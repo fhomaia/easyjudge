@@ -1,0 +1,27 @@
+{
+  "name": "easyjudge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "easyJudge - plataforma SaaS para gestão de notas e resultados em tempo real em competições de cheerleading",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=apps/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fhomaia/easyjudge.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/fhomaia/easyjudge/issues"
+  },
+  "homepage": "https://github.com/fhomaia/easyjudge#readme"
+}

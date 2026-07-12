@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: easyjudge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: easyjudge
+      POSTGRES_PASSWORD: easyjudge
+      POSTGRES_DB: easyjudge
+    ports:
+      - '5432:5432'
+    volumes:
+      - easyjudge_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  easyjudge_postgres_data:
