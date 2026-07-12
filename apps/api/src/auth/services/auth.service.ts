@@ -9,13 +9,13 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
-import { UsersService } from '../users/users.service';
+import { UsersService } from '../../users/services/users.service';
 import { MailService } from './mail.service';
-import { EmailVerification } from './entities/email-verification.entity';
-import { RegisterDto } from './dto/register.dto';
-import { VerifyEmailDto } from './dto/verify-email.dto';
-import { SetPasswordDto } from './dto/set-password.dto';
-import { LoginDto } from './dto/login.dto';
+import { EmailVerification } from '../entities/email-verification.entity';
+import { RegisterDto } from '../dto/register.dto';
+import { VerifyEmailDto } from '../dto/verify-email.dto';
+import { SetPasswordDto } from '../dto/set-password.dto';
+import { LoginDto } from '../dto/login.dto';
 
 const CODE_LENGTH = 6;
 const CODE_EXPIRATION_MINUTES = 15;

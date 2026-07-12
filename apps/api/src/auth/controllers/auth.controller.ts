@@ -6,11 +6,11 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { VerifyEmailDto } from './dto/verify-email.dto';
-import { SetPasswordDto } from './dto/set-password.dto';
-import { LoginDto } from './dto/login.dto';
+import { AuthService } from '../services/auth.service';
+import { RegisterDto } from '../dto/register.dto';
+import { VerifyEmailDto } from '../dto/verify-email.dto';
+import { SetPasswordDto } from '../dto/set-password.dto';
+import { LoginDto } from '../dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
