@@ -5,11 +5,11 @@ import type { EventStatus } from "@/api/client";
 const STATUS_CONFIG: Record<EventStatus, { label: string; className: string }> = {
   created: {
     label: "Criado",
-    className: "bg-muted text-muted-foreground",
+    className: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
   },
   published: {
     label: "Publicado",
-    className: "bg-primary/15 text-primary",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
   },
   started: {
     label: "Iniciado",
@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<EventStatus, { label: string; className: string }> =
   },
   completed: {
     label: "Concluído",
-    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    className: "bg-muted text-muted-foreground",
   },
 };
 

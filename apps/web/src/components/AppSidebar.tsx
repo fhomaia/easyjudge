@@ -1,6 +1,6 @@
-import { CalendarDays, LogOut, UserRound } from "lucide-react";
+import { CalendarDays, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { ROLE_LABELS } from "@/lib/roleLabels";
 import type { UserProfile } from "@/api/client";
 
 export type SidebarSection = "events";
@@ -16,18 +16,18 @@ const NAV_ITEMS: { key: SidebarSection; label: string; icon: typeof CalendarDays
   { key: "events", label: "Eventos", icon: CalendarDays },
 ];
 
+function getUserInitials(profile: UserProfile): string {
+  return `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase();
+}
+
 export function AppSidebar({ profile, activeSection, onSelectSection, onLogout }: AppSidebarProps) {
   return (
-    <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-border/60 bg-card">
-      <div className="flex items-center gap-3 border-b border-border/60 p-6">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-          <UserRound className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">
-            {profile ? `${profile.firstName} ${profile.lastName}` : "Carregando..."}
-          </p>
-        </div>
+    <aside className="flex h-svh w-72 shrink-0 flex-col bg-brand-navy text-white">
+      <div className="flex items-center gap-3 border-b border-white/10 p-6">
+        <img src="/favicon.png" alt="" className="size-9 shrink-0 rounded-lg" />
+        <p className="font-heading text-lg font-bold tracking-tight">
+          easy<span className="text-brand-yellow-bright">Judge</span>
+        </p>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-3">
@@ -39,8 +39,8 @@ export function AppSidebar({ profile, activeSection, onSelectSection, onLogout }
             className={cn(
               "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
               activeSection === key
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "bg-white/10 text-white"
+                : "text-white/60 hover:bg-white/5 hover:text-white",
             )}
           >
             <Icon className="size-4" />
@@ -49,12 +49,28 @@ export function AppSidebar({ profile, activeSection, onSelectSection, onLogout }
         ))}
       </nav>
 
-      <div className="flex items-center justify-between gap-2 border-t border-border/60 p-3">
-        <Button variant="ghost" className="justify-start gap-2.5" onClick={onLogout}>
+      <div className="flex items-center justify-between gap-2 border-t border-white/10 p-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow text-sm font-semibold text-brand-navy">
+            {profile ? getUserInitials(profile) : "…"}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">
+              {profile ? `${profile.firstName} ${profile.lastName}` : "Carregando..."}
+            </p>
+            <p className="truncate text-xs text-white/50">
+              {profile ? ROLE_LABELS[profile.role] : ""}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          aria-label="Sair"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+        >
           <LogOut className="size-4" />
-          Sair
-        </Button>
-        <img src="/favicon.png" alt="easyJudge" className="size-6 shrink-0 opacity-80" />
+        </button>
       </div>
     </aside>
   );

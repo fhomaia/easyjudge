@@ -28,6 +28,14 @@ const VISIBLE_TO_NON_STAFF = [
 // pra o frontend saber se mostra ações de admin (editar/iniciar/excluir).
 export type EventWithRole = Event & { currentUserRole: EventMemberRole };
 
+function latestUpdatedAt(items: { updatedAt: Date }[]): Date | null {
+  if (items.length === 0) return null;
+  return items.reduce(
+    (latest, item) => (item.updatedAt > latest ? item.updatedAt : latest),
+    items[0].updatedAt,
+  );
+}
+
 @Injectable()
 export class EventsService {
   constructor(
@@ -75,6 +83,8 @@ export class EventsService {
   async findAllForUser(userId: string): Promise<EventWithRole[]> {
     const { entities, raw } = await this.eventsRepo
       .createQueryBuilder('event')
+      .loadRelationCountAndMap('event.categoriesCount', 'event.categories')
+      .loadRelationCountAndMap('event.teamsCount', 'event.teams')
       .innerJoin(
         EventMember,
         'member',
@@ -116,7 +126,14 @@ export class EventsService {
       throw new ForbiddenException('Você não tem acesso a este evento');
     }
 
-    return { ...event, currentUserRole: member.role };
+    return {
+      ...event,
+      currentUserRole: member.role,
+      categoriesCount: event.categories.length,
+      teamsCount: event.teams.length,
+      categoriesUpdatedAt: latestUpdatedAt(event.categories),
+      teamsUpdatedAt: latestUpdatedAt(event.teams),
+    };
   }
 
   // Edita a versão ativa no lugar (mesma linha/id/versão). Se o evento

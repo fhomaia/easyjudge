@@ -130,6 +130,7 @@ export type EventMemberRole = "admin" | "judge" | "participant" | "spectator";
 
 export interface Event {
   id: string;
+  aliasId: string;
   name: string;
   startDate: string;
   competitionDays: number;
@@ -140,6 +141,10 @@ export interface Event {
   createdAt: string;
   updatedAt: string;
   currentUserRole: EventMemberRole;
+  categoriesCount?: number;
+  teamsCount?: number;
+  categoriesUpdatedAt?: string | null;
+  teamsUpdatedAt?: string | null;
 }
 
 export interface CreateEventPayload {
@@ -153,6 +158,8 @@ export type UpdateEventPayload = Partial<CreateEventPayload>;
 
 export const eventsApi = {
   list: () => authRequest<Event[]>("/events"),
+
+  get: (id: string) => authRequest<Event>(`/events/${id}`),
 
   create: (payload: CreateEventPayload) =>
     authRequest<Event>("/events", {

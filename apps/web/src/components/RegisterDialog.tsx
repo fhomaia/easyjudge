@@ -21,13 +21,7 @@ import {
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import { formatCpf, formatCnpj } from "@/lib/masks";
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  organization: "Produtor esportivo",
-  judge: "Jurado",
-  gym: "Ginásio",
-  athlete: "Atleta",
-};
+import { ROLE_LABELS } from "@/lib/roleLabels";
 
 // Cada item é uma "pergunta" da conversa. `summary` fecha a coleta de
 // dados e dispara o /auth/register (que envia o email de confirmação);

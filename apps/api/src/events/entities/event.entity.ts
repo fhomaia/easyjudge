@@ -69,6 +69,14 @@ export class Event {
   @OneToMany(() => Team, (team) => team.event)
   teams: Team[];
 
+  // Não são colunas — populadas por EventsService (findAllForUser via
+  // loadRelationCountAndMap; findOneForUser derivando das relations já
+  // carregadas), só para telas de listagem/configuração do evento.
+  categoriesCount?: number;
+  teamsCount?: number;
+  categoriesUpdatedAt?: Date | null;
+  teamsUpdatedAt?: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
