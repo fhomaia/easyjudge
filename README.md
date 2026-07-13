@@ -14,8 +14,8 @@ permissões de produtor (pode criar e gerenciar eventos também).
 ## Stack
 
 - **Backend:** NestJS + TypeScript + TypeORM + PostgreSQL
-- **Frontend:** React + Vite + TypeScript + TailwindCSS + Framer Motion +
-  Zustand (ainda não iniciado)
+- **Frontend:** React + Vite + TypeScript + TailwindCSS v4 + shadcn/ui +
+  Zustand + React Router
 - **Banco local:** Postgres via Docker Compose
 - **Monorepo:** npm workspaces (`apps/*`, `packages/*`)
 
@@ -40,9 +40,15 @@ npm run migration:run
 
 # 5. subir a API em modo dev
 npm run start:dev          # ou, da raiz: npm run dev:api
+
+# 6. em outro terminal, subir o frontend
+cd apps/web
+npm run dev                # ou, da raiz: npm run dev:web
 ```
 
 A API sobe em `http://localhost:3000` (ou na porta definida em `PORT`).
+O frontend sobe em `http://localhost:5173` e faz proxy de `/api/*` para
+a API (configurado em `apps/web/vite.config.ts`).
 
 ## Progresso
 
@@ -62,6 +68,23 @@ A API sobe em `http://localhost:3000` (ou na porta definida em `PORT`).
 - Logo opcional para evento e equipe (`POST /events/:id/logo` e
   `POST /events/:eventId/teams/:teamId/logo`, upload multipart) —
   armazenamento local em disco por enquanto, servido em `/uploads/...`
+- Frontend iniciado (`apps/web`): fluxo de auth completo — login, popup
+  "criar conta" como assistente conversacional (uma pergunta por etapa,
+  com resumo antes de enviar), sessão persistida, rotas protegidas/de
+  convidado
+  - Testado ponta a ponta com navegador headless em 2026-07-12
+- Identidade visual: logo e favicon (raio azul/amarelo, tema esportivo)
+  em `apps/web/public/`, paleta de marca aplicada em todo o app. Fundo
+  animado de entrada (`BrandBackdrop`, Framer Motion): um raio risca a
+  tela escura, um clarão estoura, e revela a tela dividida em duas fotos
+  de competições de cheerleading (uma de cada lado do raio), com uma
+  camada de cor azul/amarelo por cima e borda branca marcando a divisão
+- Visual do card de login/cadastro refinado: fonte Plus Jakarta Sans,
+  cantos bem menos arredondados, mais espaçamento, botões maiores e uma
+  cor primária mais suave/dessaturada (separada do azul vivo do fundo)
+- Email de verificação enviado de verdade via Resend (antes só logava
+  no console) — hoje só entrega pra `easyjudgepro@gmail.com` (sandbox,
+  domínio próprio ainda não verificado)
 
 ### 🚧 Em andamento / próximos passos
 
@@ -70,7 +93,7 @@ A API sobe em `http://localhost:3000` (ou na porta definida em `PORT`).
 2. Modelar `Routine`, `ScoreEvent` (event sourcing das notas) e `Result`
 3. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
    Supabase Realtime) para o painel do produtor
-4. Iniciar o frontend (`apps/web`)
+4. Telas de "criar evento" (evento, categorias, equipes, upload de logo)
 
 ### 📋 Backlog (não iniciado)
 
@@ -78,8 +101,8 @@ A API sobe em `http://localhost:3000` (ou na porta definida em `PORT`).
   em tempo real)
 - Painel de acompanhamento em tempo real e apuração de resultado
 - Jornada do atleta (consulta de nota e resultado)
-- Provider real de email (o `MailService` atual é um stub que só loga no
-  console)
+- Verificar domínio próprio no Resend (hoje só entrega email pra
+  `easyjudgepro@gmail.com`, a conta usada pra criar a API key)
 - Deploy (Neon/Supabase para Postgres em produção)
 
 ## Requisitos não-negociáveis do produto
@@ -108,7 +131,14 @@ easyjudge/
 │       │   ├── common/         # enums, validators e config compartilhados
 │       │   └── migrations/     # migrations do TypeORM
 │       └── .env.example
-├── packages/                   # vazio por enquanto (shared-types entra com o front)
+│   └── web/                    # React + Vite (Tailwind v4, shadcn/ui, Zustand, React Router, Framer Motion)
+│       ├── public/             # logo.png, favicon.png (identidade visual)
+│       └── src/
+│           ├── api/            # client.ts — chamadas à API
+│           ├── store/          # auth.ts — sessão (Zustand + persist)
+│           ├── pages/          # LoginPage, HomePage
+│           └── components/     # RegisterDialog, rotas protegidas, BrandBackdrop, ui/ (shadcn)
+├── packages/                   # vazio por enquanto (shared-types entra quando fizer sentido)
 ├── docker-compose.yml          # Postgres local
 └── package.json                # raiz do workspace
 ```

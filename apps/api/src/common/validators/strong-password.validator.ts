@@ -18,9 +18,7 @@ export function IsStrongPassword(validationOptions?: ValidationOptions) {
       options: validationOptions,
       validator: {
         validate(value: string) {
-          return (
-            typeof value === 'string' && STRONG_PASSWORD_REGEX.test(value)
-          );
+          return typeof value === 'string' && STRONG_PASSWORD_REGEX.test(value);
         },
         defaultMessage(_args: ValidationArguments) {
           return 'A senha deve ter no mínimo 8 caracteres, incluindo letra maiúscula, número e caractere especial.';

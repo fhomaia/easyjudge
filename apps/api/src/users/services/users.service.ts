@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-} from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
@@ -32,11 +29,24 @@ export class UsersService {
   }
 
   async createPendingUser(dto: RegisterDto): Promise<User> {
-    const existingEmail = await this.usersRepository.findOne({
-      where: { email: dto.email },
-    });
+    // passwordHash tem select:false na entidade — precisa de addSelect
+    // explícito, senão vem sempre undefined mesmo quando existe no banco.
+    const existingEmail = await this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.email = :email', { email: dto.email })
+      .getOne();
     if (existingEmail) {
-      throw new ConflictException('Este email já está cadastrado.');
+      if (existingEmail.passwordHash) {
+        throw new ConflictException('Este email já está cadastrado.');
+      }
+      // Cadastro anterior nunca foi finalizado (sem senha definida) — o
+      // email não está reservado de verdade, mesmo que o código de
+      // verificação já tenha sido confirmado nesse meio-tempo (usuário
+      // pode ter perdido acesso à página antes de definir a senha).
+      // Remove o pendente (cascata apaga os códigos de verificação) e
+      // deixa seguir com um cadastro novo.
+      await this.usersRepository.delete(existingEmail.id);
     }
 
     const existingDocument = await this.usersRepository.findOne({

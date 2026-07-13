@@ -129,9 +129,7 @@ export class AuthService {
   }
 
   // Etapa 3: define a senha e já retorna o usuário logado.
-  async setPassword(
-    dto: SetPasswordDto,
-  ): Promise<{ accessToken: string }> {
+  async setPassword(dto: SetPasswordDto): Promise<{ accessToken: string }> {
     const user = await this.usersService.findById(dto.userId);
     if (!user) {
       throw new BadRequestException('Usuário não encontrado.');
@@ -156,7 +154,9 @@ export class AuthService {
       throw new UnauthorizedException('Email ou senha inválidos.');
     }
     if (!user.emailVerifiedAt) {
-      throw new UnauthorizedException('Cadastro incompleto. Verifique seu email.');
+      throw new UnauthorizedException(
+        'Cadastro incompleto. Verifique seu email.',
+      );
     }
 
     const passwordMatches = await bcrypt.compare(

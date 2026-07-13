@@ -39,7 +39,12 @@ export class User {
 
   // Nulo até o usuário concluir a etapa "definir senha".
   // Enquanto for nulo, o cadastro é considerado incompleto.
-  @Column({ name: 'password_hash', type: 'varchar', nullable: true, select: false })
+  @Column({
+    name: 'password_hash',
+    type: 'varchar',
+    nullable: true,
+    select: false,
+  })
   passwordHash: string | null;
 
   @Column({ name: 'email_verified_at', type: 'timestamptz', nullable: true })

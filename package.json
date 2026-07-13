@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev:api": "npm run start:dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "test": "echo \"Error: no test specified\" && exit 1"
