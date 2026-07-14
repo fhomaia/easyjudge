@@ -1,10 +1,12 @@
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -45,4 +47,14 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsBoolean()
   nonTumbling?: boolean;
+
+  // Precisa ser um template do próprio usuário e "completo" (soma dos
+  // critérios-raiz == targetScore) — validado em
+  // ScoringTemplatesService.assertUsableTemplate, não só aqui.
+  @IsUUID()
+  scoringTemplateId: string;
+
+  @IsInt()
+  @Min(1)
+  presentationTimeSeconds: number;
 }

@@ -8,6 +8,8 @@ import { UsersModule } from './users/users.module';
 import { EventsModule } from './events/events.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TeamsModule } from './teams/teams.module';
+import { ScoringTemplatesModule } from './scoring-templates/scoring-templates.module';
+import { RegulationsModule } from './regulations/regulations.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { TeamsModule } from './teams/teams.module';
     EventsModule,
     CategoriesModule,
     TeamsModule,
+    ScoringTemplatesModule,
+    RegulationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

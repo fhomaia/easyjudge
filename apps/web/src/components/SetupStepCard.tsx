@@ -1,5 +1,15 @@
 import { Link } from "react-router-dom";
-import { BookOpen, CalendarDays, Check, Circle, Pencil, Trophy, Users } from "lucide-react";
+import {
+  BookOpen,
+  CalendarClock,
+  CalendarDays,
+  Check,
+  Circle,
+  Gavel,
+  Pencil,
+  Trophy,
+  Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/formatDate";
 import type { SetupStep, SetupStepKey } from "@/lib/eventSetupSteps";
@@ -8,6 +18,8 @@ const STEP_ICONS: Record<SetupStepKey, typeof Trophy> = {
   categories: Trophy,
   regulation: BookOpen,
   teams: Users,
+  judgePanel: Gavel,
+  schedule: CalendarClock,
 };
 
 interface SetupStepCardProps {

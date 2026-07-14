@@ -9,13 +9,12 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Event } from '../../events/entities/event.entity';
+import { ScoringTemplate } from '../../scoring-templates/entities/scoring-template.entity';
 import { CategoryStatus } from '../enums/category-status.enum';
 import { CategoryModality } from '../enums/category-modality.enum';
 import { CategoryDivision } from '../enums/category-division.enum';
 import { CategoryFormat } from '../enums/category-format.enum';
 
-// A regra de pontuação (dificuldade, execução, deduções etc.) vinculada
-// a cada categoria ainda não foi modelada — entra em uma iteração futura.
 @Entity('categories')
 export class Category {
   @PrimaryGeneratedColumn('uuid')
@@ -58,6 +57,27 @@ export class Category {
 
   @Column({ name: 'non_tumbling', default: false })
   nonTumbling: boolean;
+
+  // Nullable no banco (categorias criadas antes dessa feature não têm),
+  // mas obrigatório no CreateCategoryDto. Front-end pré-preenche um
+  // default por categoryFormat/modality (team_cheer: 2:30, exceto
+  // school/university que são 2:45; demais formatos: 1:00) — usuário
+  // pode ajustar antes de salvar. Alimenta o cronograma do evento numa
+  // etapa futura.
+  @Column({ name: 'presentation_time_seconds', type: 'int', nullable: true })
+  presentationTimeSeconds: number | null;
+
+  // Nullable no banco (categorias criadas antes dessa feature não têm),
+  // mas obrigatório na criação via CreateCategoryDto — só um template
+  // "completo" (soma dos critérios-raiz == targetScore) pode ser
+  // atribuído, ver ScoringTemplatesService.assertUsableTemplate.
+  @Index()
+  @Column({ name: 'scoring_template_id', nullable: true })
+  scoringTemplateId: string | null;
+
+  @ManyToOne(() => ScoringTemplate)
+  @JoinColumn({ name: 'scoring_template_id' })
+  scoringTemplate: ScoringTemplate | null;
 
   // Só existem esses dois estados (decisão do usuário) — nada de
   // "rascunho" ou outros status intermediários.

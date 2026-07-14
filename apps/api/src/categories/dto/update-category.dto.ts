@@ -1,10 +1,12 @@
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -53,4 +55,13 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsEnum(CategoryStatus)
   status?: CategoryStatus;
+
+  @IsOptional()
+  @IsUUID()
+  scoringTemplateId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  presentationTimeSeconds?: number;
 }

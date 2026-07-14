@@ -13,14 +13,30 @@ import {
 } from "@/components/CategoryFormFields";
 import { CategoryLevelSelector } from "@/components/CategoryLevelSelector";
 import { buildCategoryName, isAlwaysNonTumbling } from "@/lib/categoryLabels";
-import { categoriesApi, ApiError, type Category, type CategoryFormat } from "@/api/client";
+import {
+  getDefaultPresentationTimeSeconds,
+  secondsToMinutesAndSeconds,
+} from "@/lib/presentationTime";
+import {
+  categoriesApi,
+  ApiError,
+  type Category,
+  type CategoryFormat,
+  type CategoryModality,
+  type ScoringTemplate,
+} from "@/api/client";
 
 interface CreateCategoryDialogProps {
   eventId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (category: Category) => void;
+  scoringTemplates: ScoringTemplate[];
 }
+
+const defaultPresentationTime = secondsToMinutesAndSeconds(
+  getDefaultPresentationTimeSeconds("team_cheer", "all_star"),
+);
 
 const initialForm: CategorySharedFormValues = {
   modality: "all_star",
@@ -28,6 +44,9 @@ const initialForm: CategorySharedFormValues = {
   categoryFormat: "team_cheer",
   customFormatLabel: "",
   nonTumbling: false,
+  scoringTemplateId: "",
+  presentationMinutes: String(defaultPresentationTime.minutes),
+  presentationSeconds: String(defaultPresentationTime.seconds),
 };
 
 function collectLevels(selectedLevels: Set<number>, customLevels: string[]): number[] {
@@ -42,6 +61,7 @@ export function CreateCategoryDialog({
   open,
   onOpenChange,
   onCreated,
+  scoringTemplates,
 }: CreateCategoryDialogProps) {
   const [form, setForm] = useState(initialForm);
   const [selectedLevels, setSelectedLevels] = useState<Set<number>>(new Set());
@@ -54,6 +74,16 @@ export function CreateCategoryDialog({
       const next = { ...f, [key]: value };
       if (key === "categoryFormat" && isAlwaysNonTumbling(value as CategoryFormat)) {
         next.nonTumbling = true;
+      }
+      if (key === "categoryFormat" || key === "modality") {
+        const defaultTime = secondsToMinutesAndSeconds(
+          getDefaultPresentationTimeSeconds(
+            key === "categoryFormat" ? (value as CategoryFormat) : f.categoryFormat,
+            key === "modality" ? (value as CategoryModality) : f.modality,
+          ),
+        );
+        next.presentationMinutes = String(defaultTime.minutes);
+        next.presentationSeconds = String(defaultTime.seconds);
       }
       return next;
     });
@@ -99,6 +129,18 @@ export function CreateCategoryDialog({
       return;
     }
 
+    if (!form.scoringTemplateId) {
+      setError("Selecione um sistema de pontuação.");
+      return;
+    }
+
+    const presentationTimeSeconds =
+      Number(form.presentationMinutes || 0) * 60 + Number(form.presentationSeconds || 0);
+    if (!presentationTimeSeconds || presentationTimeSeconds <= 0) {
+      setError("Informe o tempo de apresentação.");
+      return;
+    }
+
     const nonTumbling = isAlwaysNonTumbling(form.categoryFormat) || form.nonTumbling;
     const customFormatLabel = form.categoryFormat === "custom" ? form.customFormatLabel : null;
 
@@ -119,6 +161,8 @@ export function CreateCategoryDialog({
           customFormatLabel,
           level,
           nonTumbling,
+          scoringTemplateId: form.scoringTemplateId,
+          presentationTimeSeconds,
         });
         onCreated(category);
       }
@@ -145,7 +189,12 @@ export function CreateCategoryDialog({
         <FormError message={error} />
 
         <form onSubmit={handleSubmit} className="grid gap-5">
-          <CategoryFormFields form={form} onChange={update} onToggleNonTumbling={toggleNonTumbling} />
+          <CategoryFormFields
+            form={form}
+            onChange={update}
+            onToggleNonTumbling={toggleNonTumbling}
+            scoringTemplates={scoringTemplates}
+          />
 
           <CategoryLevelSelector
             selectedLevels={selectedLevels}

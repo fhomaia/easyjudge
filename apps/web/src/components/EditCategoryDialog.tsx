@@ -23,11 +23,17 @@ import {
 import { STATUS_LABELS, isAlwaysNonTumbling } from "@/lib/categoryLabels";
 import { normalizeDecimalInput } from "@/lib/normalizeDecimalInput";
 import {
+  getDefaultPresentationTimeSeconds,
+  secondsToMinutesAndSeconds,
+} from "@/lib/presentationTime";
+import {
   categoriesApi,
   ApiError,
   type Category,
   type CategoryFormat,
+  type CategoryModality,
   type CategoryStatus,
+  type ScoringTemplate,
 } from "@/api/client";
 
 interface EditCategoryDialogProps {
@@ -35,6 +41,7 @@ interface EditCategoryDialogProps {
   category: Category | null;
   onOpenChange: (open: boolean) => void;
   onUpdated: (category: Category) => void;
+  scoringTemplates: ScoringTemplate[];
 }
 
 interface EditFormValues extends CategorySharedFormValues {
@@ -43,6 +50,10 @@ interface EditFormValues extends CategorySharedFormValues {
 }
 
 function toFormValues(category: Category): EditFormValues {
+  const presentationTimeSeconds =
+    category.presentationTimeSeconds ??
+    getDefaultPresentationTimeSeconds(category.categoryFormat, category.modality);
+  const presentationTime = secondsToMinutesAndSeconds(presentationTimeSeconds);
   return {
     name: category.name,
     modality: category.modality,
@@ -51,6 +62,9 @@ function toFormValues(category: Category): EditFormValues {
     customFormatLabel: category.customFormatLabel ?? "",
     level: String(category.level),
     nonTumbling: category.nonTumbling,
+    scoringTemplateId: category.scoringTemplateId ?? "",
+    presentationMinutes: String(presentationTime.minutes),
+    presentationSeconds: String(presentationTime.seconds),
   };
 }
 
@@ -59,6 +73,7 @@ export function EditCategoryDialog({
   category,
   onOpenChange,
   onUpdated,
+  scoringTemplates,
 }: EditCategoryDialogProps) {
   const [form, setForm] = useState<EditFormValues | null>(null);
   const [status, setStatus] = useState<CategoryStatus>("active");
@@ -79,6 +94,16 @@ export function EditCategoryDialog({
       const next = { ...f, [key]: value };
       if (key === "categoryFormat" && isAlwaysNonTumbling(value as CategoryFormat)) {
         next.nonTumbling = true;
+      }
+      if (key === "categoryFormat" || key === "modality") {
+        const defaultTime = secondsToMinutesAndSeconds(
+          getDefaultPresentationTimeSeconds(
+            key === "categoryFormat" ? (value as CategoryFormat) : f.categoryFormat,
+            key === "modality" ? (value as CategoryModality) : f.modality,
+          ),
+        );
+        next.presentationMinutes = String(defaultTime.minutes);
+        next.presentationSeconds = String(defaultTime.seconds);
       }
       return next;
     });
@@ -103,6 +128,18 @@ export function EditCategoryDialog({
       return;
     }
 
+    if (!form.scoringTemplateId) {
+      setError("Selecione um sistema de pontuação.");
+      return;
+    }
+
+    const presentationTimeSeconds =
+      Number(form.presentationMinutes || 0) * 60 + Number(form.presentationSeconds || 0);
+    if (!presentationTimeSeconds || presentationTimeSeconds <= 0) {
+      setError("Informe o tempo de apresentação.");
+      return;
+    }
+
     setLoading(true);
     try {
       const updated = await categoriesApi.update(eventId, category.id, {
@@ -113,6 +150,8 @@ export function EditCategoryDialog({
         customFormatLabel: form.categoryFormat === "custom" ? form.customFormatLabel : null,
         level: Number(form.level),
         nonTumbling: isAlwaysNonTumbling(form.categoryFormat) || form.nonTumbling,
+        scoringTemplateId: form.scoringTemplateId,
+        presentationTimeSeconds,
         status,
       });
       onUpdated(updated);
@@ -147,7 +186,12 @@ export function EditCategoryDialog({
               />
             </div>
 
-            <CategoryFormFields form={form} onChange={update} onToggleNonTumbling={toggleNonTumbling} />
+            <CategoryFormFields
+              form={form}
+              onChange={update}
+              onToggleNonTumbling={toggleNonTumbling}
+              scoringTemplates={scoringTemplates}
+            />
 
             <div className="grid gap-2">
               <Label htmlFor="category-level">Nível (1 a 7)</Label>

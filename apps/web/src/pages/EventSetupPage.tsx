@@ -1,13 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { AppSidebar, type SidebarSection } from "@/components/AppSidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SetupProgressSummary } from "@/components/SetupProgressSummary";
 import { SetupStepCard } from "@/components/SetupStepCard";
 import { SetupRecommendedBanner } from "@/components/SetupRecommendedBanner";
-import { buildSetupSteps } from "@/lib/eventSetupSteps";
-import { ApiError, eventsApi, usersApi, type Event, type UserProfile } from "@/api/client";
+import { buildSetupSteps, type RegulationSummary } from "@/lib/eventSetupSteps";
+import {
+  ApiError,
+  eventsApi,
+  regulationApi,
+  scoringTemplatesApi,
+  usersApi,
+  type Event,
+  type Regulation,
+  type ScoringTemplate,
+  type UserProfile,
+} from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 
 export function EventSetupPage() {
@@ -15,9 +25,10 @@ export function EventSetupPage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  const [activeSection, setActiveSection] = useState<SidebarSection>("events");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
+  const [regulation, setRegulation] = useState<Regulation | null>(null);
+  const [templates, setTemplates] = useState<ScoringTemplate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,6 +45,8 @@ export function EventSetupPage() {
           err instanceof ApiError ? err.message : "Não foi possível carregar o evento.",
         ),
       );
+    regulationApi.get(id).then(setRegulation).catch(() => setRegulation(null));
+    scoringTemplatesApi.list().then(setTemplates).catch(() => setTemplates([]));
   }, [id]);
 
   function handleLogout() {
@@ -41,22 +54,25 @@ export function EventSetupPage() {
     navigate("/login");
   }
 
-  function handleSelectSection(section: SidebarSection) {
-    setActiveSection(section);
-    navigate("/");
-  }
+  const regulationSummary: RegulationSummary | null = regulation
+    ? {
+        hasOfficialRegulation: regulation.documents.some(
+          (d) => d.kind === "official_regulation",
+        ),
+        hasSafetyRules: regulation.documents.some((d) => d.kind === "safety_rules"),
+        hasCompleteTemplate: (templates ?? []).some(
+          (t) => (t.distributedScore ?? 0) === t.targetScore,
+        ),
+        updatedAt: regulation.updatedAt,
+      }
+    : null;
 
-  const steps = event ? buildSetupSteps(event) : [];
+  const steps = event ? buildSetupSteps(event, regulationSummary) : [];
   const firstIncomplete = steps.find((s) => !s.completed);
 
   return (
-    <div className="flex min-h-svh bg-background">
-      <AppSidebar
-        profile={profile}
-        activeSection={activeSection}
-        onSelectSection={handleSelectSection}
-        onLogout={handleLogout}
-      />
+    <div className="flex h-svh bg-background">
+      <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-10 pt-6">
@@ -81,8 +97,9 @@ export function EventSetupPage() {
                   Configuração do evento
                 </h1>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  Prepare &quot;{event.name}&quot; em 3 etapas. Você pode iniciá-las em qualquer
-                  ordem, mas recomendamos seguir a sequência para facilitar o processo.
+                  Prepare &quot;{event.name}&quot; em {steps.length} etapas. Você pode
+                  iniciá-las em qualquer ordem, mas recomendamos seguir a sequência para
+                  facilitar o processo.
                 </p>
               </div>
 
@@ -94,7 +111,7 @@ export function EventSetupPage() {
                     key={step.key}
                     step={step}
                     stepNumber={index + 1}
-                    recommended={index === 0}
+                    recommended={step.key === firstIncomplete?.key}
                   />
                 ))}
               </div>

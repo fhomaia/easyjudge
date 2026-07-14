@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { AppSidebar, type SidebarSection } from "@/components/AppSidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { CreateEventDialog } from "@/components/CreateEventDialog";
 import { EditEventDialog } from "@/components/EditEventDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -40,7 +40,6 @@ export function HomePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  const [activeSection, setActiveSection] = useState<SidebarSection>("events");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [events, setEvents] = useState<Event[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -134,13 +133,8 @@ export function HomePage() {
   const showingTo = Math.min(currentPage * PAGE_SIZE, filteredEvents.length);
 
   return (
-    <div className="flex min-h-svh bg-background">
-      <AppSidebar
-        profile={profile}
-        activeSection={activeSection}
-        onSelectSection={setActiveSection}
-        onLogout={handleLogout}
-      />
+    <div className="flex h-svh bg-background">
+      <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="flex-1 overflow-y-auto">
         <div className="flex justify-end px-10 pt-6">
@@ -149,7 +143,7 @@ export function HomePage() {
 
         <div className="px-10 pb-10">
           <AnimatePresence mode="wait">
-            {activeSection === "events" && events !== null && (
+            {events !== null && (
               <motion.div key="events" initial="hidden" animate="show" exit={{ opacity: 0 }}>
                 <div className="grid gap-6">
                   <div className="flex items-center justify-between gap-4">

@@ -1,26 +1,31 @@
-import { CalendarDays, LogOut } from "lucide-react";
+import { Calculator, CalendarDays, LogOut } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/roleLabels";
 import type { UserProfile } from "@/api/client";
 
-export type SidebarSection = "events";
-
 interface AppSidebarProps {
   profile: UserProfile | null;
-  activeSection: SidebarSection;
-  onSelectSection: (section: SidebarSection) => void;
   onLogout: () => void;
 }
 
-const NAV_ITEMS: { key: SidebarSection; label: string; icon: typeof CalendarDays }[] = [
-  { key: "events", label: "Eventos", icon: CalendarDays },
+const NAV_ITEMS: { href: string; label: string; icon: typeof CalendarDays }[] = [
+  { href: "/", label: "Eventos", icon: CalendarDays },
+  { href: "/scoring-templates", label: "Sistema de pontuação", icon: Calculator },
 ];
 
 function getUserInitials(profile: UserProfile): string {
   return `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase();
 }
 
-export function AppSidebar({ profile, activeSection, onSelectSection, onLogout }: AppSidebarProps) {
+function isNavItemActive(pathname: string, href: string): boolean {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
+
+export function AppSidebar({ profile, onLogout }: AppSidebarProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   return (
     <aside className="flex h-svh w-72 shrink-0 flex-col bg-brand-navy text-white">
       <div className="flex items-center gap-3 border-b border-white/10 p-6">
@@ -31,14 +36,14 @@ export function AppSidebar({ profile, activeSection, onSelectSection, onLogout }
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-3">
-        {NAV_ITEMS.map(({ key, label, icon: Icon }) => (
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
           <button
-            key={key}
+            key={href}
             type="button"
-            onClick={() => onSelectSection(key)}
+            onClick={() => navigate(href)}
             className={cn(
               "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
-              activeSection === key
+              isNavItemActive(location.pathname, href)
                 ? "bg-white/10 text-white"
                 : "text-white/60 hover:bg-white/5 hover:text-white",
             )}

@@ -69,7 +69,7 @@ async function authUpload<T>(path: string, formData: FormData): Promise<T> {
   return data as T;
 }
 
-export type UserRole = "judge" | "athlete" | "organization" | "gym";
+export type UserRole = "judge" | "athlete" | "organization" | "program";
 export type DocumentType = "cpf" | "cnpj";
 
 export interface RegisterPayload {
@@ -205,6 +205,9 @@ export interface Category {
   level: number;
   nonTumbling: boolean;
   status: CategoryStatus;
+  scoringTemplateId: string | null;
+  scoringTemplate: { id: string; name: string } | null;
+  presentationTimeSeconds: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -217,6 +220,8 @@ export interface CategoryPayload {
   customFormatLabel?: string | null;
   level: number;
   nonTumbling: boolean;
+  scoringTemplateId: string;
+  presentationTimeSeconds: number;
 }
 
 export type UpdateCategoryPayload = Partial<CategoryPayload> & {
@@ -240,4 +245,189 @@ export const categoriesApi = {
 
   remove: (eventId: string, id: string) =>
     authRequest<void>(`/events/${eventId}/categories/${id}`, { method: "DELETE" }),
+};
+
+export type ScoringCriterionType = "group" | "score_item";
+
+export interface ScoringTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  targetScore: number;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  criteriaCount?: number;
+  distributedScore?: number;
+}
+
+export interface ScoringCriterion {
+  id: string;
+  templateId: string;
+  parentId: string | null;
+  type: ScoringCriterionType;
+  name: string;
+  description: string | null;
+  maxScore: number;
+  weight: number;
+  order: number;
+  showInJudgingSheet: boolean;
+  allowDecimalScoring: boolean;
+  isRequired: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScoringTemplatePayload {
+  name: string;
+  description?: string;
+  targetScore?: number;
+  cloneFromId?: string;
+}
+
+export type UpdateScoringTemplatePayload = Partial<ScoringTemplatePayload>;
+
+export interface CreateScoringCriterionPayload {
+  parentId?: string;
+  type: ScoringCriterionType;
+  name: string;
+  description?: string;
+  maxScore: number;
+  weight?: number;
+  showInJudgingSheet?: boolean;
+  allowDecimalScoring?: boolean;
+  isRequired?: boolean;
+}
+
+// parentId de propósito não entra aqui — reparenting só acontece via
+// scoringCriteriaApi.move.
+export type UpdateScoringCriterionPayload = Partial<
+  Omit<CreateScoringCriterionPayload, "parentId">
+>;
+
+export interface MoveScoringCriterionPayload {
+  newParentId: string | null;
+  newIndex: number;
+}
+
+export const scoringTemplatesApi = {
+  list: () => authRequest<ScoringTemplate[]>("/scoring-templates"),
+
+  get: (id: string) => authRequest<ScoringTemplate>(`/scoring-templates/${id}`),
+
+  create: (payload: ScoringTemplatePayload) =>
+    authRequest<ScoringTemplate>("/scoring-templates", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  update: (id: string, payload: UpdateScoringTemplatePayload) =>
+    authRequest<ScoringTemplate>(`/scoring-templates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (id: string) => authRequest<void>(`/scoring-templates/${id}`, { method: "DELETE" }),
+};
+
+export const scoringCriteriaApi = {
+  list: (templateId: string) =>
+    authRequest<ScoringCriterion[]>(`/scoring-templates/${templateId}/criteria`),
+
+  create: (templateId: string, payload: CreateScoringCriterionPayload) =>
+    authRequest<ScoringCriterion>(`/scoring-templates/${templateId}/criteria`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  update: (templateId: string, id: string, payload: UpdateScoringCriterionPayload) =>
+    authRequest<ScoringCriterion>(`/scoring-templates/${templateId}/criteria/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (templateId: string, id: string) =>
+    authRequest<void>(`/scoring-templates/${templateId}/criteria/${id}`, {
+      method: "DELETE",
+    }),
+
+  move: (templateId: string, id: string, payload: MoveScoringCriterionPayload) =>
+    authRequest<ScoringCriterion[]>(`/scoring-templates/${templateId}/criteria/${id}/move`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
+export type RegulationDeductionMode = "iasf" | "custom";
+export type RegulationDocumentKind =
+  | "official_regulation"
+  | "safety_rules"
+  | "code_of_conduct"
+  | "additional";
+export type DeductionType =
+  | "athlete_fall"
+  | "major_athlete_fall"
+  | "building_bobble"
+  | "building_fall"
+  | "major_building_fall"
+  | "legality_infractions"
+  | "skill_out_of_level"
+  | "time_limit_violations"
+  | "boundary_violations";
+
+export interface RegulationDocument {
+  id: string;
+  kind: RegulationDocumentKind;
+  name: string;
+  fileUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface DeductionRuleView {
+  type: DeductionType;
+  defaultValue: number;
+  value: number;
+}
+
+export interface Regulation {
+  eventId: string;
+  deductionMode: RegulationDeductionMode;
+  deductions: DeductionRuleView[];
+  documents: RegulationDocument[];
+  updatedAt: string | null;
+}
+
+export interface UpdateRegulationPayload {
+  deductionMode?: RegulationDeductionMode;
+  deductionValues?: Partial<Record<DeductionType, number>>;
+}
+
+export const regulationApi = {
+  get: (eventId: string) => authRequest<Regulation>(`/events/${eventId}/regulation`),
+
+  updateDeductions: (eventId: string, payload: UpdateRegulationPayload) =>
+    authRequest<Regulation>(`/events/${eventId}/regulation`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  uploadDocument: (
+    eventId: string,
+    kind: RegulationDocumentKind,
+    file: File,
+    name?: string,
+  ) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("kind", kind);
+    if (name) formData.append("name", name);
+    return authUpload<Regulation>(`/events/${eventId}/regulation/documents`, formData);
+  },
+
+  deleteDocument: (eventId: string, documentId: string) =>
+    authRequest<void>(`/events/${eventId}/regulation/documents/${documentId}`, {
+      method: "DELETE",
+    }),
 };

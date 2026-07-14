@@ -1,6 +1,6 @@
 import type { Event } from "@/api/client";
 
-export type SetupStepKey = "categories" | "regulation" | "teams";
+export type SetupStepKey = "categories" | "regulation" | "teams" | "judgePanel" | "schedule";
 export type SetupStepState = "completed" | "in_progress" | "not_started";
 
 export interface SetupStep {
@@ -17,11 +17,41 @@ export interface SetupStep {
   href?: string;
 }
 
-export function buildSetupSteps(event: Event): SetupStep[] {
+// Montado em EventSetupPage a partir de regulationApi.get(id) (docs) +
+// scoringTemplatesApi.list() (template completo) — ver RegulationPage.
+export interface RegulationSummary {
+  hasOfficialRegulation: boolean;
+  hasSafetyRules: boolean;
+  hasCompleteTemplate: boolean;
+  updatedAt: string | null;
+}
+
+export function buildSetupSteps(
+  event: Event,
+  regulation: RegulationSummary | null,
+): SetupStep[] {
   const categoriesCount = event.categoriesCount ?? 0;
   const teamsCount = event.teamsCount ?? 0;
+  const regulationCompleted =
+    !!regulation &&
+    regulation.hasOfficialRegulation &&
+    regulation.hasSafetyRules &&
+    regulation.hasCompleteTemplate;
 
   return [
+    {
+      key: "regulation",
+      title: "Regulamentos",
+      shortTitle: "Regulamento",
+      description: "Defina as regras de competição, segurança e pontuação do evento.",
+      completed: regulationCompleted,
+      detail: regulationCompleted
+        ? "Documentos e template de pontuação prontos"
+        : "Pendente: documentos obrigatórios e um template completo",
+      updatedAt: regulation?.updatedAt ?? null,
+      actionLabel: regulationCompleted ? "Editar regulamento" : "Iniciar cadastro",
+      href: `/events/${event.id}/regulation`,
+    },
     {
       key: "categories",
       title: "Categorias",
@@ -37,19 +67,9 @@ export function buildSetupSteps(event: Event): SetupStep[] {
       href: `/events/${event.id}/categories`,
     },
     {
-      key: "regulation",
-      title: "Regulamento e regras de pontuação",
-      shortTitle: "Regulamento",
-      description: "Defina as regras de competição e os critérios de pontuação do evento.",
-      completed: false,
-      detail: "Disponível em breve",
-      updatedAt: null,
-      actionLabel: "Iniciar cadastro",
-    },
-    {
       key: "teams",
-      title: "Competidores",
-      shortTitle: "Competidores",
+      title: "Programas e equipes",
+      shortTitle: "Programas e equipes",
       description: "Cadastre as equipes que vão participar do evento.",
       completed: teamsCount > 0,
       detail:
@@ -58,6 +78,26 @@ export function buildSetupSteps(event: Event): SetupStep[] {
           : "Nenhuma equipe cadastrada",
       updatedAt: event.teamsUpdatedAt,
       actionLabel: teamsCount > 0 ? "Editar equipes" : "Iniciar cadastro",
+    },
+    {
+      key: "judgePanel",
+      title: "Painel de jurados",
+      shortTitle: "Painel de jurados",
+      description: "Cadastre os jurados do evento e defina o que cada um irá julgar em cada sistema de pontuação.",
+      completed: false,
+      detail: "Disponível em breve",
+      updatedAt: null,
+      actionLabel: "Iniciar cadastro",
+    },
+    {
+      key: "schedule",
+      title: "Cronograma",
+      shortTitle: "Cronograma",
+      description: "Monte a ordem de apresentação das equipes durante o evento.",
+      completed: false,
+      detail: "Disponível em breve",
+      updatedAt: null,
+      actionLabel: "Iniciar cadastro",
     },
   ];
 }

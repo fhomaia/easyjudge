@@ -1,6 +1,7 @@
 import { Pencil, Trash2, Users } from "lucide-react";
 import { CategoryStatusBadge } from "@/components/CategoryStatusBadge";
 import { DIVISION_LABELS, MODALITY_LABELS, formatLabelFor } from "@/lib/categoryLabels";
+import { formatMinutesSeconds } from "@/lib/presentationTime";
 import type { Category } from "@/api/client";
 
 interface CategoryTableProps {
@@ -20,6 +21,8 @@ export function CategoryTable({ categories, onEdit, onDelete }: CategoryTablePro
             <th className="px-4 py-3 font-medium">Divisão</th>
             <th className="px-4 py-3 font-medium">Formato</th>
             <th className="px-4 py-3 font-medium">Nível</th>
+            <th className="px-4 py-3 font-medium">Tempo</th>
+            <th className="px-4 py-3 font-medium">Sistema de pontuação</th>
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 text-right font-medium">Ações</th>
           </tr>
@@ -53,6 +56,14 @@ export function CategoryTable({ categories, onEdit, onDelete }: CategoryTablePro
                 {formatLabelFor(category.categoryFormat, category.customFormatLabel)}
               </td>
               <td className="px-4 py-3 text-muted-foreground">Nível {category.level}</td>
+              <td className="px-4 py-3 text-muted-foreground">
+                {category.presentationTimeSeconds != null
+                  ? formatMinutesSeconds(category.presentationTimeSeconds)
+                  : "—"}
+              </td>
+              <td className="px-4 py-3 text-muted-foreground">
+                {category.scoringTemplate?.name ?? "—"}
+              </td>
               <td className="px-4 py-3">
                 <CategoryStatusBadge status={category.status} />
               </td>

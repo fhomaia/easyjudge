@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
-import { Pencil, Trash2, Users } from "lucide-react";
+import { Calculator, Clock, Pencil, Trash2, Users } from "lucide-react";
 import { CategoryStatusBadge } from "@/components/CategoryStatusBadge";
 import { listItemVariants } from "@/lib/motionVariants";
 import { DIVISION_LABELS, MODALITY_LABELS, formatLabelFor } from "@/lib/categoryLabels";
+import { formatMinutesSeconds } from "@/lib/presentationTime";
 import type { Category } from "@/api/client";
 
 interface CategoryGridItemProps {
@@ -53,6 +54,18 @@ export function CategoryGridItem({ category, onEdit, onDelete }: CategoryGridIte
             {category.level}
           </span>
           {category.nonTumbling && <span>Non-tumbling</span>}
+          {category.presentationTimeSeconds != null && (
+            <span className="flex items-center gap-1.5">
+              <Clock className="size-3.5" />
+              {formatMinutesSeconds(category.presentationTimeSeconds)}
+            </span>
+          )}
+          {category.scoringTemplate && (
+            <span className="flex items-center gap-1.5">
+              <Calculator className="size-3.5" />
+              {category.scoringTemplate.name}
+            </span>
+          )}
         </div>
       </div>
 

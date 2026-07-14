@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, CalendarDays, MapPin, Plus } from "lucide-react";
-import { AppSidebar, type SidebarSection } from "@/components/AppSidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { CategoryStatCards } from "@/components/CategoryStatCards";
@@ -26,9 +26,11 @@ import {
   ApiError,
   categoriesApi,
   eventsApi,
+  scoringTemplatesApi,
   usersApi,
   type Category,
   type Event,
+  type ScoringTemplate,
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
@@ -52,10 +54,10 @@ export function CategoriesPage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  const [activeSection, setActiveSection] = useState<SidebarSection>("events");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
   const [categories, setCategories] = useState<Category[] | null>(null);
+  const [scoringTemplates, setScoringTemplates] = useState<ScoringTemplate[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Category | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
@@ -88,6 +90,14 @@ export function CategoriesPage() {
           err instanceof ApiError ? err.message : "Não foi possível carregar as categorias.",
         ),
       );
+    scoringTemplatesApi
+      .list()
+      .then((templates) =>
+        setScoringTemplates(
+          templates.filter((t) => (t.distributedScore ?? 0) === t.targetScore),
+        ),
+      )
+      .catch(() => setScoringTemplates([]));
   }, [id]);
 
   useEffect(() => {
@@ -118,11 +128,6 @@ export function CategoriesPage() {
     navigate("/login");
   }
 
-  function handleSelectSection(section: SidebarSection) {
-    setActiveSection(section);
-    navigate("/");
-  }
-
   function handleCreated(category: Category) {
     setCategories((prev) => [category, ...(prev ?? [])]);
   }
@@ -143,13 +148,8 @@ export function CategoriesPage() {
   const showingTo = Math.min(currentPage * PAGE_SIZE, filteredCategories.length);
 
   return (
-    <div className="flex min-h-svh bg-background">
-      <AppSidebar
-        profile={profile}
-        activeSection={activeSection}
-        onSelectSection={handleSelectSection}
-        onLogout={handleLogout}
-      />
+    <div className="flex h-svh bg-background">
+      <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-10 pt-6">
@@ -284,6 +284,7 @@ export function CategoriesPage() {
           open={createOpen}
           onOpenChange={setCreateOpen}
           onCreated={handleCreated}
+          scoringTemplates={scoringTemplates}
         />
       )}
 
@@ -293,6 +294,7 @@ export function CategoriesPage() {
           category={editTarget}
           onOpenChange={(open) => !open && setEditTarget(null)}
           onUpdated={handleUpdated}
+          scoringTemplates={scoringTemplates}
         />
       )}
 

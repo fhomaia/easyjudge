@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { CategoriesService } from '../services/categories.service';
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
+import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
 @Controller('events/:eventId/categories')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,8 +28,12 @@ export class CategoriesController {
   @Post()
   @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
   @HttpCode(HttpStatus.CREATED)
-  create(@Param('eventId') eventId: string, @Body() dto: CreateCategoryDto) {
-    return this.categoriesService.create(eventId, dto);
+  create(
+    @Param('eventId') eventId: string,
+    @Body() dto: CreateCategoryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.categoriesService.create(eventId, dto, req.user.userId);
   }
 
   @Get()
@@ -42,8 +48,9 @@ export class CategoriesController {
     @Param('eventId') eventId: string,
     @Param('id') id: string,
     @Body() dto: UpdateCategoryDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.categoriesService.update(eventId, id, dto);
+    return this.categoriesService.update(eventId, id, dto, req.user.userId);
   }
 
   @Delete(':id')
