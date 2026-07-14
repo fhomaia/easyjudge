@@ -13,6 +13,7 @@ import { EventMemberRole } from '../enums/event-member-role.enum';
 import { EventStatus } from '../enums/event-status.enum';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
+import { stripUndefined } from '../../common/utils/strip-undefined';
 
 // Participantes e espectadores só enxergam o evento nesses status;
 // admin e jurado enxergam em qualquer status (inclusive rascunho).
@@ -155,7 +156,7 @@ export class EventsService {
       );
     }
 
-    Object.assign(event, dto);
+    Object.assign(event, stripUndefined(dto));
     if (event.status === EventStatus.PUBLISHED) {
       event.status = EventStatus.CREATED;
     }

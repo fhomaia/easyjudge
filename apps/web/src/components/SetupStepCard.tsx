@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { BookOpen, CalendarDays, Check, Circle, Pencil, Trophy, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/formatDate";
@@ -77,15 +78,25 @@ export function SetupStepCard({ step, stepNumber, recommended }: SetupStepCardPr
         </p>
       )}
 
-      <button
-        type="button"
-        disabled
-        title="Disponível em breve"
-        className="mt-auto flex items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary opacity-50"
-      >
-        {step.completed && <Pencil className="size-4" />}
-        {step.actionLabel}
-      </button>
+      {step.href ? (
+        <Link
+          to={step.href}
+          className="mt-auto flex items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+        >
+          {step.completed && <Pencil className="size-4" />}
+          {step.actionLabel}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled
+          title="Disponível em breve"
+          className="mt-auto flex items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary opacity-50"
+        >
+          {step.completed && <Pencil className="size-4" />}
+          {step.actionLabel}
+        </button>
+      )}
     </div>
   );
 }

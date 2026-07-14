@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ArrowRight, Star } from "lucide-react";
 import type { SetupStep } from "@/lib/eventSetupSteps";
 
@@ -16,15 +17,25 @@ export function SetupRecommendedBanner({ step }: { step: SetupStep }) {
           </p>
         </div>
       </div>
-      <button
-        type="button"
-        disabled
-        title="Disponível em breve"
-        className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary opacity-50"
-      >
-        Ir para {step.shortTitle.toLowerCase()}
-        <ArrowRight className="size-4" />
-      </button>
+      {step.href ? (
+        <Link
+          to={step.href}
+          className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+        >
+          Ir para {step.shortTitle.toLowerCase()}
+          <ArrowRight className="size-4" />
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled
+          title="Disponível em breve"
+          className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary opacity-50"
+        >
+          Ir para {step.shortTitle.toLowerCase()}
+          <ArrowRight className="size-4" />
+        </button>
+      )}
     </div>
   );
 }

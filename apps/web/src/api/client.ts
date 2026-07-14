@@ -188,3 +188,56 @@ export const eventsApi = {
     return authUpload<Event>(`/events/${id}/logo`, formData);
   },
 };
+
+export type CategoryStatus = "active" | "inactive";
+export type CategoryModality = "all_star" | "university" | "school";
+export type CategoryDivision = "coed" | "all_girl" | "all_boy";
+export type CategoryFormat = "team_cheer" | "group_stunt" | "coed" | "partner" | "custom";
+
+export interface Category {
+  id: string;
+  eventId: string;
+  name: string;
+  modality: CategoryModality;
+  division: CategoryDivision;
+  categoryFormat: CategoryFormat;
+  customFormatLabel: string | null;
+  level: number;
+  nonTumbling: boolean;
+  status: CategoryStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CategoryPayload {
+  name: string;
+  modality: CategoryModality;
+  division: CategoryDivision;
+  categoryFormat: CategoryFormat;
+  customFormatLabel?: string | null;
+  level: number;
+  nonTumbling: boolean;
+}
+
+export type UpdateCategoryPayload = Partial<CategoryPayload> & {
+  status?: CategoryStatus;
+};
+
+export const categoriesApi = {
+  list: (eventId: string) => authRequest<Category[]>(`/events/${eventId}/categories`),
+
+  create: (eventId: string, payload: CategoryPayload) =>
+    authRequest<Category>(`/events/${eventId}/categories`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  update: (eventId: string, id: string, payload: UpdateCategoryPayload) =>
+    authRequest<Category>(`/events/${eventId}/categories/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (eventId: string, id: string) =>
+    authRequest<void>(`/events/${eventId}/categories/${id}`, { method: "DELETE" }),
+};

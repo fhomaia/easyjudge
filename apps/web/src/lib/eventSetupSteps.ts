@@ -12,6 +12,9 @@ export interface SetupStep {
   detail: string;
   updatedAt?: string | null;
   actionLabel: string;
+  // Só definido para etapas que já têm uma tela de cadastro construída
+  // — as demais mostram o botão desabilitado ("disponível em breve").
+  href?: string;
 }
 
 export function buildSetupSteps(event: Event): SetupStep[] {
@@ -31,6 +34,7 @@ export function buildSetupSteps(event: Event): SetupStep[] {
           : "Nenhuma categoria cadastrada",
       updatedAt: event.categoriesUpdatedAt,
       actionLabel: categoriesCount > 0 ? "Editar categorias" : "Iniciar cadastro",
+      href: `/events/${event.id}/categories`,
     },
     {
       key: "regulation",

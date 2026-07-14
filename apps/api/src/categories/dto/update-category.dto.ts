@@ -13,36 +13,44 @@ import {
 import { CategoryModality } from '../enums/category-modality.enum';
 import { CategoryDivision } from '../enums/category-division.enum';
 import { CategoryFormat } from '../enums/category-format.enum';
+import { CategoryStatus } from '../enums/category-status.enum';
 
-export class CreateCategoryDto {
+export class UpdateCategoryDto {
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(150)
-  name: string;
+  name?: string;
 
+  @IsOptional()
   @IsEnum(CategoryModality)
-  modality: CategoryModality;
+  modality?: CategoryModality;
 
+  @IsOptional()
   @IsEnum(CategoryDivision)
-  division: CategoryDivision;
+  division?: CategoryDivision;
 
+  @IsOptional()
   @IsEnum(CategoryFormat)
-  categoryFormat: CategoryFormat;
+  categoryFormat?: CategoryFormat;
 
-  // Obrigatório só quando categoryFormat = 'custom' (validado no
-  // formulário também, mas repetido aqui pra não depender só do front).
   @ValidateIf((dto) => dto.categoryFormat === CategoryFormat.CUSTOM)
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   customFormatLabel?: string;
 
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 1 })
   @Min(1)
   @Max(7)
-  level: number;
+  level?: number;
 
   @IsOptional()
   @IsBoolean()
   nonTumbling?: boolean;
+
+  @IsOptional()
+  @IsEnum(CategoryStatus)
+  status?: CategoryStatus;
 }
