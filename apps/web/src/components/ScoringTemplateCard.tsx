@@ -3,6 +3,7 @@ import { Calculator, Settings, Trash2 } from "lucide-react";
 import { ScoringTemplateStatusBadge } from "@/components/ScoringTemplateStatusBadge";
 import { listItemVariants } from "@/lib/motionVariants";
 import { formatDateTime } from "@/lib/formatDate";
+import { getAvatarColor } from "@/lib/avatarColor";
 import type { ScoringTemplate } from "@/api/client";
 
 interface ScoringTemplateCardProps {
@@ -27,7 +28,10 @@ export function ScoringTemplateCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <div
+            style={{ backgroundColor: getAvatarColor(template.id) }}
+            className="flex size-11 shrink-0 items-center justify-center rounded-full text-white"
+          >
             <Calculator className="size-5" />
           </div>
           <ScoringTemplateStatusBadge

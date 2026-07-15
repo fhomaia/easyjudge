@@ -1,6 +1,6 @@
 import type { Event } from "@/api/client";
 
-export type SetupStepKey = "categories" | "regulation" | "teams" | "judgePanel" | "schedule";
+export type SetupStepKey = "categories" | "regulation" | "programs" | "judgePanel" | "schedule";
 export type SetupStepState = "completed" | "in_progress" | "not_started";
 
 export interface SetupStep {
@@ -31,7 +31,7 @@ export function buildSetupSteps(
   regulation: RegulationSummary | null,
 ): SetupStep[] {
   const categoriesCount = event.categoriesCount ?? 0;
-  const teamsCount = event.teamsCount ?? 0;
+  const programsCount = event.programsCount ?? 0;
   const regulationCompleted =
     !!regulation &&
     regulation.hasOfficialRegulation &&
@@ -67,17 +67,18 @@ export function buildSetupSteps(
       href: `/events/${event.id}/categories`,
     },
     {
-      key: "teams",
+      key: "programs",
       title: "Programas e equipes",
       shortTitle: "Programas e equipes",
-      description: "Cadastre as equipes que vão participar do evento.",
-      completed: teamsCount > 0,
+      description: "Cadastre os programas e as equipes que vão participar do evento.",
+      completed: programsCount > 0,
       detail:
-        teamsCount > 0
-          ? `${teamsCount} ${teamsCount === 1 ? "equipe cadastrada" : "equipes cadastradas"}`
-          : "Nenhuma equipe cadastrada",
-      updatedAt: event.teamsUpdatedAt,
-      actionLabel: teamsCount > 0 ? "Editar equipes" : "Iniciar cadastro",
+        programsCount > 0
+          ? `${programsCount} ${programsCount === 1 ? "programa cadastrado" : "programas cadastrados"}`
+          : "Nenhum programa cadastrado",
+      updatedAt: event.programsUpdatedAt,
+      actionLabel: programsCount > 0 ? "Editar programas" : "Iniciar cadastro",
+      href: `/events/${event.id}/programs`,
     },
     {
       key: "judgePanel",

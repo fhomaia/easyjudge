@@ -1,0 +1,9 @@
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+
+export class UpdateTeamDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
+  name?: string;
+}

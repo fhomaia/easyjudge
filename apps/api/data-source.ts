@@ -5,6 +5,10 @@ import { EmailVerification } from './src/auth/entities/email-verification.entity
 import { Event } from './src/events/entities/event.entity';
 import { EventMember } from './src/events/entities/event-member.entity';
 import { Category } from './src/categories/entities/category.entity';
+import { ProgramParticipation } from './src/programs/entities/program-participation.entity';
+import { ProgramProfile } from './src/programs/entities/program-profile.entity';
+import { JudgeParticipation } from './src/judges/entities/judge-participation.entity';
+import { JudgeProfile } from './src/judges/entities/judge-profile.entity';
 import { Team } from './src/teams/entities/team.entity';
 import { ScoringTemplate } from './src/scoring-templates/entities/scoring-template.entity';
 import { ScoringCriterion } from './src/scoring-templates/entities/scoring-criterion.entity';
@@ -22,6 +26,10 @@ export default new DataSource({
     Event,
     EventMember,
     Category,
+    ProgramParticipation,
+    ProgramProfile,
+    JudgeParticipation,
+    JudgeProfile,
     Team,
     ScoringTemplate,
     ScoringCriterion,

@@ -10,6 +10,9 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 import { UsersService } from '../../users/services/users.service';
+import { ProgramsService } from '../../programs/services/programs.service';
+import { JudgesService } from '../../judges/services/judges.service';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { MailService } from './mail.service';
 import { EmailVerification } from '../entities/email-verification.entity';
 import { RegisterDto } from '../dto/register.dto';
@@ -27,6 +30,8 @@ export class AuthService {
     @InjectRepository(EmailVerification)
     private readonly emailVerificationRepository: Repository<EmailVerification>,
     private readonly usersService: UsersService,
+    private readonly programsService: ProgramsService,
+    private readonly judgesService: JudgesService,
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
   ) {}
@@ -142,6 +147,27 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
     await this.usersService.setPasswordHash(user.id, passwordHash);
+
+    // Cadastro só é considerado completo aqui (com senha definida) —
+    // é o momento certo pra vincular automaticamente qualquer
+    // ProgramParticipation cadastrada manualmente por um organizador
+    // (userId ainda null) com o mesmo email, em qualquer evento. Ver
+    // ProgramsService.linkUnclaimedProgramsByEmail. Mesmo padrão vale
+    // pra jurados logo abaixo (JudgesService.linkUnclaimedJudgesByEmail).
+    if (user.role === UserRole.PROGRAM) {
+      await this.programsService.linkUnclaimedProgramsByEmail(user.id, {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        teamOrInstitutionName: user.teamOrInstitutionName,
+      });
+    } else if (user.role === UserRole.JUDGE) {
+      await this.judgesService.linkUnclaimedJudgesByEmail(user.id, {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      });
+    }
 
     return this.buildAccessToken(user.id, user.role);
   }

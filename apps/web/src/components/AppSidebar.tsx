@@ -11,7 +11,7 @@ interface AppSidebarProps {
 
 const NAV_ITEMS: { href: string; label: string; icon: typeof CalendarDays }[] = [
   { href: "/", label: "Eventos", icon: CalendarDays },
-  { href: "/scoring-templates", label: "Sistema de pontuação", icon: Calculator },
+  { href: "/scoring-templates", label: "Sistemas de pontuação", icon: Calculator },
 ];
 
 function getUserInitials(profile: UserProfile): string {

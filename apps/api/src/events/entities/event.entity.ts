@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Category } from '../../categories/entities/category.entity';
-import { Team } from '../../teams/entities/team.entity';
+import { ProgramParticipation } from '../../programs/entities/program-participation.entity';
 import { EventStatus } from '../enums/event-status.enum';
 
 @Entity('events')
@@ -66,16 +66,16 @@ export class Event {
   @OneToMany(() => Category, (category) => category.event)
   categories: Category[];
 
-  @OneToMany(() => Team, (team) => team.event)
-  teams: Team[];
+  @OneToMany(() => ProgramParticipation, (participation) => participation.event)
+  programs: ProgramParticipation[];
 
   // Não são colunas — populadas por EventsService (findAllForUser via
   // loadRelationCountAndMap; findOneForUser derivando das relations já
   // carregadas), só para telas de listagem/configuração do evento.
   categoriesCount?: number;
-  teamsCount?: number;
+  programsCount?: number;
   categoriesUpdatedAt?: Date | null;
-  teamsUpdatedAt?: Date | null;
+  programsUpdatedAt?: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

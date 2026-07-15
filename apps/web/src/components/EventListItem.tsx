@@ -60,7 +60,7 @@ export function EventListItem({
           </span>
           <span className="flex items-center gap-1.5">
             <Users className="size-3.5" />
-            {event.categoriesCount ?? 0} categorias · {event.teamsCount ?? 0} equipes
+            {event.categoriesCount ?? 0} categorias · {event.programsCount ?? 0} programas
           </span>
         </div>
       </div>

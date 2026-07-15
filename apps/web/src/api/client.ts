@@ -142,9 +142,9 @@ export interface Event {
   updatedAt: string;
   currentUserRole: EventMemberRole;
   categoriesCount?: number;
-  teamsCount?: number;
+  programsCount?: number;
   categoriesUpdatedAt?: string | null;
-  teamsUpdatedAt?: string | null;
+  programsUpdatedAt?: string | null;
 }
 
 export interface CreateEventPayload {
@@ -245,6 +245,128 @@ export const categoriesApi = {
 
   remove: (eventId: string, id: string) =>
     authRequest<void>(`/events/${eventId}/categories/${id}`, { method: "DELETE" }),
+};
+
+export interface Program {
+  id: string;
+  eventId: string;
+  userId: string | null;
+  name: string;
+  email: string;
+  city: string;
+  state: string;
+  logoUrl: string | null;
+  teamsCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProgramPayload {
+  name: string;
+  email: string;
+  city: string;
+  state: string;
+  userId?: string;
+}
+
+export type UpdateProgramPayload = Partial<ProgramPayload>;
+
+export interface ProgramWithTeams extends Program {
+  teams: Team[];
+}
+
+export interface ProgramCatalogEntry {
+  source: "platform" | "own";
+  programId?: string;
+  userId: string | null;
+  name: string;
+  email: string;
+  city: string | null;
+  state: string | null;
+  logoUrl: string | null;
+  usedByMe?: boolean;
+}
+
+export const programsApi = {
+  list: (eventId: string) => authRequest<Program[]>(`/events/${eventId}/programs`),
+
+  getCatalog: () => authRequest<ProgramCatalogEntry[]>("/programs/catalog"),
+
+  get: (eventId: string, id: string) =>
+    authRequest<ProgramWithTeams>(`/events/${eventId}/programs/${id}`),
+
+  create: (eventId: string, payload: ProgramPayload) =>
+    authRequest<Program>(`/events/${eventId}/programs`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  update: (eventId: string, id: string, payload: UpdateProgramPayload) =>
+    authRequest<Program>(`/events/${eventId}/programs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (eventId: string, id: string) =>
+    authRequest<void>(`/events/${eventId}/programs/${id}`, { method: "DELETE" }),
+
+  uploadLogo: (eventId: string, id: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return authUpload<Program>(`/events/${eventId}/programs/${id}/logo`, formData);
+  },
+};
+
+export interface Team {
+  id: string;
+  programId: string;
+  name: string;
+  categories: Category[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamPayload {
+  name: string;
+}
+
+export const teamsApi = {
+  list: (eventId: string, programId: string) =>
+    authRequest<Team[]>(`/events/${eventId}/programs/${programId}/teams`),
+
+  create: (eventId: string, programId: string, payload: TeamPayload) =>
+    authRequest<Team>(`/events/${eventId}/programs/${programId}/teams`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  update: (eventId: string, programId: string, teamId: string, payload: TeamPayload) =>
+    authRequest<Team>(`/events/${eventId}/programs/${programId}/teams/${teamId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (eventId: string, programId: string, teamId: string) =>
+    authRequest<void>(`/events/${eventId}/programs/${programId}/teams/${teamId}`, {
+      method: "DELETE",
+    }),
+
+  addCategory: (eventId: string, programId: string, teamId: string, categoryId: string) =>
+    authRequest<Team>(
+      `/events/${eventId}/programs/${programId}/teams/${teamId}/categories`,
+      { method: "POST", body: JSON.stringify({ categoryId }) },
+    ),
+
+  removeCategory: (
+    eventId: string,
+    programId: string,
+    teamId: string,
+    categoryId: string,
+  ) =>
+    authRequest<Team>(
+      `/events/${eventId}/programs/${programId}/teams/${teamId}/categories/${categoryId}`,
+      { method: "DELETE" },
+    ),
 };
 
 export type ScoringCriterionType = "group" | "score_item";

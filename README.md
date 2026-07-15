@@ -85,15 +85,44 @@ a API (configurado em `apps/web/vite.config.ts`).
 - Email de verificação enviado de verdade via Resend (antes só logava
   no console) — hoje só entrega pra `easyjudgepro@gmail.com` (sandbox,
   domínio próprio ainda não verificado)
+- Telas de "criar evento" completas: evento (com upload de logo),
+  categorias (com formato/modalidade/divisão/nível/tempo de
+  apresentação) e equipes/programas
+- Setup do evento com checklist de 5 etapas (Regulamento, Categorias,
+  Programas e equipes, Painel de jurados, Cronograma) — as 2 últimas
+  ainda são placeholders "disponível em breve"
+- **Sistema de pontuação** (`scoring-templates`): biblioteca pessoal de
+  templates reutilizáveis entre eventos, com árvore de critérios
+  (grupos/itens, drag-and-drop pra reordenar/reparentar), clonagem de
+  um template existente ao criar outro, e indicador de "completo"
+  (soma dos critérios-raiz bate com a meta de pontos)
+- **Regulamento do evento** (`regulations`): upload de documentos
+  (regulamento oficial, regras de segurança, documentos adicionais com
+  título customizado), tabela de deduções de pontos (padrão ou
+  customizada), e vitrine dos sistemas de pontuação do usuário
+- Categorias agora exigem um sistema de pontuação **completo**
+  atribuído (validado no backend, não só na UI) — excluir um sistema
+  de pontuação em uso por categorias é bloqueado
+- **Programas e equipes**: `ProgramParticipation` (instituição/academia
+  num evento) + `ProgramProfile` (perfil canônico do programa, 1:1 com
+  a conta própria) + catálogo do produtor (evita recadastrar o mesmo
+  programa em cada evento, com validação de duplicidade) + merge
+  automático quando o programa cria conta na plataforma. `Team` é um
+  domínio próprio aninhado (equipes de um programa, ligadas a
+  categorias)
+- **Painel de jurados (base no backend)**: mesmo padrão de
+  catálogo/perfil canônico/dedup dos programas aplicado a jurados
+  (`judges`) — ainda sem tela própria, só a API
 
 ### 🚧 Em andamento / próximos passos
 
-1. Detalhar `Regulation` (regulamento) e `ScoringRule` (regra de
-   pontuação por categoria)
-2. Modelar `Routine`, `ScoreEvent` (event sourcing das notas) e `Result`
+1. Modelar `Routine`, `ScoreEvent` (event sourcing das notas) e `Result`
+2. Construir as telas de "Painel de jurados" e "Cronograma" (hoje
+   placeholders no checklist de setup do evento)
 3. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
    Supabase Realtime) para o painel do produtor
-4. Telas de "criar evento" (evento, categorias, equipes, upload de logo)
+4. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje é
+   pelo `id` de uma versão específica)
 
 ### 📋 Backlog (não iniciado)
 
@@ -128,6 +157,8 @@ easyjudge/
 │       │   ├── events/         # Event + jornada "criar evento"
 │       │   ├── categories/     # Category (aninhada em /events/:eventId/categories)
 │       │   ├── teams/          # Team (aninhada em /events/:eventId/teams)
+│       │   ├── scoring-templates/  # ScoringTemplate + ScoringCriterion (árvore de pontuação)
+│       │   ├── regulations/    # Regulation + RegulationDocument (1:1 com Event)
 │       │   ├── common/         # enums, validators e config compartilhados
 │       │   └── migrations/     # migrations do TypeORM
 │       └── .env.example
@@ -136,7 +167,8 @@ easyjudge/
 │       └── src/
 │           ├── api/            # client.ts — chamadas à API
 │           ├── store/          # auth.ts — sessão (Zustand + persist)
-│           ├── pages/          # LoginPage, HomePage
+│           ├── pages/          # LoginPage, HomePage, EventSetupPage, CategoriesPage,
+│           │                    # RegulationPage, ScoringTemplatesListPage/BuilderPage
 │           └── components/     # RegisterDialog, rotas protegidas, BrandBackdrop, ui/ (shadcn)
 ├── packages/                   # vazio por enquanto (shared-types entra quando fizer sentido)
 ├── docker-compose.yml          # Postgres local

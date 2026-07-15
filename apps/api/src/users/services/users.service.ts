@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { RegisterDto } from '../../auth/dto/register.dto';
+import { UserRole } from '../../common/enums/user-role.enum';
 
 @Injectable()
 export class UsersService {
@@ -26,6 +27,15 @@ export class UsersService {
 
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });
+  }
+
+  // Usado pra popular a lista de "vincular a um programa já
+  // cadastrado" na tela de Programas e Equipes.
+  findAllByRole(role: UserRole): Promise<User[]> {
+    return this.usersRepository.find({
+      where: { role },
+      order: { firstName: 'ASC' },
+    });
   }
 
   async createPendingUser(dto: RegisterDto): Promise<User> {

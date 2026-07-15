@@ -85,7 +85,7 @@ export class EventsService {
     const { entities, raw } = await this.eventsRepo
       .createQueryBuilder('event')
       .loadRelationCountAndMap('event.categoriesCount', 'event.categories')
-      .loadRelationCountAndMap('event.teamsCount', 'event.teams')
+      .loadRelationCountAndMap('event.programsCount', 'event.programs')
       .innerJoin(
         EventMember,
         'member',
@@ -115,7 +115,7 @@ export class EventsService {
   async findOneForUser(id: string, userId: string): Promise<EventWithRole> {
     const event = await this.eventsRepo.findOne({
       where: { id },
-      relations: ['categories', 'teams'],
+      relations: ['categories', 'programs'],
     });
     if (!event) throw new NotFoundException('Evento não encontrado');
 
@@ -131,9 +131,9 @@ export class EventsService {
       ...event,
       currentUserRole: member.role,
       categoriesCount: event.categories.length,
-      teamsCount: event.teams.length,
+      programsCount: event.programs.length,
       categoriesUpdatedAt: latestUpdatedAt(event.categories),
-      teamsUpdatedAt: latestUpdatedAt(event.teams),
+      programsUpdatedAt: latestUpdatedAt(event.programs),
     };
   }
 

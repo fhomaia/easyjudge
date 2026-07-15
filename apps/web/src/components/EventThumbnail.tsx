@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { getAvatarColor } from "@/lib/avatarColor";
 
 const STOPWORDS = new Set([
   "de", "da", "do", "das", "dos", "e", "em", "a", "o", "as", "os",
@@ -34,8 +35,9 @@ export function EventThumbnail({ name, logoUrl, className }: EventThumbnailProps
 
   return (
     <div
+      style={{ backgroundColor: getAvatarColor(name) }}
       className={cn(
-        "flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary",
+        "flex size-12 shrink-0 items-center justify-center rounded-lg text-sm font-semibold text-white",
         className,
       )}
     >

@@ -12,12 +12,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/formatDate";
+import { getAvatarColor } from "@/lib/avatarColor";
 import type { SetupStep, SetupStepKey } from "@/lib/eventSetupSteps";
 
 const STEP_ICONS: Record<SetupStepKey, typeof Trophy> = {
   categories: Trophy,
   regulation: BookOpen,
-  teams: Users,
+  programs: Users,
   judgePanel: Gavel,
   schedule: CalendarClock,
 };
@@ -50,7 +51,10 @@ export function SetupStepCard({ step, stepNumber, recommended }: SetupStepCardPr
       </div>
 
       <div className="flex items-start gap-4">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <div
+          style={{ backgroundColor: getAvatarColor(step.key) }}
+          className="flex size-14 shrink-0 items-center justify-center rounded-full text-white"
+        >
           <Icon className="size-6" />
         </div>
         <div className="min-w-0">

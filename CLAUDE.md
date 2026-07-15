@@ -82,12 +82,14 @@ migrarmos para produção — ainda não implementado.
 
 ## Estrutura do repositório
 
-Cada domínio (`auth`, `users`, `events`, `categories`, `teams`, ...) é uma
-pasta autocontida em `apps/api/src/`, com `controllers/` e `services/`
-como subpastas próprias dentro dele (não pastas globais compartilhadas
-entre domínios). `dto/`, `entities/`, `*.module.ts` ficam na raiz de cada
-domínio. Padrão a seguir para novos domínios (`Regulation`,
-`ScoringRule`, `Routine`, `ScoreEvent`, `Result`, etc).
+Cada domínio (`auth`, `users`, `events`, `categories`, `programs`,
+`teams`, `judges`, `scoring-templates`, `regulations`, ...) é uma pasta
+autocontida em
+`apps/api/src/`, com `controllers/` e `services/` como subpastas
+próprias dentro dele (não pastas globais compartilhadas entre
+domínios). `dto/`, `entities/`, `*.module.ts` ficam na raiz de cada
+domínio. Mesmo padrão a seguir para os próximos domínios (`Routine`,
+`ScoreEvent`, `Result`, etc).
 
 ```
 easyjudge/
@@ -109,10 +111,28 @@ easyjudge/
 │       │   ├── categories/     # Category, aninhada em /events/:eventId/categories
 │       │   │   ├── controllers/ services/ dto/ entities/
 │       │   │   └── categories.module.ts
-│       │   ├── teams/          # Team, aninhada em /events/:eventId/teams
+│       │   ├── programs/       # ProgramParticipation (a instituição/academia
+│       │   │   │                # num evento) + ProgramProfile (perfil canônico,
+│       │   │   │                # 1:1 com User role PROGRAM) + catálogo do produtor
+│       │   │   ├── controllers/ services/ dto/ entities/
+│       │   │   └── programs.module.ts  # exporta ProgramsService (usado por teams/auth)
+│       │   ├── teams/          # Team, aninhada em
+│       │   │   │                # /events/:eventId/programs/:programId/teams
 │       │   │   ├── controllers/ services/ dto/ entities/
 │       │   │   └── teams.module.ts
-│       │   ├── common/         # enums, validators e config compartilhados (CPF/CNPJ, senha forte, upload de logo)
+│       │   ├── judges/         # JudgeParticipation + JudgeProfile — mesmo padrão
+│       │   │   │                # de programs/ aplicado a jurados (só backend, sem
+│       │   │   │                # tela ainda)
+│       │   │   ├── controllers/ services/ dto/ entities/
+│       │   │   └── judges.module.ts
+│       │   ├── scoring-templates/  # ScoringTemplate + ScoringCriterion (árvore),
+│       │   │   │                    # biblioteca pessoal do usuário, não presa a evento
+│       │   │   ├── controllers/ services/ dto/ entities/ enums/
+│       │   │   └── scoring-templates.module.ts  # exporta ScoringTemplatesService (usado por categories)
+│       │   ├── regulations/    # Regulation + RegulationDocument, 1:1 com Event (por eventId)
+│       │   │   ├── controllers/ services/ dto/ entities/ enums/ constants/
+│       │   │   └── regulations.module.ts
+│       │   ├── common/         # enums, validators e config compartilhados (CPF/CNPJ, senha forte, upload de logo/documento)
 │       │   ├── migrations/     # migrations do TypeORM
 │       │   ├── app.module.ts
 │       │   └── main.ts
@@ -122,7 +142,8 @@ easyjudge/
 │       ├── src/
 │       │   ├── api/            # client.ts — fetch wrapper para a API (via proxy /api)
 │       │   ├── store/          # auth.ts — Zustand + persist (JWT no localStorage)
-│       │   ├── pages/          # LoginPage, HomePage
+│       │   ├── pages/          # LoginPage, HomePage, EventSetupPage, CategoriesPage,
+│       │   │   │                # RegulationPage, ScoringTemplatesListPage/BuilderPage
 │       │   ├── components/     # RegisterDialog, ProtectedRoute, GuestRoute, FormError,
 │       │   │   │                # BrandBackdrop (raio riscando a tela -> clarão -> split azul/amarelo)
 │       │   │   └── ui/         # componentes shadcn/ui (gerados via CLI, editáveis)
@@ -232,8 +253,10 @@ número, caractere especial) + confirmar senha → conta criada e já loga
   (método público, exportado) para validar que o evento existe antes de
   criar o recurso filho — ver gotcha sobre esse padrão abaixo:
   - `Event`: nome, `startDate`, `competitionDays`, `location`, `createdById`
-  - `Category`: nome, vinculada a um evento (`eventId`) — ainda sem a
-    regra de pontuação (será uma entidade própria, a detalhar)
+  - `Category`: nome, vinculada a um evento (`eventId`) — desde
+    2026-07-14 também exige um `scoringTemplateId` (ver seção de
+    `scoring-templates`/categorias mais abaixo), regra de pontuação
+    virou uma entidade própria de verdade, não mais "a detalhar"
   - `Team`: nome, email, cidade, estado (UF), vinculada a um evento
   - `POST /events` — cria evento (`@Roles(JUDGE, ORGANIZATION)`)
   - `GET /events` / `GET /events/:id` — qualquer usuário autenticado
@@ -545,6 +568,13 @@ número, caractere especial) + confirmar senha → conta criada e já loga
   as opções vêm de `Object.keys(ROLE_LABELS)`, a ordem é só a ordem de
   inserção das chaves no objeto `ROLE_LABELS` em `RegisterDialog.tsx`
   (`organization`, `judge`, `gym`, `athlete`, nessa ordem).
+  **Atualização (2026-07-14): renomeado de novo, "Ginásio"/`GYM` virou
+  "Programa"/`UserRole.PROGRAM = 'program'`** (migration
+  `RenameGymRoleToProgram`, mesmo procedimento de rename→create→cast→drop
+  do tipo enum do Postgres já usado no rename `TEAM`→`GYM` anterior).
+  Rótulo no frontend (`ROLE_LABELS`) também virou "Programa". O restante
+  do raciocínio desta seção (não gerencia eventos, ordem das opções)
+  continua valendo, só o nome mudou.
   **Gotcha de altura fixa cortando a 4ª opção (2026-07-12):** o wizard
   usa `AnimatePresence` com cada passo em `position: absolute inset-0`
   dentro de um wrapper `relative min-h-[Npx] overflow-hidden` — isso é
@@ -824,13 +854,268 @@ número, caractere especial) + confirmar senha → conta criada e já loga
     `addSelect('member.role', 'member_role')` pra trazer a coluna do
     join sem virar uma entidade `EventMember` completa por linha).
 
+- **Módulo `scoring-templates` — sistema de pontuação como biblioteca
+  pessoal do usuário (2026-07-13/14).** `ScoringTemplate` (nome,
+  descrição, `targetScore`) + `ScoringCriterion` (árvore auto-
+  referenciada via `parentId`, tipo `group`/`score_item`, `maxScore`,
+  `weight`, `order`, `showInJudgingSheet`, `allowDecimalScoring`,
+  `isRequired`) — não pertence a um evento específico, é reutilizável
+  entre eventos (associação com `Category` só entrou depois, ver
+  abaixo). Rotas `POST/GET/PATCH/DELETE /scoring-templates` e
+  `POST/GET/PATCH/DELETE /scoring-templates/:templateId/criteria` +
+  `POST .../criteria/:id/move` (drag-and-drop, reordena/reparenta).
+  - **Frontend**: `ScoringTemplatesListPage` (grid de cards) +
+    `ScoringTemplateBuilderPage` (`/scoring-templates/:id`) — árvore
+    editável com painel lateral (`EditCriterionPanel`), drag-and-drop
+    (`lib/dndProjection.ts` calcula onde soltar/reparentar antes de
+    confirmar no servidor), `ScoringValidationBar` (mostra se a soma
+    dos critérios-raiz bate com a meta).
+  - **`distributedScore` (2026-07-14)**: campo computado (não é
+    coluna) em `ScoringTemplate`, soma do `maxScore` dos critérios
+    **raiz** (`parentId IS NULL`) de cada template — calculado numa
+    query agrupada separada em `findAllForUser` (não dá pra usar
+    `loadRelationCountAndMap`, que só serve pra `COUNT`, não `SUM`).
+    Um template está **"completo"** quando `distributedScore ===
+    targetScore` — badge `ScoringTemplateStatusBadge` ("Completo"/
+    "Incompleto") na listagem, e essa é a condição usada em toda
+    validação de "template utilizável" no resto do sistema (ver
+    `assertUsableTemplate` abaixo).
+  - **Clonagem ao criar (2026-07-14)**: `CreateScoringTemplateDto`
+    aceita `cloneFromId?` opcional — `ScoringTemplatesService.create`
+    valida que o template de origem pertence ao usuário e clona a
+    árvore inteira de critérios pro novo template
+    (`cloneCriteria`, privado). **Gotcha resolvido**: não dá pra só
+    trocar `templateId` nos critérios copiados — cada nó precisa de um
+    `id` próprio, e `parentId` dos filhos precisa apontar pro **novo**
+    id do pai clonado, não pro antigo. Resolvido com um `Map<oldId,
+    newId>` e processamento em ordem topológica simples (só clona um
+    nó depois que o pai dele já foi clonado ou se for raiz — while
+    loop com `findIndex` até esvaziar a lista). No frontend, o dialog
+    de criar template busca a lista de templates do usuário ao abrir
+    e, ao escolher um "Clonar de", pré-preenche nome (`"Nome
+    (cópia)"`) e meta de pontos a partir da origem (editável antes de
+    salvar).
+
+- **Módulo `regulations` — documentos + deduções de um evento
+  (2026-07-14).** `Regulation` é 1:1 com `Event` (endereçado sempre por
+  `eventId`, nunca pelo próprio `id` — o front nem recebe esse `id` na
+  resposta). Segue o mesmo padrão de domínio filho que `categories`/
+  `teams` (importa `EventsModule`, injeta
+  `EventsService.findEventOrThrow`).
+  - **Sem linha persistida até o primeiro write**: `GET
+    /events/:eventId/regulation` não cria nada no banco só por ser
+    acessado — se não existir `Regulation` pro evento, devolve uma
+    view sintética (modo `iasf`, `documents: []`, deduções nos valores
+    padrão). A linha real (`getOrCreateForEvent`, privado) só nasce no
+    primeiro `PATCH` de deduções ou upload de documento. Decisão
+    deliberada pra não poluir o banco com registros vazios de eventos
+    que ninguém nunca configurou.
+  - **Documentos** (`RegulationDocument`, N por `Regulation`): 2 slots
+    fixos obrigatórios (`official_regulation`, `safety_rules`) + 1
+    opcional (`code_of_conduct` — **removido da UI** a pedido do
+    usuário em 2026-07-14, o `enum` `RegulationDocumentKind` ainda tem
+    o valor mas nada mais cria documentos desse `kind`) + `additional`
+    (lista livre, múltiplos). Reenviar um documento de slot fixo
+    **substitui** o anterior (delete+insert, mesmo raciocínio de "só
+    uma linha ativa" já usado em outros lugares do projeto — não limpa
+    o arquivo antigo do disco, mesma escolha já feita em
+    `setEventLogo`). Upload aceita PDF/JPEG/PNG, máx. 10MB
+    (`common/config/document-upload.config.ts`, mesmo formato de
+    `logo-upload.config.ts`, salva em `uploads/regulation-documents/`).
+    Documentos adicionais pedem um **título** ao usuário antes do
+    upload (dialog com `Input` pré-preenchido com o nome do arquivo,
+    editável) — os 2 slots fixos não, o nome de exibição é sempre o
+    nome original do arquivo.
+  - **Deduções**: `deductionMode` (`iasf` | `custom`) + `deductionValues`
+    (jsonb, `Partial<Record<DeductionType, number>>`, só guarda
+    overrides quando `custom`). Os 9 tipos de dedução reais (não são
+    mais os 6 de exemplo do mockup original) e seus valores padrão:
+    `athlete_fall` -1.0, `major_athlete_fall` -2.0, `building_bobble`
+    -2.0, `building_fall` -3.0, `major_building_fall` -4.0,
+    `legality_infractions` -4.0, `skill_out_of_level` -1.0,
+    `time_limit_violations` -1.0, `boundary_violations` -1.0
+    (`constants/iasf-deductions.ts`, ordem fixa de exibição via
+    `DEDUCTION_TYPES_ORDER`, não depende de ordem de chaves de objeto).
+    Rótulos em inglês (termos oficiais de regulamento de cheer) ficam
+    só no frontend (`lib/deductionLabels.ts`), backend manda só
+    `{type, defaultValue, value}` — mesmo padrão de `ROLE_LABELS`
+    (rótulo é responsabilidade do front, não do back). Tabela editável
+    só quando `mode === 'custom'`; virar pra IASF mostra os defaults
+    read-only. Salva com debounce por linha (mesmo padrão de
+    `persistTargetScore` no builder de templates).
+  - **Frontend**: `RegulationPage` (`/events/:id/regulation`), 3
+    seções (Documentos, Deduções, Sistemas de pontuação — a terceira
+    reaproveita `ScoringTemplateCard`/`CreateScoringTemplateDialog` já
+    existentes, sem duplicar UI) + rodapé "Próxima etapa" com o mesmo
+    visual do banner âmbar já usado em `SetupRecommendedBanner`.
+
+- **Categorias agora exigem um sistema de pontuação "completo"
+  (2026-07-14).** `Category.scoringTemplateId` (FK nullable no banco —
+  categorias antigas não têm — mas **obrigatório** em
+  `CreateCategoryDto`). `ScoringTemplatesService.assertUsableTemplate`
+  (chamado por `CategoriesService.create`/`update`) valida que o
+  template pertence ao usuário **e** está "completo" (`distributedScore
+  === targetScore`), senão `409`. Consequência direta: como a FK passou
+  a existir de verdade, **excluir um template em uso por categorias
+  agora é bloqueado** (`409`, contagem via `categoriesRepo.count` — só
+  possível porque `ScoringTemplatesModule` registra
+  `TypeOrmModule.forFeature([...,Category])` pra ter o repositório,
+  sem precisar importar `CategoriesModule` inteiro e criar dependência
+  circular). `findAllForEvent` inclui `relations: ['scoringTemplate']`
+  pra listagem mostrar o nome. **Gotcha real pego depois do primeiro
+  teste manual**: `create`/`update` retornavam a entidade de
+  `categoriesRepo.save()`, que **não hidrata relações** — só a coluna
+  `scoringTemplateId`, então a tela mostrava "—" na coluna até um
+  refresh manual. Corrigido buscando a categoria de novo com
+  `relations: ['scoringTemplate']` (`findCategoryWithTemplate`) antes
+  de retornar do `create`/`update`.
+  - **Tempo de apresentação** (`Category.presentationTimeSeconds`,
+    nullable no banco / obrigatório no DTO): default calculado no
+    frontend por `categoryFormat`+`modality`
+    (`lib/presentationTime.ts`) — Team Cheer All Star: 2:30; Team
+    Cheer Escolar/Universitário: 2:45; qualquer outro formato: 1:00.
+    Recalculado sempre que formato ou modalidade mudam no formulário
+    (mesmo padrão de auto-override já usado pra `nonTumbling`), editável
+    pelo usuário antes de salvar. Alimenta o cronograma do evento numa
+    etapa futura (ver "Próximos passos").
+  - Extraído `ScoringTemplateCard.tsx` de dentro de
+    `ScoringTemplatesListPage.tsx` pra reusar também em
+    `ScoringTemplatesSummarySection` (regulamento) — evita duas versões
+    divergentes do mesmo card.
+
+- **Módulo `programs` — "Programas e Equipes", perfil canônico +
+  catálogo do produtor (2026-07-14/15).** Etapa "Programas e equipes"
+  do setup do evento: `Program` (renomeado depois pra
+  `ProgramParticipation`, ver abaixo) é a instituição/academia
+  participante de um evento — nome, email, cidade, estado, logo
+  opcional. `Team` é um domínio separado, aninhado (equipe dentro de
+  um programa, só nome, ligada N:N a `Category` via `@JoinTable`
+  nativa do TypeORM, sem entidade de junção própria).
+  - **Perfil canônico + catálogo do produtor.** Cada linha de
+    `ProgramParticipation` é "esse programa nesse evento", não o
+    programa em si — tem `createdById` (o produtor que cadastrou) e um
+    `userId` opcional (preenchido quando o programa cria conta própria,
+    role `PROGRAM`). Enquanto `userId` é nulo, os dados
+    (`name`/`email`/`city`/`state`/`logoUrl`) são a própria fonte de
+    verdade daquela linha; quando um usuário `PROGRAM` se cadastra com o
+    mesmo email, `ProgramsService.linkUnclaimedProgramsByEmail`
+    (chamado por `AuthService.setPassword`) vincula automaticamente
+    **todas** as linhas não reclamadas daquele email, em qualquer
+    evento, e cria um `ProgramProfile` (entidade canônica, 1:1 com o
+    `User`) semeado com os dados do cadastro. A partir daí, os dados
+    locais da linha viram um snapshot congelado — toda leitura passa
+    pelo `ProgramProfile` via join (`ProgramsService.toProgramView`), e
+    editar via `PATCH /programs/me` (`ProgramProfileController`, só o
+    próprio usuário `PROGRAM`) atualiza **uma linha só**, refletindo
+    pra todos os produtores que cadastraram aquele programa em
+    qualquer evento — sem precisar propagar `UPDATE` em N linhas (isso
+    foi uma correção de arquitetura: a primeira versão fazia `UPDATE`
+    em massa direto nas linhas `Program`, o que vazava dado entre
+    eventos de produtores diferentes quando dois produtores cadastravam
+    o mesmo programa manualmente com dados divergentes).
+  - **`GET /programs/catalog`** (`ProgramCatalogController`,
+    `ProgramsService.findCatalogForUser`): pra evitar redigitar o mesmo
+    programa em cada evento novo, a lista de escolha do produtor é
+    **todo usuário `PROGRAM` da plataforma** (com o `ProgramProfile`
+    resolvido pra exibição + um flag `usedByMe`) **mais** as linhas do
+    catálogo do próprio produtor (`createdById` dele) que ainda **não**
+    têm `userId` (as que já têm conta não precisam aparecer duas vezes
+    — já estão no primeiro grupo). Escolher uma entrada `platform`
+    vincula de verdade (`userId` no payload); escolher uma entrada
+    `own` só copia os dados pro formulário, sem vínculo.
+  - **Sem duplicidade no catálogo**: `ProgramsService.
+    assertNoDuplicateInCatalog` rejeita (`409`) cadastrar/editar um
+    programa com nome OU email já usado por outra linha do catálogo
+    daquele produtor, **exceto** quando é um match exato de nome e
+    email (aí é reaproveitamento legítimo do mesmo programa em outro
+    evento, não duplicidade).
+  - **Rename `Program` → `ProgramParticipation` (2026-07-15):**
+    ter `Program` e `ProgramProfile` lado a lado ficou ambíguo — não
+    fica óbvio só pelo nome que um é "uma linha por evento" e o outro é
+    "o dado canônico único". Renomeada a entidade (classe, arquivo,
+    DTOs, nome da tabela — `programs` → `program_participations`, com
+    migration renomeando as constraints/índices, mesmo padrão do rename
+    anterior `teams`→`programs`). **Só o nome do tipo mudou** —
+    `ProgramsService`/`ProgramsController`/`ProgramsModule`, a pasta
+    `programs/`, os nomes de método e todas as rotas HTTP continuam
+    iguais (é o domínio/rota pública, não a entidade). Frontend não
+    mudou (o tipo `Program` do `client.ts` não expõe `ProgramProfile`,
+    não tinha a mesma ambiguidade).
+  - Sem integração com `EventMember`: vincular `userId` numa
+    `ProgramParticipation` não dá acesso/membership ao evento pro
+    usuário — isso é um endpoint futuro separado (ver "Próximos
+    passos").
+
+- **Módulo `judges` — mesmo padrão de catálogo aplicado a jurados,
+  só backend (2026-07-15).** A pedido do usuário, o mesmo padrão de
+  `programs` (perfil canônico + catálogo do produtor + dedup +
+  merge automático) foi replicado pra jurados: `JudgeParticipation`
+  (`id`, `eventId`, `createdById`, `userId` opcional, `name`, `email`
+  — sem `city`/`state`/`logoUrl`, não fazem sentido pra jurado) +
+  `JudgeProfile` (canônico, 1:1 com `User` role `JUDGE`). Endpoints
+  espelham 1:1 os de `programs`: `POST/GET/PATCH/DELETE
+  /events/:eventId/judges`, `GET /judges/catalog`, `GET/PATCH
+  /judges/me`. `AuthService.setPassword` chama
+  `JudgesService.linkUnclaimedJudgesByEmail` quando `role === JUDGE`,
+  mesmo hook usado pra `PROGRAM`. Domínio próprio
+  (`apps/api/src/judges/`), sem abstração compartilhada com
+  `programs/` (mesma convenção do projeto — cada domínio é
+  autocontido; duplicar a mesma estrutura 1x não justificou extrair
+  uma base genérica). **Ainda não existe tela** — o placeholder
+  "Painel de jurados"/"Disponível em breve" em `eventSetupSteps.ts`
+  continua como está; a tela real (+ "o que cada jurado julga em cada
+  sistema de pontuação") fica pra quando for pedida.
+
+- **Setup do evento ganhou 2 etapas placeholder + tag "recomendado"
+  dinâmica (2026-07-14).** `EventSetupPage` tinha 3 etapas
+  (`regulation`/`categories`/`teams`); "Regulamento" saiu de
+  placeholder pra tela real nesta sessão (ver módulo `regulations`
+  acima). Adicionadas 2 etapas novas, ainda sem tela construída
+  (mesmo padrão que "Regulamento" usava antes: `completed: false`
+  fixo, sem `href`, botão desabilitado "Disponível em breve"):
+  `judgePanel` ("Painel de jurados" — jurados do evento + o que cada
+  um julga em cada sistema de pontuação) e `schedule` ("Cronograma" —
+  ordem de apresentação das equipes, vai consumir
+  `presentationTimeSeconds` de cada categoria). `buildSetupSteps` e
+  o header ("Prepare X em N etapas") já eram genéricos o suficiente
+  pra crescer sem mudança de lógica, só `steps.length`.
+  **Tag "RECOMENDADO"**: antes fixa em `index === 0`; agora acompanha
+  `firstIncomplete` (primeira etapa não concluída), calculado uma vez
+  e reusado tanto pro banner quanto pro card.
+- **Terminologia "template" → "sistema de pontuação" (2026-07-14):**
+  a pedido do usuário, referências a "template(s) de pontuação" na UI
+  viraram "sistema(s) de pontuação" (heading da seção 3 do
+  regulamento, textos informativos, link "Ir para Sistemas de
+  Pontuação"). Nomes de arquivo/tipos internos (`ScoringTemplate`,
+  `scoring-templates/`) **não** foram renomeados — é só rótulo de UI.
+  Card "Competidores" no setup também renomeado pra "Programas e
+  equipes".
+- **Gotcha do shell com sidebar: `min-h-svh` no wrapper quebra o
+  scroll interno (2026-07-14).** Todas as páginas com `AppSidebar`
+  usavam `<div className="flex min-h-svh ...">` (altura **mínima**,
+  cresce com o conteúdo) enquanto o `<aside>` da sidebar é fixo em
+  `h-svh` (altura da viewport). Com conteúdo mais alto que uma tela
+  (ex: a nova `RegulationPage`), o wrapper crescia além da altura da
+  sidebar, que ficava "curta" visualmente conforme rolava a página. O
+  `overflow-y-auto` do `<main>` só funciona de verdade se o pai tiver
+  altura **fixa**, não mínima — trocado `min-h-svh` → `h-svh` no
+  wrapper de `HomePage`, `EventSetupPage`, `CategoriesPage`,
+  `RegulationPage`, `ScoringTemplatesListPage` e
+  `ScoringTemplateBuilderPage` (não em `LoginPage`, que não tem
+  sidebar e usa `min-h-svh` de propósito pra centralizar o card com
+  espaço pra crescer).
+
 ## Próximos passos (não iniciados ainda)
 
-1. Detalhar e modelar `Regulation` (regulamento do evento) e
-   `ScoringRule` (regra de pontuação vinculada a cada categoria)
-2. Modelar o restante da jornada do jurado: `Routine` (rotinas/equipes
+1. Modelar o restante da jornada do jurado: `Routine` (rotinas/equipes
    competindo em uma categoria), `ScoreEvent` (event sourcing das notas),
    `Result`
+2. Construir as telas de "Painel de jurados" e "Cronograma" no setup
+   do evento (hoje são placeholders "Disponível em breve" — ver
+   `eventSetupSteps.ts`); cronograma vai consumir
+   `Category.presentationTimeSeconds`. O backend de "Painel de
+   Jurados" já existe (módulo `judges/`, catálogo + dedup + merge
+   automático, ver seção acima) — falta só a tela
 3. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
    Supabase Realtime) para o painel do produtor
 4. Transição de status `completed` ("concluir evento") — `created` ⇄
@@ -838,13 +1123,14 @@ número, caractere especial) + confirmar senha → conta criada e já loga
    /events/:id/publish`, `POST /events/:id/start`); falta decidir a
    regra de "concluir" (manual pelo admin? automático quando os
    `competitionDays` terminam?)
-5. Tela de detalhe do evento (clicar num item da lista da Home não faz
-   nada ainda) — onde entrariam categorias, equipes e upload/troca de
-   foto do evento
-6. Endpoint pra adicionar participante/espectador/jurado a um evento
-   (hoje só quem cria o evento tem membership — decisão explícita do
-   usuário de deixar isso fora desta rodada)
-7. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
+5. Endpoint pra adicionar participante/espectador/jurado como
+   `EventMember` de verdade (hoje só quem cria o evento tem
+   membership/acesso — decisão explícita do usuário de deixar isso
+   fora desta rodada). Vincular uma `ProgramParticipation`/
+   `JudgeParticipation` a um usuário (`userId`) hoje só afeta exibição
+   de dados, não dá `EventMember`/acesso ao evento — são conceitos
+   separados
+6. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
    é por `id` de versão específica — ver gotcha de versionamento
    acima) e propagar o conceito de `aliasId`/versionamento pra
    `categories`/`teams`, que hoje ainda resolvem o evento pai só pelo
@@ -909,6 +1195,22 @@ número, caractere especial) + confirmar senha → conta criada e já loga
 - TypeScript 6.x depreciou `baseUrl` em `tsconfig` (aviso TS5101) —
   `paths` sozinho já resolve relativo ao tsconfig, não precisa de
   `baseUrl` junto.
+- **`Select` do shadcn (Base UI) só mostra o `placeholder` quando o
+  `value` controlado é `null`/`undefined` — string vazia `""` conta
+  como um valor selecionado de verdade** (não acopla ao placeholder).
+  Pra um select opcional/"nada selecionado ainda" onde o estado do
+  form guarda `""` internamente (padrão desse projeto pros outros
+  campos de texto), passar `value={form.algumId || null}` no
+  componente `Select`, não `value={form.algumId}` direto (2026-07-14,
+  `scoringTemplateId` em categorias e `cloneFromId` no template).
+- **`dotenv` v17.x imprime uma "dica" aleatória a cada carga do
+  `.env`** (`console.log`, array `TIPS` fixo no pacote) — a maioria
+  aponta pro produto irmão `dotenvx.com`, mas uma delas anuncia um
+  domínio de terceiros (`vestauth.com`, "auth for agents"). Confirmado
+  que é comportamento do próprio pacote publicado (não é injeção via
+  código do projeto), inofensivo (só imprime, não executa nada), mas
+  vale saber que não é bug nosso se aparecer de novo no log de
+  `migration:run`/`migration:generate`.
 
 ## Comandos úteis
 
