@@ -9,6 +9,14 @@ export interface SetupStep {
   shortTitle: string;
   description: string;
   completed: boolean;
+  // Verdadeiro quando a etapa já tem algum progresso real (não só
+  // "primeira etapa incompleta da sequência", que é o que
+  // computeStepState calcula pro stepper do topo) mas ainda não está
+  // concluída — usado pelo card individual (SetupStepCard) pra mostrar
+  // "Em andamento" em vez de "Não iniciado". Por enquanto só
+  // calculado pra `judgePanel`; as demais etapas não têm essa
+  // distinção ainda.
+  inProgress?: boolean;
   detail: string;
   updatedAt?: string | null;
   actionLabel: string;
@@ -26,12 +34,31 @@ export interface RegulationSummary {
   updatedAt: string | null;
 }
 
+// Escala de arbitragem só conta como concluída com as duas condições
+// atendidas — mensagem precisa conforme o que ainda falta.
+function judgePanelDetail(hasLegalityJudge: boolean, allTemplatesJudgingComplete: boolean): string {
+  if (hasLegalityJudge && allTemplatesJudgingComplete) {
+    return "Jurado de Legalidade definido e sistemas de pontuação 100% cobertos";
+  }
+  if (!hasLegalityJudge && !allTemplatesJudgingComplete) {
+    return "Pendente: definir o Jurado de Legalidade e concluir os sistemas de pontuação";
+  }
+  if (!hasLegalityJudge) {
+    return "Pendente: definir o Jurado de Legalidade";
+  }
+  return "Pendente: concluir todos os sistemas de pontuação";
+}
+
 export function buildSetupSteps(
   event: Event,
   regulation: RegulationSummary | null,
+  hasLegalityJudge: boolean,
+  allTemplatesJudgingComplete: boolean,
+  hasAnyJudge: boolean,
 ): SetupStep[] {
   const categoriesCount = event.categoriesCount ?? 0;
   const programsCount = event.programsCount ?? 0;
+  const judgePanelCompleted = hasLegalityJudge && allTemplatesJudgingComplete;
   const regulationCompleted =
     !!regulation &&
     regulation.hasOfficialRegulation &&
@@ -85,10 +112,12 @@ export function buildSetupSteps(
       title: "Painel de jurados",
       shortTitle: "Painel de jurados",
       description: "Cadastre os jurados do evento e defina o que cada um irá julgar em cada sistema de pontuação.",
-      completed: false,
-      detail: "Disponível em breve",
+      completed: judgePanelCompleted,
+      inProgress: !judgePanelCompleted && hasAnyJudge,
+      detail: judgePanelDetail(hasLegalityJudge, allTemplatesJudgingComplete),
       updatedAt: null,
-      actionLabel: "Iniciar cadastro",
+      actionLabel: judgePanelCompleted ? "Editar escala de arbitragem" : "Iniciar cadastro",
+      href: `/events/${event.id}/judging`,
     },
     {
       key: "schedule",

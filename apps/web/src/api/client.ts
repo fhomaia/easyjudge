@@ -369,6 +369,57 @@ export const teamsApi = {
     ),
 };
 
+export interface Judge {
+  id: string;
+  eventId: string;
+  createdById: string;
+  userId: string | null;
+  name: string;
+  email: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JudgePayload {
+  name: string;
+  email: string;
+  userId?: string;
+}
+
+export type UpdateJudgePayload = Partial<JudgePayload>;
+
+export interface JudgeCatalogEntry {
+  source: "platform" | "own";
+  judgeId?: string;
+  userId: string | null;
+  name: string;
+  email: string;
+  usedByMe?: boolean;
+}
+
+export const judgesApi = {
+  list: (eventId: string) => authRequest<Judge[]>(`/events/${eventId}/judges`),
+
+  getCatalog: () => authRequest<JudgeCatalogEntry[]>("/judges/catalog"),
+
+  get: (eventId: string, id: string) => authRequest<Judge>(`/events/${eventId}/judges/${id}`),
+
+  create: (eventId: string, payload: JudgePayload) =>
+    authRequest<Judge>(`/events/${eventId}/judges`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  update: (eventId: string, id: string, payload: UpdateJudgePayload) =>
+    authRequest<Judge>(`/events/${eventId}/judges/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (eventId: string, id: string) =>
+    authRequest<void>(`/events/${eventId}/judges/${id}`, { method: "DELETE" }),
+};
+
 export type ScoringCriterionType = "group" | "score_item";
 
 export interface ScoringTemplate {
@@ -381,6 +432,7 @@ export interface ScoringTemplate {
   updatedAt: string;
   criteriaCount?: number;
   distributedScore?: number;
+  isComplete?: boolean;
 }
 
 export interface ScoringCriterion {
@@ -477,6 +529,55 @@ export const scoringCriteriaApi = {
     authRequest<ScoringCriterion[]>(`/scoring-templates/${templateId}/criteria/${id}/move`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+};
+
+export type SpecialJudgeRole = "legality_judge" | "head_judge";
+export type BulkAssignStrategy = "unassigned_only" | "replace" | "add";
+
+export interface CriterionAssignmentsState {
+  criterionAssignments: Array<{ criterionId: string; judgeIds: string[] }>;
+  specialRoles: Array<{ role: SpecialJudgeRole; judgeIds: string[] }>;
+}
+
+export const judgingApi = {
+  getAssignments: (eventId: string, templateId: string) =>
+    authRequest<CriterionAssignmentsState>(
+      `/events/${eventId}/judging?templateId=${templateId}`,
+    ),
+
+  getSpecialRoles: (eventId: string) =>
+    authRequest<Array<{ role: SpecialJudgeRole; judgeIds: string[] }>>(
+      `/events/${eventId}/judging/special-roles`,
+    ),
+
+  setCriterionJudges: (
+    eventId: string,
+    templateId: string,
+    criterionId: string,
+    judgeIds: string[],
+  ) =>
+    authRequest<void>(
+      `/events/${eventId}/judging/templates/${templateId}/criteria/${criterionId}/judges`,
+      { method: "PUT", body: JSON.stringify({ judgeIds }) },
+    ),
+
+  bulkAssign: (
+    eventId: string,
+    templateId: string,
+    criterionId: string,
+    judgeParticipationId: string,
+    strategy: BulkAssignStrategy,
+  ) =>
+    authRequest<void>(
+      `/events/${eventId}/judging/templates/${templateId}/criteria/${criterionId}/bulk-assign`,
+      { method: "POST", body: JSON.stringify({ judgeParticipationId, strategy }) },
+    ),
+
+  setSpecialRoleJudges: (eventId: string, role: SpecialJudgeRole, judgeIds: string[]) =>
+    authRequest<void>(`/events/${eventId}/judging/special-roles/${role}`, {
+      method: "PUT",
+      body: JSON.stringify({ judgeIds }),
     }),
 };
 

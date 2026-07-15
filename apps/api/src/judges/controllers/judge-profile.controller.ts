@@ -7,13 +7,14 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
-// Endpoints do próprio usuário JUDGE sobre as JudgeParticipation
-// vinculadas a ele (ver JudgesService.linkUnclaimedJudgesByEmail) —
-// mesmo padrão de program-profile.controller.ts. Ainda sem tela
-// própria no frontend — só a base no backend por enquanto.
+// Endpoints do próprio usuário sobre as JudgeParticipation vinculadas
+// a ele (ver JudgesService.linkUnclaimedJudgesByEmail) — mesmo padrão
+// de program-profile.controller.ts. Qualquer role menos PROGRAM pode
+// ter sido vinculado como jurado, por isso os três aqui (não só JUDGE).
+// Ainda sem tela própria no frontend — só a base no backend por enquanto.
 @Controller('judges/me')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.JUDGE)
+@Roles(UserRole.JUDGE, UserRole.ATHLETE, UserRole.ORGANIZATION)
 export class JudgeProfileController {
   constructor(private readonly judgesService: JudgesService) {}
 

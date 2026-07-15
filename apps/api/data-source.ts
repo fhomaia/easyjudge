@@ -14,6 +14,8 @@ import { ScoringTemplate } from './src/scoring-templates/entities/scoring-templa
 import { ScoringCriterion } from './src/scoring-templates/entities/scoring-criterion.entity';
 import { Regulation } from './src/regulations/entities/regulation.entity';
 import { RegulationDocument } from './src/regulations/entities/regulation-document.entity';
+import { CriterionJudgeAssignment } from './src/judging/entities/criterion-judge-assignment.entity';
+import { SpecialRoleAssignment } from './src/judging/entities/special-role-assignment.entity';
 
 config(); // carrega o .env
 
@@ -35,6 +37,8 @@ export default new DataSource({
     ScoringCriterion,
     Regulation,
     RegulationDocument,
+    CriterionJudgeAssignment,
+    SpecialRoleAssignment,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

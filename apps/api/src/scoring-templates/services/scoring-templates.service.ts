@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ScoringTemplate } from '../entities/scoring-template.entity';
 import { ScoringCriterion } from '../entities/scoring-criterion.entity';
+import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 import { CreateScoringTemplateDto } from '../dto/create-scoring-template.dto';
 import { UpdateScoringTemplateDto } from '../dto/update-scoring-template.dto';
 import { stripUndefined } from '../../common/utils/strip-undefined';
@@ -97,22 +98,36 @@ export class ScoringTemplatesService {
 
     if (templates.length === 0) return templates;
 
+    const templateIds = templates.map((t) => t.id);
     const sums = await this.criteriaRepo
       .createQueryBuilder('criterion')
       .select('criterion.templateId', 'templateId')
       .addSelect('SUM(criterion.maxScore)', 'distributedScore')
       .where('criterion.parentId IS NULL')
-      .andWhere('criterion.templateId IN (:...templateIds)', {
-        templateIds: templates.map((t) => t.id),
-      })
+      .andWhere('criterion.templateId IN (:...templateIds)', { templateIds })
       .groupBy('criterion.templateId')
       .getRawMany<{ templateId: string; distributedScore: string }>();
 
     const distributedByTemplateId = new Map(
       sums.map((s) => [s.templateId, Number(s.distributedScore)]),
     );
+
+    const allCriteria = await this.criteriaRepo.find({
+      where: templateIds.map((templateId) => ({ templateId })),
+    });
+    const criteriaByTemplateId = new Map<string, ScoringCriterion[]>();
+    for (const criterion of allCriteria) {
+      const list = criteriaByTemplateId.get(criterion.templateId) ?? [];
+      list.push(criterion);
+      criteriaByTemplateId.set(criterion.templateId, list);
+    }
+
     for (const template of templates) {
-      template.distributedScore = distributedByTemplateId.get(template.id) ?? 0;
+      const distributedScore = distributedByTemplateId.get(template.id) ?? 0;
+      template.distributedScore = distributedScore;
+      const criteria = criteriaByTemplateId.get(template.id) ?? [];
+      template.isComplete =
+        distributedScore === template.targetScore && !this.hasEmptyGroup(criteria);
     }
     return templates;
   }
@@ -170,7 +185,8 @@ export class ScoringTemplatesService {
 
   // Usado por CategoriesService antes de atribuir um template a uma
   // categoria — só um template do próprio usuário e "completo" (soma
-  // dos critérios-raiz == targetScore) pode ser usado.
+  // dos critérios-raiz == targetScore E nenhum grupo sem item de
+  // avaliação descendente) pode ser usado.
   async assertUsableTemplate(
     templateId: string,
     userId: string,
@@ -182,6 +198,36 @@ export class ScoringTemplatesService {
         'Este sistema de pontuação está incompleto — a soma dos critérios-raiz precisa bater com a meta de pontos antes de ser usado em uma categoria.',
       );
     }
+    const criteria = await this.criteriaRepo.find({ where: { templateId } });
+    if (this.hasEmptyGroup(criteria)) {
+      throw new ConflictException(
+        'Este sistema de pontuação está incompleto — todo grupo precisa ter ao menos um item de avaliação vinculado (em qualquer nível).',
+      );
+    }
     return template;
+  }
+
+  // Verdadeiro se algum grupo (em qualquer nível) não tem nenhum item
+  // de avaliação (score_item) entre seus descendentes — considera toda
+  // a subárvore, não só os filhos diretos.
+  private hasEmptyGroup(criteria: ScoringCriterion[]): boolean {
+    const childrenByParent = new Map<string, ScoringCriterion[]>();
+    for (const criterion of criteria) {
+      if (!criterion.parentId) continue;
+      const list = childrenByParent.get(criterion.parentId) ?? [];
+      list.push(criterion);
+      childrenByParent.set(criterion.parentId, list);
+    }
+
+    const hasLeafDescendant = (nodeId: string): boolean =>
+      (childrenByParent.get(nodeId) ?? []).some((child) =>
+        child.type === ScoringCriterionType.SCORE_ITEM
+          ? true
+          : hasLeafDescendant(child.id),
+      );
+
+    return criteria.some(
+      (c) => c.type === ScoringCriterionType.GROUP && !hasLeafDescendant(c.id),
+    );
   }
 }

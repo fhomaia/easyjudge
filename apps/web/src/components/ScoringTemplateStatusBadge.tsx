@@ -2,16 +2,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface ScoringTemplateStatusBadgeProps {
-  distributedScore: number;
-  targetScore: number;
+  isComplete: boolean;
 }
 
-export function ScoringTemplateStatusBadge({
-  distributedScore,
-  targetScore,
-}: ScoringTemplateStatusBadgeProps) {
-  const isComplete = distributedScore === targetScore;
-
+export function ScoringTemplateStatusBadge({ isComplete }: ScoringTemplateStatusBadgeProps) {
   return (
     <Badge
       variant="outline"

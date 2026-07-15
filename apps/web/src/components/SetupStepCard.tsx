@@ -66,22 +66,31 @@ export function SetupStepCard({ step, stepNumber, recommended }: SetupStepCardPr
       <div
         className={cn(
           "rounded-lg px-4 py-3",
-          step.completed ? "bg-emerald-500/10" : "bg-muted",
+          step.completed ? "bg-emerald-500/10" : step.inProgress ? "bg-primary/10" : "bg-muted",
         )}
       >
         <div className="flex items-center gap-2">
           {step.completed ? (
             <Check className="size-4 shrink-0 text-emerald-600" />
           ) : (
-            <Circle className="size-4 shrink-0 text-muted-foreground" />
+            <Circle
+              className={cn(
+                "size-4 shrink-0",
+                step.inProgress ? "text-primary" : "text-muted-foreground",
+              )}
+            />
           )}
           <span
             className={cn(
               "text-sm font-medium",
-              step.completed ? "text-emerald-700 dark:text-emerald-400" : "text-foreground",
+              step.completed
+                ? "text-emerald-700 dark:text-emerald-400"
+                : step.inProgress
+                  ? "text-primary"
+                  : "text-foreground",
             )}
           >
-            {step.completed ? "Concluído" : "Não iniciado"}
+            {step.completed ? "Concluído" : step.inProgress ? "Em andamento" : "Não iniciado"}
           </span>
         </div>
         <p className="mt-0.5 pl-6 text-sm text-muted-foreground">{step.detail}</p>

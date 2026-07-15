@@ -51,6 +51,13 @@ export class ScoringTemplate {
   // mostrar "completo"/"incompleto" sem buscar a árvore inteira).
   distributedScore?: number;
 
+  // Não é coluna — "completo" = distributedScore bate com targetScore E
+  // nenhum grupo (em qualquer nível) está sem nenhum item de avaliação
+  // descendente. Preenchida em ScoringTemplatesService.findAllForUser;
+  // fonte única de verdade pro frontend, evita recomputar a regra em
+  // cada tela (CategoriesPage, EventSetupPage, ScoringTemplateCard).
+  isComplete?: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

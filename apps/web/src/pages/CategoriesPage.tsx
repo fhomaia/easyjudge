@@ -93,9 +93,7 @@ export function CategoriesPage() {
     scoringTemplatesApi
       .list()
       .then((templates) =>
-        setScoringTemplates(
-          templates.filter((t) => (t.distributedScore ?? 0) === t.targetScore),
-        ),
+        setScoringTemplates(templates.filter((t) => t.isComplete)),
       )
       .catch(() => setScoringTemplates([]));
   }, [id]);

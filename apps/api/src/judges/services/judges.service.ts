@@ -13,6 +13,7 @@ import { UpdateJudgeParticipationDto } from '../dto/update-judge-participation.d
 import { UpdateOwnJudgeDto } from '../dto/update-own-judge.dto';
 import { EventsService } from '../../events/services/events.service';
 import { UsersService } from '../../users/services/users.service';
+import type { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 
@@ -52,12 +53,36 @@ export class JudgesService {
     createdById: string,
   ): Promise<JudgeParticipation> {
     await this.eventsService.findEventOrThrow(eventId);
-    if (dto.userId) {
-      await this.assertJudgeUser(dto.userId);
+    let userId = dto.userId ?? null;
+    let eligibleUser: User | null = null;
+    if (userId) {
+      await this.assertJudgeUser(userId);
+    } else {
+      // Nenhum userId veio do picker do catálogo — antes de criar uma
+      // linha solta, confere se o email digitado já não é de uma conta
+      // elegível (qualquer role menos PROGRAM) da plataforma, pra
+      // vincular direto em vez de deixar uma entrada duplicada/órfã que
+      // nunca vai se reclamar sozinha (o merge automático só roda no
+      // set-password, e essa conta pode já ter passado por ali há
+      // muito tempo).
+      eligibleUser = await this.findEligibleJudgeUserByEmail(dto.email);
+      userId = eligibleUser?.id ?? null;
     }
     await this.assertNoDuplicateInCatalog(createdById, dto.name, dto.email);
+    if (userId) {
+      // Semeia com o nome/email REAIS da conta (não o que o produtor
+      // digitou) — mesma fonte de verdade usada em
+      // linkUnclaimedJudgesByEmail, só cria se não existir ainda.
+      await this.getOrCreateProfile(
+        userId,
+        eligibleUser
+          ? { name: `${eligibleUser.firstName} ${eligibleUser.lastName}`, contactEmail: eligibleUser.email }
+          : undefined,
+      );
+    }
     const participation = this.participationsRepo.create({
       ...dto,
+      userId,
       eventId,
       createdById,
     });
@@ -125,12 +150,20 @@ export class JudgesService {
     return participation;
   }
 
+  // Qualquer usuário pode assumir o papel de jurado num evento, exceto
+  // contas PROGRAM (a instituição/academia, não uma pessoa que julga).
   private async assertJudgeUser(userId: string): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('Usuário não encontrado');
-    if (user.role !== UserRole.JUDGE) {
-      throw new ConflictException('O usuário selecionado não é do tipo Jurado.');
+    if (user.role === UserRole.PROGRAM) {
+      throw new ConflictException('Uma conta do tipo Programa não pode ser jurado.');
     }
+  }
+
+  private async findEligibleJudgeUserByEmail(email: string): Promise<User | null> {
+    const user = await this.usersService.findByEmailInsensitive(email);
+    if (!user || user.role === UserRole.PROGRAM) return null;
+    return user;
   }
 
   // Impede um produtor de acumular duas entradas divergentes no
@@ -225,12 +258,13 @@ export class JudgesService {
     return this.profilesRepo.save(profile);
   }
 
-  // Todo usuário role JUDGE da plataforma + as entradas do catálogo
-  // deste produtor que ainda não têm conta própria (senão já
-  // apareceriam no primeiro grupo). Idêntico a
-  // ProgramsService.findCatalogForUser.
+  // Todo usuário da plataforma que não seja PROGRAM (qualquer um pode
+  // ser jurado — não é restrito a contas role=JUDGE) + as entradas do
+  // catálogo deste produtor que ainda não têm conta própria (senão já
+  // apareceriam no primeiro grupo). Mesmo padrão de
+  // ProgramsService.findCatalogForUser, mas sem restringir por role.
   async findCatalogForUser(createdById: string): Promise<JudgeCatalogEntry[]> {
-    const judgeUsers = await this.usersService.findAllByRole(UserRole.JUDGE);
+    const judgeUsers = await this.usersService.findAllExceptRole(UserRole.PROGRAM);
     const myParticipations = await this.participationsRepo.find({ where: { createdById } });
     const myUserIds = new Set(
       myParticipations.filter((p) => p.userId).map((p) => p.userId as string),

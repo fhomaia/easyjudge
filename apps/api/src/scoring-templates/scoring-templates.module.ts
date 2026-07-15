@@ -14,6 +14,6 @@ import { ScoringCriteriaService } from './services/scoring-criteria.service';
   ],
   controllers: [ScoringTemplatesController, ScoringCriteriaController],
   providers: [ScoringTemplatesService, ScoringCriteriaService],
-  exports: [ScoringTemplatesService],
+  exports: [ScoringTemplatesService, ScoringCriteriaService],
 })
 export class ScoringTemplatesModule {}

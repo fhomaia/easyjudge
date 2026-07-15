@@ -79,12 +79,40 @@ export function maxTreeDepth(criteria: ScoringCriterion[]): number {
   return deepest;
 }
 
-// Um grupo é "válido" quando a soma do maxScore dos filhos diretos bate
-// com o próprio maxScore. Um item de avaliação (folha) não tem essa
-// checagem — é sempre considerado válido.
+// Verdadeiro se o nó tem ao menos um item de avaliação (score_item)
+// entre seus descendentes — considera toda a subárvore, não só os
+// filhos diretos.
+export function hasLeafDescendant(nodeId: string, criteria: ScoringCriterion[]): boolean {
+  const childrenMap = buildChildrenMap(criteria);
+
+  function walk(id: string): boolean {
+    const children = childrenMap.get(id) ?? [];
+    return children.some((child) => (child.type === "score_item" ? true : walk(child.id)));
+  }
+
+  return walk(nodeId);
+}
+
+// Um grupo é "válido" (check verde) só quando: a soma do maxScore dos
+// filhos diretos bate com o próprio maxScore E existe pelo menos um
+// item de avaliação em algum nível da subárvore — um grupo vazio (sem
+// filhos, ou só com subgrupos igualmente vazios) nunca é válido, senão
+// ficaria com o check verde sem nunca poder ser julgado de verdade
+// (mesma regra usada no backend pra "template completo"). Um item de
+// avaliação (folha) não tem essa checagem — é sempre considerado válido.
 export function isNodeValid(criterion: ScoringCriterion, criteria: ScoringCriterion[]): boolean {
   if (criterion.type !== "group") return true;
   const children = getDirectChildren(criteria, criterion.id);
-  if (children.length === 0) return true;
-  return Math.abs(sumMaxScore(children) - criterion.maxScore) < 0.001;
+  if (children.length === 0) return false;
+  const sumMatches = Math.abs(sumMaxScore(children) - criterion.maxScore) < 0.001;
+  return sumMatches && hasLeafDescendant(criterion.id, criteria);
+}
+
+// Verdadeiro se algum grupo (em qualquer nível) não tem nenhum item de
+// avaliação (score_item) entre seus descendentes — considera toda a
+// subárvore, não só os filhos diretos. Mesma regra usada no backend
+// (ScoringTemplatesService.assertUsableTemplate) pra decidir se um
+// template está "completo".
+export function hasEmptyGroup(criteria: ScoringCriterion[]): boolean {
+  return criteria.some((c) => c.type === "group" && !hasLeafDescendant(c.id, criteria));
 }

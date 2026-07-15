@@ -206,7 +206,7 @@ export function ProgramsPage() {
               </div>
 
               {hasAnyPrograms ? (
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr] lg:gap-8">
                   <div className="grid gap-4">
                     <div className="relative self-start">
                       <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -261,7 +261,7 @@ export function ProgramsPage() {
                     <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
                   </div>
 
-                  <div>
+                  <div className="lg:border-l lg:border-border lg:pl-8">
                     {selectedProgram ? (
                       <div className="grid gap-4">
                         <div className="flex items-start justify-between gap-4 rounded-lg border border-border/60 bg-card p-5">

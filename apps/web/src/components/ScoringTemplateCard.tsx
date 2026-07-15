@@ -34,10 +34,7 @@ export function ScoringTemplateCard({
           >
             <Calculator className="size-5" />
           </div>
-          <ScoringTemplateStatusBadge
-            distributedScore={template.distributedScore ?? 0}
-            targetScore={template.targetScore}
-          />
+          <ScoringTemplateStatusBadge isComplete={template.isComplete ?? false} />
         </div>
         {(onEdit || onDelete) && (
           <div className="flex items-center gap-1">

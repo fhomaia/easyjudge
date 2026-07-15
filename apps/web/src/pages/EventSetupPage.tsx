@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -8,11 +8,19 @@ import { SetupStepCard } from "@/components/SetupStepCard";
 import { SetupRecommendedBanner } from "@/components/SetupRecommendedBanner";
 import { buildSetupSteps, type RegulationSummary } from "@/lib/eventSetupSteps";
 import {
+  fetchTemplateJudgingStats,
+  isTemplateJudgingComplete,
+} from "@/lib/templateJudgingProgress";
+import {
   ApiError,
+  categoriesApi,
   eventsApi,
+  judgesApi,
+  judgingApi,
   regulationApi,
   scoringTemplatesApi,
   usersApi,
+  type Category,
   type Event,
   type Regulation,
   type ScoringTemplate,
@@ -29,6 +37,12 @@ export function EventSetupPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [regulation, setRegulation] = useState<Regulation | null>(null);
   const [templates, setTemplates] = useState<ScoringTemplate[] | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [hasLegalityJudge, setHasLegalityJudge] = useState(false);
+  const [hasAnyJudge, setHasAnyJudge] = useState(false);
+  const [templateStats, setTemplateStats] = useState<
+    Map<string, { total: number; assigned: number }>
+  >(new Map());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,7 +61,52 @@ export function EventSetupPage() {
       );
     regulationApi.get(id).then(setRegulation).catch(() => setRegulation(null));
     scoringTemplatesApi.list().then(setTemplates).catch(() => setTemplates([]));
+    categoriesApi.list(id).then(setCategories).catch(() => setCategories([]));
+    judgesApi
+      .list(id)
+      .then((judges) => setHasAnyJudge(judges.length > 0))
+      .catch(() => setHasAnyJudge(false));
+    judgingApi
+      .getSpecialRoles(id)
+      .then((roles) =>
+        setHasLegalityJudge(
+          (roles.find((r) => r.role === "legality_judge")?.judgeIds.length ?? 0) > 0,
+        ),
+      )
+      .catch(() => setHasLegalityJudge(false));
   }, [id]);
+
+  // Templates de pontuação em uso por alguma categoria do evento —
+  // mesma derivação de JudgingPage. A escala de arbitragem só conta
+  // como concluída na página de setup quando TODOS eles estão 100%
+  // cobertos (todo item de avaliação com jurado atribuído).
+  const judgingTemplateIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const category of categories) {
+      if (category.scoringTemplate) ids.add(category.scoringTemplate.id);
+    }
+    return Array.from(ids);
+  }, [categories]);
+
+  useEffect(() => {
+    if (!id || judgingTemplateIds.length === 0) {
+      setTemplateStats(new Map());
+      return;
+    }
+    let cancelled = false;
+    fetchTemplateJudgingStats(id, judgingTemplateIds).then((stats) => {
+      if (!cancelled) setTemplateStats(stats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, judgingTemplateIds]);
+
+  const allTemplatesJudgingComplete =
+    judgingTemplateIds.length > 0 &&
+    judgingTemplateIds.every((templateId) =>
+      isTemplateJudgingComplete(templateStats.get(templateId)),
+    );
 
   function handleLogout() {
     logout();
@@ -60,14 +119,20 @@ export function EventSetupPage() {
           (d) => d.kind === "official_regulation",
         ),
         hasSafetyRules: regulation.documents.some((d) => d.kind === "safety_rules"),
-        hasCompleteTemplate: (templates ?? []).some(
-          (t) => (t.distributedScore ?? 0) === t.targetScore,
-        ),
+        hasCompleteTemplate: (templates ?? []).some((t) => t.isComplete),
         updatedAt: regulation.updatedAt,
       }
     : null;
 
-  const steps = event ? buildSetupSteps(event, regulationSummary) : [];
+  const steps = event
+    ? buildSetupSteps(
+        event,
+        regulationSummary,
+        hasLegalityJudge,
+        allTemplatesJudgingComplete,
+        hasAnyJudge,
+      )
+    : [];
   const firstIncomplete = steps.find((s) => !s.completed);
 
   return (

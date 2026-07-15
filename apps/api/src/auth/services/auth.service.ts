@@ -153,7 +153,8 @@ export class AuthService {
     // ProgramParticipation cadastrada manualmente por um organizador
     // (userId ainda null) com o mesmo email, em qualquer evento. Ver
     // ProgramsService.linkUnclaimedProgramsByEmail. Mesmo padrão vale
-    // pra jurados logo abaixo (JudgesService.linkUnclaimedJudgesByEmail).
+    // pra jurados logo abaixo (JudgesService.linkUnclaimedJudgesByEmail)
+    // — qualquer role menos PROGRAM pode ser jurado, não só JUDGE.
     if (user.role === UserRole.PROGRAM) {
       await this.programsService.linkUnclaimedProgramsByEmail(user.id, {
         email: user.email,
@@ -161,7 +162,7 @@ export class AuthService {
         lastName: user.lastName,
         teamOrInstitutionName: user.teamOrInstitutionName,
       });
-    } else if (user.role === UserRole.JUDGE) {
+    } else {
       await this.judgesService.linkUnclaimedJudgesByEmail(user.id, {
         email: user.email,
         firstName: user.firstName,

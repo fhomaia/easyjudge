@@ -16,6 +16,19 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { email } });
   }
 
+  // Comparação sem diferenciar maiúsculas/minúsculas — mesmo padrão já
+  // usado em ProgramsService/JudgesService pra achar linhas não
+  // reclamadas por email. Usado pra detectar, na hora de cadastrar um
+  // programa/jurado manualmente, se o email digitado já pertence a uma
+  // conta real da plataforma (pra vincular na hora em vez de criar uma
+  // entrada solta e duplicada).
+  async findByEmailInsensitive(email: string): Promise<User | null> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) = LOWER(:email)', { email })
+      .getOne();
+  }
+
   // Usado no login: precisa trazer o passwordHash mesmo com select:false na entidade.
   async findByEmailWithPassword(email: string): Promise<User | null> {
     return this.usersRepository
@@ -36,6 +49,17 @@ export class UsersService {
       where: { role },
       order: { firstName: 'ASC' },
     });
+  }
+
+  // Usado pelo catálogo de jurados: qualquer usuário pode assumir o
+  // papel de jurado num evento, exceto contas PROGRAM (que representam
+  // a instituição/academia, não uma pessoa que julga).
+  findAllExceptRole(role: UserRole): Promise<User[]> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where('user.role != :role', { role })
+      .orderBy('user.firstName', 'ASC')
+      .getMany();
   }
 
   async createPendingUser(dto: RegisterDto): Promise<User> {

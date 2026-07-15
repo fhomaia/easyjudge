@@ -13,6 +13,7 @@ import { UpdateProgramParticipationDto } from '../dto/update-program-participati
 import { UpdateOwnProgramDto } from '../dto/update-own-program.dto';
 import { EventsService } from '../../events/services/events.service';
 import { UsersService } from '../../users/services/users.service';
+import type { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 
@@ -52,12 +53,42 @@ export class ProgramsService {
     createdById: string,
   ): Promise<ProgramParticipation> {
     await this.eventsService.findEventOrThrow(eventId);
-    if (dto.userId) {
-      await this.assertProgramUser(dto.userId);
+    let userId = dto.userId ?? null;
+    let eligibleUser: User | null = null;
+    if (userId) {
+      await this.assertProgramUser(userId);
+    } else {
+      // Nenhum userId veio do picker do catálogo — antes de criar uma
+      // linha solta, confere se o email digitado já não é de uma conta
+      // PROGRAM real da plataforma, pra vincular direto em vez de
+      // deixar uma entrada duplicada/órfã que nunca vai se reclamar
+      // sozinha (o merge automático só roda no set-password, e essa
+      // conta pode já ter passado por ali há muito tempo).
+      eligibleUser = await this.findEligibleProgramUserByEmail(dto.email);
+      userId = eligibleUser?.id ?? null;
     }
     await this.assertNoDuplicateInCatalog(createdById, dto.name, dto.email);
+    if (userId) {
+      // Nome/email vêm da conta REAL (mesma fonte de verdade de
+      // linkUnclaimedProgramsByEmail) — cidade/estado não existem no
+      // User, então usam o que acabou de ser digitado (melhor fonte
+      // disponível nesse momento). Só cria se não existir, nunca
+      // sobrescreve um perfil que o próprio programa já tenha editado.
+      await this.getOrCreateProfile(
+        userId,
+        eligibleUser
+          ? {
+              name: eligibleUser.teamOrInstitutionName || `${eligibleUser.firstName} ${eligibleUser.lastName}`,
+              contactEmail: eligibleUser.email,
+              city: dto.city,
+              state: dto.state,
+            }
+          : undefined,
+      );
+    }
     const participation = this.participationsRepo.create({
       ...dto,
+      userId,
       eventId,
       createdById,
     });
@@ -149,6 +180,12 @@ export class ProgramsService {
         'O usuário selecionado não é do tipo Programa.',
       );
     }
+  }
+
+  private async findEligibleProgramUserByEmail(email: string): Promise<User | null> {
+    const user = await this.usersService.findByEmailInsensitive(email);
+    if (!user || user.role !== UserRole.PROGRAM) return null;
+    return user;
   }
 
   // Impede um produtor de acumular duas entradas divergentes no
