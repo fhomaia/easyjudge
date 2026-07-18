@@ -538,9 +538,16 @@ export const scoringCriteriaApi = {
 export type SpecialJudgeRole = "legality_judge" | "head_judge";
 export type BulkAssignStrategy = "unassigned_only" | "replace" | "add";
 
+export interface JudgingDay {
+  id: string;
+  date: string;
+  dayIndex: number;
+  resources: Array<{ id: string; name: string }>;
+}
+
 export interface CriterionAssignmentsState {
-  criterionAssignments: Array<{ criterionId: string; judgeIds: string[] }>;
-  specialRoles: Array<{ role: SpecialJudgeRole; judgeIds: string[] }>;
+  days: JudgingDay[];
+  criterionAssignments: Array<{ criterionId: string; resourceId: string; judgeIds: string[] }>;
 }
 
 export const judgingApi = {
@@ -549,19 +556,24 @@ export const judgingApi = {
       `/events/${eventId}/judging?templateId=${templateId}`,
     ),
 
-  getSpecialRoles: (eventId: string) =>
+  // Por recurso (2026-07-19) — o jurado de uma função especial (Head
+  // Judge, Jurado de Legalidade) não pode estar em duas pistas ao
+  // mesmo tempo, mesma razão da atribuição por recurso na árvore de
+  // critérios.
+  getSpecialRoles: (eventId: string, resourceId: string) =>
     authRequest<Array<{ role: SpecialJudgeRole; judgeIds: string[] }>>(
-      `/events/${eventId}/judging/special-roles`,
+      `/events/${eventId}/judging/resources/${resourceId}/special-roles`,
     ),
 
   setCriterionJudges: (
     eventId: string,
     templateId: string,
     criterionId: string,
+    resourceId: string,
     judgeIds: string[],
   ) =>
     authRequest<void>(
-      `/events/${eventId}/judging/templates/${templateId}/criteria/${criterionId}/judges`,
+      `/events/${eventId}/judging/templates/${templateId}/criteria/${criterionId}/resources/${resourceId}/judges`,
       { method: "PUT", body: JSON.stringify({ judgeIds }) },
     ),
 
@@ -569,16 +581,22 @@ export const judgingApi = {
     eventId: string,
     templateId: string,
     criterionId: string,
+    resourceId: string,
     judgeParticipationId: string,
     strategy: BulkAssignStrategy,
   ) =>
     authRequest<void>(
-      `/events/${eventId}/judging/templates/${templateId}/criteria/${criterionId}/bulk-assign`,
+      `/events/${eventId}/judging/templates/${templateId}/criteria/${criterionId}/resources/${resourceId}/bulk-assign`,
       { method: "POST", body: JSON.stringify({ judgeParticipationId, strategy }) },
     ),
 
-  setSpecialRoleJudges: (eventId: string, role: SpecialJudgeRole, judgeIds: string[]) =>
-    authRequest<void>(`/events/${eventId}/judging/special-roles/${role}`, {
+  setSpecialRoleJudges: (
+    eventId: string,
+    role: SpecialJudgeRole,
+    resourceId: string,
+    judgeIds: string[],
+  ) =>
+    authRequest<void>(`/events/${eventId}/judging/resources/${resourceId}/special-roles/${role}`, {
       method: "PUT",
       body: JSON.stringify({ judgeIds }),
     }),

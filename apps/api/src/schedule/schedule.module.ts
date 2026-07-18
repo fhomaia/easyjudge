@@ -22,5 +22,6 @@ import { EventsModule } from '../events/events.module';
   ],
   controllers: [ScheduleController],
   providers: [ScheduleService],
+  exports: [ScheduleService],
 })
 export class ScheduleModule {}

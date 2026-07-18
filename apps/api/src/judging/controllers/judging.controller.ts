@@ -38,11 +38,12 @@ export class JudgingController {
     );
   }
 
-  @Put('templates/:templateId/criteria/:criterionId/judges')
+  @Put('templates/:templateId/criteria/:criterionId/resources/:resourceId/judges')
   setCriterionJudges(
     @Param('eventId') eventId: string,
     @Param('templateId') templateId: string,
     @Param('criterionId') criterionId: string,
+    @Param('resourceId') resourceId: string,
     @Body() dto: SetJudgeIdsDto,
     @Req() req: AuthenticatedRequest,
   ) {
@@ -50,16 +51,18 @@ export class JudgingController {
       eventId,
       templateId,
       criterionId,
+      resourceId,
       dto.judgeIds,
       req.user.userId,
     );
   }
 
-  @Post('templates/:templateId/criteria/:criterionId/bulk-assign')
+  @Post('templates/:templateId/criteria/:criterionId/resources/:resourceId/bulk-assign')
   bulkAssign(
     @Param('eventId') eventId: string,
     @Param('templateId') templateId: string,
     @Param('criterionId') criterionId: string,
+    @Param('resourceId') resourceId: string,
     @Body() dto: BulkAssignDto,
     @Req() req: AuthenticatedRequest,
   ) {
@@ -67,26 +70,32 @@ export class JudgingController {
       eventId,
       templateId,
       criterionId,
+      resourceId,
       dto.judgeParticipationId,
       dto.strategy,
       req.user.userId,
     );
   }
 
-  @Get('special-roles')
-  getSpecialRoles(@Param('eventId') eventId: string) {
-    return this.judgingService.getSpecialRoles(eventId);
+  @Get('resources/:resourceId/special-roles')
+  getSpecialRoles(
+    @Param('eventId') eventId: string,
+    @Param('resourceId') resourceId: string,
+  ) {
+    return this.judgingService.getSpecialRoles(eventId, resourceId);
   }
 
-  @Put('special-roles/:role')
+  @Put('resources/:resourceId/special-roles/:role')
   setSpecialRoleJudges(
     @Param('eventId') eventId: string,
+    @Param('resourceId') resourceId: string,
     @Param('role') role: SpecialJudgeRole,
     @Body() dto: SetJudgeIdsDto,
   ) {
     return this.judgingService.setSpecialRoleJudges(
       eventId,
       role,
+      resourceId,
       dto.judgeIds,
     );
   }

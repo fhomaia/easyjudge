@@ -79,6 +79,54 @@ export class ScheduleService {
     return this.hydrateDays(days);
   }
 
+  // Usado por JudgingService pra montar as abas "por dia" da escala de
+  // arbitragem (ver painel de jurados): só interessam os dias que já
+  // têm apresentação agendada de alguma categoria que usa o sistema de
+  // pontuação em questão, e dentro deles só os recursos que aceitam
+  // apresentação (não faz sentido escalar jurado pra um recurso de
+  // aquecimento). Um recurso é day-scoped (não existe "Pista 1"
+  // estável entre dias, ver ScheduleResource) — por isso a atribuição
+  // de jurado por recurso também é por dia, não por evento inteiro.
+  async findResourcesWithScheduledCategories(
+    eventId: string,
+    categoryIds: string[],
+  ): Promise<
+    Array<{ id: string; date: string; dayIndex: number; resources: Array<{ id: string; name: string }> }>
+  > {
+    if (categoryIds.length === 0) return [];
+    const days = await this.daysRepo.find({
+      where: { eventId },
+      order: { dayIndex: 'ASC' },
+    });
+    const result: Array<{
+      id: string;
+      date: string;
+      dayIndex: number;
+      resources: Array<{ id: string; name: string }>;
+    }> = [];
+    for (const day of days) {
+      const resources = await this.resourcesRepo.find({
+        where: { scheduleDayId: day.id, supportsPresentations: true },
+        order: { order: 'ASC' },
+      });
+      const matching: Array<{ id: string; name: string }> = [];
+      for (const resource of resources) {
+        const scheduledCount = await this.entriesRepo.count({
+          where: {
+            resourceId: resource.id,
+            type: ScheduleEntryType.PRESENTATION,
+            categoryId: In(categoryIds),
+          },
+        });
+        if (scheduledCount > 0) matching.push({ id: resource.id, name: resource.name });
+      }
+      if (matching.length > 0) {
+        result.push({ id: day.id, date: day.date, dayIndex: day.dayIndex, resources: matching });
+      }
+    }
+    return result;
+  }
+
   async addDay(eventId: string): Promise<ScheduleDayView> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const existing = await this.daysRepo.find({
@@ -1531,7 +1579,10 @@ export class ScheduleService {
     }));
   }
 
-  private async findDayOrThrow(
+  // Público — usado por JudgingService pra validar que um dayId de
+  // função especial (ver SpecialRoleAssignment) pertence de fato ao
+  // evento antes de gravar a atribuição.
+  async findDayOrThrow(
     eventId: string,
     dayId: string,
   ): Promise<ScheduleDay> {
@@ -1550,6 +1601,20 @@ export class ScheduleService {
       scheduleDayId: dayId,
     });
     if (!resource) throw new NotFoundException('Recurso não encontrado');
+    return resource;
+  }
+
+  // Público — usado por JudgingService pra validar um resourceId de
+  // função especial (ver SpecialRoleAssignment) sem já saber de qual
+  // dia ele é (diferente de findResourceOrThrow, que exige o dayId de
+  // antemão).
+  async findResourceInEventOrThrow(
+    eventId: string,
+    resourceId: string,
+  ): Promise<ScheduleResource> {
+    const resource = await this.resourcesRepo.findOneBy({ id: resourceId });
+    if (!resource) throw new NotFoundException('Recurso não encontrado');
+    await this.findDayOrThrow(eventId, resource.scheduleDayId);
     return resource;
   }
 

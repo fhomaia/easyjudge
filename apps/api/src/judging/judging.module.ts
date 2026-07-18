@@ -8,6 +8,7 @@ import { JudgingService } from './services/judging.service';
 import { EventsModule } from '../events/events.module';
 import { JudgesModule } from '../judges/judges.module';
 import { ScoringTemplatesModule } from '../scoring-templates/scoring-templates.module';
+import { ScheduleModule } from '../schedule/schedule.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ScoringTemplatesModule } from '../scoring-templates/scoring-templates.m
     EventsModule,
     JudgesModule,
     ScoringTemplatesModule,
+    ScheduleModule,
   ],
   controllers: [JudgingController],
   providers: [JudgingService],

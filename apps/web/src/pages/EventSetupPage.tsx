@@ -73,16 +73,49 @@ export function EventSetupPage() {
       .list(id)
       .then((judges) => setHasAnyJudge(judges.length > 0))
       .catch(() => setHasAnyJudge(false));
-    judgingApi
-      .getSpecialRoles(id)
-      .then((roles) =>
-        setHasLegalityJudge(
-          (roles.find((r) => r.role === "legality_judge")?.judgeIds.length ?? 0) > 0,
-        ),
-      )
-      .catch(() => setHasLegalityJudge(false));
     scheduleApi.listDays(id).then(setScheduleDays).catch(() => setScheduleDays([]));
   }, [id]);
+
+  // Jurado de Legalidade agora é por RECURSO (2026-07-19 — mesma razão
+  // da árvore de critérios: um jurado não pode estar em duas pistas ao
+  // mesmo tempo) — só considera preenchido quando TODO recurso que já
+  // tem apresentação agendada, em TODOS os dias do cronograma, tem um
+  // jurado de legalidade definido (mesmo raciocínio já usado pra
+  // "sistema de pontuação completo": um recurso sem essa função ainda
+  // é uma pendência real, não dá pra contar como resolvido só porque
+  // outro já tem). **Gotcha corrigido**: filtrar só por
+  // `supportsPresentations` contava recursos que aceitam apresentação
+  // mas ainda não têm NENHUMA agendada (ex: "Pista 1" de um dia sem
+  // apresentações ainda) — esses recursos nunca aparecem como coluna
+  // no painel de jurados (ver JudgingService.
+  // findResourcesWithScheduledCategories, que só lista recursos com
+  // apresentação de verdade), então essa etapa nunca fechava mesmo com
+  // tudo que o usuário conseguia ver preenchido. Agora só conta
+  // recurso que já tem pelo menos uma entry `presentation`.
+  useEffect(() => {
+    const resourceIds = scheduleDays.flatMap((day) =>
+      day.resources
+        .filter((r) => r.supportsPresentations && r.entries.some((e) => e.type === "presentation"))
+        .map((r) => r.id),
+    );
+    if (!id || resourceIds.length === 0) {
+      setHasLegalityJudge(false);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(resourceIds.map((resourceId) => judgingApi.getSpecialRoles(id, resourceId)))
+      .then((allRoles) => {
+        if (cancelled) return;
+        const complete = allRoles.every(
+          (roles) => (roles.find((r) => r.role === "legality_judge")?.judgeIds.length ?? 0) > 0,
+        );
+        setHasLegalityJudge(complete);
+      })
+      .catch(() => setHasLegalityJudge(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [id, scheduleDays]);
 
   // "Não agendadas" é por dia (ver ScheduleService — cada equipe/
   // categoria se apresenta uma vez em CADA dia, não uma vez só no
@@ -138,9 +171,18 @@ export function EventSetupPage() {
     };
   }, [id, judgingTemplateIds]);
 
+  // Um template sem nenhuma apresentação agendada (`total === 0`, ver
+  // fetchTemplateJudgingStats) não tem em qual dia/recurso escalar
+  // jurado ainda — não deveria ser exigido pra fechar esta etapa
+  // (mesmo filtro usado no seletor de template da JudgingPage).
+  const relevantJudgingTemplateIds = useMemo(
+    () => judgingTemplateIds.filter((templateId) => (templateStats.get(templateId)?.total ?? 0) > 0),
+    [judgingTemplateIds, templateStats],
+  );
+
   const allTemplatesJudgingComplete =
-    judgingTemplateIds.length > 0 &&
-    judgingTemplateIds.every((templateId) =>
+    relevantJudgingTemplateIds.length > 0 &&
+    relevantJudgingTemplateIds.every((templateId) =>
       isTemplateJudgingComplete(templateStats.get(templateId)),
     );
 

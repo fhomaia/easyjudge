@@ -1,7 +1,8 @@
-import { Crown, Pencil, Scale, type LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Crown, Scale, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { getAvatarColor } from "@/lib/avatarColor";
+import { assignmentKey } from "@/lib/judgingAssignments";
 import { SPECIAL_JUDGE_ROLES } from "@/lib/specialJudgeRoles";
 import type { Judge, SpecialJudgeRole } from "@/api/client";
 
@@ -11,6 +12,8 @@ function getJudgeInitials(name: string): string {
   if (words.length === 1) return words[0][0]?.toUpperCase() ?? "?";
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase();
 }
+
+const MAX_VISIBLE_CHIPS = 2;
 
 const ROLE_ICONS: Record<SpecialJudgeRole, LucideIcon> = {
   legality_judge: Scale,
@@ -26,39 +29,68 @@ const ROLE_COLORS: Record<SpecialJudgeRole, string> = {
 };
 
 interface SpecialRolesCardProps {
-  judgeIdsByRole: Map<SpecialJudgeRole, string[]>;
+  resources: Array<{ id: string; name: string }>;
+  judgeIdsByRoleResource: Map<string, string[]>;
   judgesById: Map<string, Judge>;
-  onEditRole: (role: SpecialJudgeRole) => void;
+  selectedRole: SpecialJudgeRole | null;
+  selectedResourceId: string | null;
+  onSelectCell: (role: SpecialJudgeRole, resourceId: string) => void;
 }
 
+// Uma linha por função especial, uma coluna por recurso do dia
+// selecionado — mesmo padrão de separação por pista da árvore de
+// critérios (2026-07-19, a pedido do usuário): um jurado não pode
+// estar em duas pistas ao mesmo tempo, então a função especial também
+// precisa de um jurado por recurso, não um só pro dia inteiro.
 export function SpecialRolesCard({
-  judgeIdsByRole,
+  resources,
+  judgeIdsByRoleResource,
   judgesById,
-  onEditRole,
+  selectedRole,
+  selectedResourceId,
+  onSelectCell,
 }: SpecialRolesCardProps) {
   return (
-    <div className="rounded-lg border border-border/60 bg-card">
-      <div className="border-b border-border/60 px-5 py-3">
-        <h2 className="text-sm font-semibold text-foreground">Funções especiais</h2>
-      </div>
+    <div className="flex flex-col gap-4">
+      <h2 className="text-sm font-semibold text-foreground">
+        Funções especiais{" "}
+        <span className="font-normal text-muted-foreground">
+          (clique no recurso para atribuir o jurado responsável)
+        </span>
+      </h2>
 
-      <div className="grid grid-cols-1 divide-y divide-border/60 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+      {resources.length > 0 && (
+        <div
+          style={{ gridTemplateColumns: `1.6fr repeat(${resources.length}, 160px)` }}
+          className="grid gap-3 border-b border-border/60 pb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+        >
+          <span>Função</span>
+          {resources.map((resource) => (
+            <span key={resource.id} className="truncate normal-case">
+              {resource.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="divide-y divide-border/60">
         {SPECIAL_JUDGE_ROLES.map(({ role, label, description, required }) => {
           const Icon = ROLE_ICONS[role];
-          const judges = (judgeIdsByRole.get(role) ?? [])
-            .map((id) => judgesById.get(id))
-            .filter((j): j is Judge => !!j);
 
           return (
-            <div key={role} className="flex items-center justify-between gap-4 p-5">
-              <div className="flex items-center gap-4">
+            <div
+              key={role}
+              style={{ gridTemplateColumns: `1.6fr repeat(${resources.length}, 160px)` }}
+              className="grid items-center gap-3 py-4 first:pt-0 last:pb-0"
+            >
+              <div className="flex items-center gap-3">
                 <div
                   style={{ backgroundColor: ROLE_COLORS[role] }}
-                  className="flex size-12 shrink-0 items-center justify-center rounded-full text-white"
+                  className="flex size-10 shrink-0 items-center justify-center rounded-full text-white"
                 >
-                  <Icon className="size-5" />
+                  <Icon className="size-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     {label}
                     {required && (
@@ -70,28 +102,49 @@ export function SpecialRolesCard({
                       </Badge>
                     )}
                   </p>
-                  <p className="text-xs text-muted-foreground">{description}</p>
+                  <p className="truncate text-xs text-muted-foreground">{description}</p>
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center gap-3">
-                <div className="flex items-center">
-                  {judges.map((judge) => (
-                    <span
-                      key={judge.id}
-                      title={judge.name}
-                      style={{ backgroundColor: getAvatarColor(judge.id) }}
-                      className="-ml-2 flex size-8 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-card first:ml-0"
-                    >
-                      {getJudgeInitials(judge.name)}
-                    </span>
-                  ))}
-                </div>
-                <Button size="sm" variant="outline" onClick={() => onEditRole(role)}>
-                  <Pencil data-icon="inline-start" />
-                  Editar
-                </Button>
-              </div>
+              {resources.map((resource) => {
+                const judges = (judgeIdsByRoleResource.get(assignmentKey(role, resource.id)) ?? [])
+                  .map((id) => judgesById.get(id))
+                  .filter((j): j is Judge => !!j);
+                const visibleJudges = judges.slice(0, MAX_VISIBLE_CHIPS);
+                const overflowCount = judges.length - visibleJudges.length;
+                const selected = selectedRole === role && selectedResourceId === resource.id;
+
+                return (
+                  <button
+                    key={resource.id}
+                    type="button"
+                    onClick={() => onSelectCell(role, resource.id)}
+                    className={cn(
+                      "flex min-h-9 items-center rounded-md px-1.5 transition-colors hover:bg-muted/40",
+                      selected && "bg-primary/[0.06]",
+                    )}
+                  >
+                    {visibleJudges.map((judge) => (
+                      <span
+                        key={judge.id}
+                        title={judge.name}
+                        style={{ backgroundColor: getAvatarColor(judge.id) }}
+                        className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-card first:ml-0"
+                      >
+                        {getJudgeInitials(judge.name)}
+                      </span>
+                    ))}
+                    {overflowCount > 0 && (
+                      <span className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground ring-2 ring-card">
+                        +{overflowCount}
+                      </span>
+                    )}
+                    {judges.length === 0 && (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           );
         })}

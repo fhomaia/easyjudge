@@ -3,7 +3,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, Circle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getAvatarColor } from "@/lib/avatarColor";
-import type { NodeAssignmentStatus } from "@/lib/judgingAssignments";
+import { assignmentKey, type NodeAssignmentStatus } from "@/lib/judgingAssignments";
 import type { ScoringCriterion, Judge } from "@/api/client";
 
 function getJudgeInitials(name: string): string {
@@ -13,7 +13,7 @@ function getJudgeInitials(name: string): string {
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase();
 }
 
-const MAX_VISIBLE_CHIPS = 3;
+const MAX_VISIBLE_CHIPS = 2;
 
 function JudgeAvatarChip({ judge }: { judge: Judge }) {
   return (
@@ -51,17 +51,73 @@ const STATUS_CONFIG: Record<
   },
 };
 
+// Uma célula por recurso (pista) do dia selecionado — cada uma é seu
+// próprio alvo de soltar (drag-and-drop) e, pra folhas, seu próprio
+// gatilho pra abrir o painel de edição (ver JudgingPage). Um jurado
+// não pode estar em duas pistas ao mesmo tempo, então cada recurso
+// tem seu próprio conjunto de jurados, independente dos outros.
+function ResourceAssignmentCell({
+  criterionId,
+  resourceId,
+  judges,
+  isLeaf,
+  selected,
+  onSelect,
+}: {
+  criterionId: string;
+  resourceId: string;
+  judges: Judge[];
+  isLeaf: boolean;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: assignmentKey(criterionId, resourceId) });
+  const visibleJudges = judges.slice(0, MAX_VISIBLE_CHIPS);
+  const overflowCount = judges.length - visibleJudges.length;
+
+  return (
+    <div
+      ref={setNodeRef}
+      onClick={
+        isLeaf
+          ? (e) => {
+              e.stopPropagation();
+              onSelect();
+            }
+          : undefined
+      }
+      className={cn(
+        "flex min-h-9 items-center rounded-md px-1.5 transition-colors",
+        isLeaf && "cursor-pointer hover:bg-muted/40",
+        selected && "bg-primary/[0.06]",
+        isOver && "bg-primary/10 ring-1 ring-inset ring-primary/40",
+      )}
+    >
+      {visibleJudges.map((judge) => (
+        <JudgeAvatarChip key={judge.id} judge={judge} />
+      ))}
+      {overflowCount > 0 && (
+        <span className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground ring-2 ring-card">
+          +{overflowCount}
+        </span>
+      )}
+      {judges.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+    </div>
+  );
+}
+
 interface JudgingCriterionRowProps {
   criterion: ScoringCriterion;
   depth: number;
   status: NodeAssignmentStatus;
   fraction: { assigned: number; total: number };
-  judges: Judge[];
+  resources: Array<{ id: string; name: string }>;
+  judgesByResource: Map<string, Judge[]>;
   hasChildren: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  selected: boolean;
-  onSelect: () => void;
+  selectedResourceId: string | null;
+  onSelectCell: (resourceId: string) => void;
 }
 
 export function JudgingCriterionRow({
@@ -69,33 +125,30 @@ export function JudgingCriterionRow({
   depth,
   status,
   fraction,
-  judges,
+  resources,
+  judgesByResource,
   hasChildren,
   collapsed,
   onToggleCollapse,
-  selected,
-  onSelect,
+  selectedResourceId,
+  onSelectCell,
 }: JudgingCriterionRowProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: criterion.id });
   const isLeaf = criterion.type === "score_item";
   const statusConfig = STATUS_CONFIG[status];
   const StatusIcon = statusConfig.icon;
-  const visibleJudges = judges.slice(0, MAX_VISIBLE_CHIPS);
-  const overflowCount = judges.length - visibleJudges.length;
 
   return (
     <div
-      ref={setNodeRef}
-      onClick={isLeaf ? onSelect : undefined}
-      style={{ paddingLeft: `${depth * 24 + 12}px` }}
-      className={cn(
-        "grid grid-cols-[1fr_180px_140px] items-center gap-3 border-b border-border/60 py-3 pr-4 transition-colors last:border-0",
-        isLeaf && "cursor-pointer hover:bg-muted/40",
-        selected && "bg-primary/[0.06]",
-        isOver && "bg-primary/10 ring-1 ring-inset ring-primary/40",
-      )}
+      style={{
+        gridTemplateColumns: `1fr repeat(${resources.length}, 160px) 140px`,
+        paddingLeft: 0,
+      }}
+      className="grid items-center gap-3 border-b border-border/60 py-2 pr-4 pl-3 transition-colors last:border-0"
     >
-      <div className="flex min-w-0 items-center gap-2">
+      <div
+        className="flex min-w-0 items-center gap-2"
+        style={{ paddingLeft: `${depth * 24}px` }}
+      >
         <button
           type="button"
           onClick={(e) => {
@@ -115,17 +168,17 @@ export function JudgingCriterionRow({
         </span>
       </div>
 
-      <div className="flex items-center">
-        {visibleJudges.map((judge) => (
-          <JudgeAvatarChip key={judge.id} judge={judge} />
-        ))}
-        {overflowCount > 0 && (
-          <span className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground ring-2 ring-card">
-            +{overflowCount}
-          </span>
-        )}
-        {judges.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
-      </div>
+      {resources.map((resource) => (
+        <ResourceAssignmentCell
+          key={resource.id}
+          criterionId={criterion.id}
+          resourceId={resource.id}
+          judges={judgesByResource.get(resource.id) ?? []}
+          isLeaf={isLeaf}
+          selected={isLeaf && selectedResourceId === resource.id}
+          onSelect={() => onSelectCell(resource.id)}
+        />
+      ))}
 
       <div className="flex items-center justify-end gap-3">
         {isLeaf && (
