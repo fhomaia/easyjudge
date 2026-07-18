@@ -5,7 +5,6 @@ import { DatePicker } from "@/components/DatePicker";
 export interface EventFormValues {
   name: string;
   startDate: string;
-  competitionDays: string;
   location: string;
 }
 
@@ -14,6 +13,10 @@ interface EventFormFieldsProps {
   onChange: (key: keyof EventFormValues, value: string) => void;
 }
 
+// "Dias de competição" saiu do formulário (2026-07-16) — o número de
+// dias do evento agora é controlado na tela de Cronograma, através do
+// botão "+ Dia" (faz mais sentido lá, já que é onde os dias
+// efetivamente existem/são usados).
 export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
   return (
     <>
@@ -28,26 +31,13 @@ export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="event-start-date">Data de início</Label>
-          <DatePicker
-            id="event-start-date"
-            value={form.startDate}
-            onChange={(value) => onChange("startDate", value)}
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="event-days">Dias de competição</Label>
-          <Input
-            id="event-days"
-            type="number"
-            min={1}
-            value={form.competitionDays}
-            onChange={(e) => onChange("competitionDays", e.target.value)}
-            required
-          />
-        </div>
+      <div className="grid gap-2">
+        <Label htmlFor="event-start-date">Data de início</Label>
+        <DatePicker
+          id="event-start-date"
+          value={form.startDate}
+          onChange={(value) => onChange("startDate", value)}
+        />
       </div>
 
       <div className="grid gap-2">

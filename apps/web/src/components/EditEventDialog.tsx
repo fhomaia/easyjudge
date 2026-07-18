@@ -20,7 +20,6 @@ function toFormValues(event: Event): EventFormValues {
   return {
     name: event.name,
     startDate: event.startDate,
-    competitionDays: String(event.competitionDays),
     location: event.location,
   };
 }
@@ -59,7 +58,6 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
       const updated = await eventsApi.update(event.id, {
         name: form.name,
         startDate: form.startDate,
-        competitionDays: Number(form.competitionDays),
         location: form.location,
       });
       onUpdated(updated);

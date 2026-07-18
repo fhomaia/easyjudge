@@ -11,7 +11,11 @@ import { ScoringTemplatesModule } from '../scoring-templates/scoring-templates.m
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CriterionJudgeAssignment, SpecialRoleAssignment, Category]),
+    TypeOrmModule.forFeature([
+      CriterionJudgeAssignment,
+      SpecialRoleAssignment,
+      Category,
+    ]),
     EventsModule,
     JudgesModule,
     ScoringTemplatesModule,

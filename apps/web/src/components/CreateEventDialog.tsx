@@ -22,7 +22,6 @@ interface CreateEventDialogProps {
 const initialForm = {
   name: "",
   startDate: "",
-  competitionDays: "1",
   location: "",
 };
 
@@ -86,7 +85,6 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
       let event = await eventsApi.create({
         name: form.name,
         startDate: form.startDate,
-        competitionDays: Number(form.competitionDays),
         location: form.location,
       });
       if (photo) {

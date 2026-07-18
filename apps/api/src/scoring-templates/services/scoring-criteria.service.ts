@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import { ScoringCriterion } from '../entities/scoring-criterion.entity';
@@ -99,7 +103,9 @@ export class ScoringCriteriaService {
 
     if (newParentId) {
       if (newParentId === id) {
-        throw new ConflictException('Um critério não pode ser filho de si mesmo.');
+        throw new ConflictException(
+          'Um critério não pode ser filho de si mesmo.',
+        );
       }
       // Sobe a cadeia de ancestrais do novo pai — se o próprio nó
       // movido aparecer nela, o novo pai é descendente dele (cria um
@@ -176,8 +182,10 @@ export class ScoringCriteriaService {
       order: { order: 'ASC' },
     });
 
-    let ordered = siblings;
-    const movedIndex = movedId ? ordered.findIndex((c) => c.id === movedId) : -1;
+    const ordered = siblings;
+    const movedIndex = movedId
+      ? ordered.findIndex((c) => c.id === movedId)
+      : -1;
     if (movedIndex !== -1) {
       const [moved] = ordered.splice(movedIndex, 1);
       const targetIndex = Math.min(Math.max(moved.order, 0), ordered.length);

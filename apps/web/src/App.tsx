@@ -6,6 +6,7 @@ import { RegulationPage } from "@/pages/RegulationPage";
 import { CategoriesPage } from "@/pages/CategoriesPage";
 import { ProgramsPage } from "@/pages/ProgramsPage";
 import { JudgingPage } from "@/pages/JudgingPage";
+import { SchedulePage } from "@/pages/SchedulePage";
 import { ScoringTemplatesListPage } from "@/pages/ScoringTemplatesListPage";
 import { ScoringTemplateBuilderPage } from "@/pages/ScoringTemplateBuilderPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -24,6 +25,7 @@ function App() {
         <Route path="/events/:id/categories" element={<CategoriesPage />} />
         <Route path="/events/:id/programs" element={<ProgramsPage />} />
         <Route path="/events/:id/judging" element={<JudgingPage />} />
+        <Route path="/events/:id/schedule" element={<SchedulePage />} />
         <Route path="/scoring-templates" element={<ScoringTemplatesListPage />} />
         <Route path="/scoring-templates/:id" element={<ScoringTemplateBuilderPage />} />
       </Route>

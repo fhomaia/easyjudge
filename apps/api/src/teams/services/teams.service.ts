@@ -48,7 +48,11 @@ export class TeamsService {
     return this.teamsRepo.save(team);
   }
 
-  async remove(eventId: string, programId: string, teamId: string): Promise<void> {
+  async remove(
+    eventId: string,
+    programId: string,
+    teamId: string,
+  ): Promise<void> {
     const team = await this.findTeamOrThrow(eventId, programId, teamId);
     await this.teamsRepo.remove(team);
   }

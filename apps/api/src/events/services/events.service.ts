@@ -56,6 +56,7 @@ export class EventsService {
     return this.dataSource.transaction(async (manager) => {
       const event = manager.create(Event, {
         ...dto,
+        competitionDays: dto.competitionDays ?? 1,
         id,
         aliasId: id,
         version: 1,
@@ -202,9 +203,7 @@ export class EventsService {
     const event = await this.getOwnEventOrThrow(id, userId);
 
     if (event.status !== EventStatus.PUBLISHED) {
-      throw new ConflictException(
-        'Só é possível iniciar um evento publicado.',
-      );
+      throw new ConflictException('Só é possível iniciar um evento publicado.');
     }
 
     event.status = EventStatus.STARTED;

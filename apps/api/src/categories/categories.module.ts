@@ -7,7 +7,11 @@ import { EventsModule } from '../events/events.module';
 import { ScoringTemplatesModule } from '../scoring-templates/scoring-templates.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Category]), EventsModule, ScoringTemplatesModule],
+  imports: [
+    TypeOrmModule.forFeature([Category]),
+    EventsModule,
+    ScoringTemplatesModule,
+  ],
   controllers: [CategoriesController],
   providers: [CategoriesService],
 })

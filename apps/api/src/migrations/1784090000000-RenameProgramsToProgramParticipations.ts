@@ -6,13 +6,13 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // renomeia constraint/índice junto com a tabela (mesma gotcha já
 // documentada na migration RenameTeamsToPrograms) — por isso o rename
 // explícito de cada um logo em seguida.
-export class RenameProgramsToProgramParticipations1784090000000
-  implements MigrationInterface
-{
+export class RenameProgramsToProgramParticipations1784090000000 implements MigrationInterface {
   name = 'RenameProgramsToProgramParticipations1784090000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "programs" RENAME TO "program_participations"`);
+    await queryRunner.query(
+      `ALTER TABLE "programs" RENAME TO "program_participations"`,
+    );
 
     await queryRunner.query(
       `ALTER TABLE "program_participations" RENAME CONSTRAINT "PK_programs_id" TO "PK_program_participations_id"`,
@@ -66,6 +66,8 @@ export class RenameProgramsToProgramParticipations1784090000000
       `ALTER TABLE "program_participations" RENAME CONSTRAINT "PK_program_participations_id" TO "PK_programs_id"`,
     );
 
-    await queryRunner.query(`ALTER TABLE "program_participations" RENAME TO "programs"`);
+    await queryRunner.query(
+      `ALTER TABLE "program_participations" RENAME TO "programs"`,
+    );
   }
 }

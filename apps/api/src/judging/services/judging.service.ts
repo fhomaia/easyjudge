@@ -35,13 +35,19 @@ export class JudgingService {
     templateId: string,
     userId: string,
   ): Promise<CriterionAssignmentsState> {
-    const criteria = await this.assertTemplateUsableForEvent(eventId, templateId, userId);
+    const criteria = await this.assertTemplateUsableForEvent(
+      eventId,
+      templateId,
+      userId,
+    );
     const criterionIds = criteria.map((c) => c.id);
 
     const criterionRows = criterionIds.length
       ? await this.criterionAssignmentsRepo
           .createQueryBuilder('assignment')
-          .where('assignment.criterionId IN (:...criterionIds)', { criterionIds })
+          .where('assignment.criterionId IN (:...criterionIds)', {
+            criterionIds,
+          })
           .getMany()
       : [];
     const byCriterion = new Map<string, string[]>();
@@ -52,10 +58,12 @@ export class JudgingService {
     }
 
     return {
-      criterionAssignments: Array.from(byCriterion.entries()).map(([criterionId, judgeIds]) => ({
-        criterionId,
-        judgeIds,
-      })),
+      criterionAssignments: Array.from(byCriterion.entries()).map(
+        ([criterionId, judgeIds]) => ({
+          criterionId,
+          judgeIds,
+        }),
+      ),
       specialRoles: await this.getSpecialRoles(eventId),
     };
   }
@@ -70,7 +78,9 @@ export class JudgingService {
     eventId: string,
   ): Promise<Array<{ role: SpecialJudgeRole; judgeIds: string[] }>> {
     await this.eventsService.findEventOrThrow(eventId);
-    const specialRoleRows = await this.specialRoleAssignmentsRepo.find({ where: { eventId } });
+    const specialRoleRows = await this.specialRoleAssignmentsRepo.find({
+      where: { eventId },
+    });
     const byRole = new Map<SpecialJudgeRole, string[]>();
     for (const row of specialRoleRows) {
       const list = byRole.get(row.role) ?? [];
@@ -93,13 +103,21 @@ export class JudgingService {
     judgeIds: string[],
     userId: string,
   ): Promise<void> {
-    const criteria = await this.assertTemplateUsableForEvent(eventId, templateId, userId);
+    const criteria = await this.assertTemplateUsableForEvent(
+      eventId,
+      templateId,
+      userId,
+    );
     const criterion = criteria.find((c) => c.id === criterionId);
     if (!criterion) {
-      throw new BadRequestException('Critério não pertence a este sistema de pontuação');
+      throw new BadRequestException(
+        'Critério não pertence a este sistema de pontuação',
+      );
     }
     if (criterion.type !== ScoringCriterionType.SCORE_ITEM) {
-      throw new BadRequestException('Só critérios-folha (item de avaliação) recebem jurados diretamente');
+      throw new BadRequestException(
+        'Só critérios-folha (item de avaliação) recebem jurados diretamente',
+      );
     }
     await this.assertJudgesBelongToEvent(eventId, judgeIds);
     await this.replaceCriterionJudges(criterionId, judgeIds);
@@ -116,10 +134,16 @@ export class JudgingService {
     strategy: BulkAssignStrategy,
     userId: string,
   ): Promise<void> {
-    const criteria = await this.assertTemplateUsableForEvent(eventId, templateId, userId);
+    const criteria = await this.assertTemplateUsableForEvent(
+      eventId,
+      templateId,
+      userId,
+    );
     const group = criteria.find((c) => c.id === groupCriterionId);
     if (!group) {
-      throw new BadRequestException('Critério não pertence a este sistema de pontuação');
+      throw new BadRequestException(
+        'Critério não pertence a este sistema de pontuação',
+      );
     }
     await this.assertJudgesBelongToEvent(eventId, [judgeParticipationId]);
 
@@ -149,7 +173,9 @@ export class JudgingService {
           break;
         case BulkAssignStrategy.ADD:
         default:
-          next = current.includes(judgeParticipationId) ? current : [...current, judgeParticipationId];
+          next = current.includes(judgeParticipationId)
+            ? current
+            : [...current, judgeParticipationId];
           break;
       }
       await this.replaceCriterionJudges(leafId, next);
@@ -166,22 +192,36 @@ export class JudgingService {
     await this.specialRoleAssignmentsRepo.delete({ eventId, role });
     if (judgeIds.length === 0) return;
     const rows = judgeIds.map((judgeParticipationId) =>
-      this.specialRoleAssignmentsRepo.create({ eventId, role, judgeParticipationId }),
+      this.specialRoleAssignmentsRepo.create({
+        eventId,
+        role,
+        judgeParticipationId,
+      }),
     );
     await this.specialRoleAssignmentsRepo.save(rows);
   }
 
-  private async replaceCriterionJudges(criterionId: string, judgeIds: string[]): Promise<void> {
+  private async replaceCriterionJudges(
+    criterionId: string,
+    judgeIds: string[],
+  ): Promise<void> {
     await this.criterionAssignmentsRepo.delete({ criterionId });
     if (judgeIds.length === 0) return;
     const rows = judgeIds.map((judgeParticipationId) =>
-      this.criterionAssignmentsRepo.create({ criterionId, judgeParticipationId }),
+      this.criterionAssignmentsRepo.create({
+        criterionId,
+        judgeParticipationId,
+      }),
     );
     await this.criterionAssignmentsRepo.save(rows);
   }
 
   private getDescendantLeafIds(
-    criteria: Array<{ id: string; parentId: string | null; type: ScoringCriterionType }>,
+    criteria: Array<{
+      id: string;
+      parentId: string | null;
+      type: ScoringCriterionType;
+    }>,
     rootId: string,
   ): string[] {
     const childrenByParent = new Map<string, typeof criteria>();
@@ -204,7 +244,10 @@ export class JudgingService {
     return leafIds;
   }
 
-  private async assertJudgesBelongToEvent(eventId: string, judgeIds: string[]): Promise<void> {
+  private async assertJudgesBelongToEvent(
+    eventId: string,
+    judgeIds: string[],
+  ): Promise<void> {
     for (const judgeId of judgeIds) {
       await this.judgesService.findJudgeOrThrow(eventId, judgeId);
     }
@@ -220,8 +263,13 @@ export class JudgingService {
     userId: string,
   ) {
     await this.eventsService.findEventOrThrow(eventId);
-    const criteria = await this.scoringCriteriaService.findAllForTemplate(templateId, userId);
-    const inUse = await this.categoriesRepo.count({ where: { eventId, scoringTemplateId: templateId } });
+    const criteria = await this.scoringCriteriaService.findAllForTemplate(
+      templateId,
+      userId,
+    );
+    const inUse = await this.categoriesRepo.count({
+      where: { eventId, scoringTemplateId: templateId },
+    });
     if (inUse === 0) {
       throw new BadRequestException(
         'Este sistema de pontuação não está em uso por nenhuma categoria deste evento',

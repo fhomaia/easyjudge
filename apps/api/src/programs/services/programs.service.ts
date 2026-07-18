@@ -78,7 +78,9 @@ export class ProgramsService {
         userId,
         eligibleUser
           ? {
-              name: eligibleUser.teamOrInstitutionName || `${eligibleUser.firstName} ${eligibleUser.lastName}`,
+              name:
+                eligibleUser.teamOrInstitutionName ||
+                `${eligibleUser.firstName} ${eligibleUser.lastName}`,
               contactEmail: eligibleUser.email,
               city: dto.city,
               state: dto.state,
@@ -100,14 +102,20 @@ export class ProgramsService {
     await this.eventsService.findEventOrThrow(eventId);
     const participations = await this.participationsRepo
       .createQueryBuilder('participation')
-      .loadRelationCountAndMap('participation.teamsCount', 'participation.teams')
+      .loadRelationCountAndMap(
+        'participation.teamsCount',
+        'participation.teams',
+      )
       .where('participation.eventId = :eventId', { eventId })
       .orderBy('participation.createdAt', 'DESC')
       .getMany();
     return Promise.all(participations.map((p) => this.toProgramView(p)));
   }
 
-  async findOneForEvent(eventId: string, id: string): Promise<ProgramParticipation> {
+  async findOneForEvent(
+    eventId: string,
+    id: string,
+  ): Promise<ProgramParticipation> {
     const participation = await this.participationsRepo.findOne({
       where: { id, eventId },
       relations: ['teams', 'teams.categories'],
@@ -166,8 +174,14 @@ export class ProgramsService {
 
   // Usado por TeamsService pra validar que o programa existe antes de
   // criar/editar uma equipe vinculada a ele.
-  async findProgramOrThrow(eventId: string, id: string): Promise<ProgramParticipation> {
-    const participation = await this.participationsRepo.findOneBy({ id, eventId });
+  async findProgramOrThrow(
+    eventId: string,
+    id: string,
+  ): Promise<ProgramParticipation> {
+    const participation = await this.participationsRepo.findOneBy({
+      id,
+      eventId,
+    });
     if (!participation) throw new NotFoundException('Programa não encontrado');
     return participation;
   }
@@ -182,7 +196,9 @@ export class ProgramsService {
     }
   }
 
-  private async findEligibleProgramUserByEmail(email: string): Promise<User | null> {
+  private async findEligibleProgramUserByEmail(
+    email: string,
+  ): Promise<User | null> {
     const user = await this.usersService.findByEmailInsensitive(email);
     if (!user || user.role !== UserRole.PROGRAM) return null;
     return user;
@@ -235,13 +251,16 @@ export class ProgramsService {
   ): Promise<number> {
     const unclaimed = await this.participationsRepo
       .createQueryBuilder('participation')
-      .where('LOWER(participation.email) = LOWER(:email)', { email: user.email })
+      .where('LOWER(participation.email) = LOWER(:email)', {
+        email: user.email,
+      })
       .andWhere('participation.userId IS NULL')
       .getMany();
 
     if (unclaimed.length === 0) return 0;
 
-    const name = user.teamOrInstitutionName || `${user.firstName} ${user.lastName}`;
+    const name =
+      user.teamOrInstitutionName || `${user.firstName} ${user.lastName}`;
     const seed = unclaimed.find((p) => p.city && p.state);
     await this.getOrCreateProfile(userId, {
       name,
@@ -263,9 +282,7 @@ export class ProgramsService {
   // A partir daqui, endpoints de "programs/me" (ProgramProfileController)
   // — usados pelo próprio usuário PROGRAM pra gerenciar o perfil
   // canônico e ver os eventos em que está incluído.
-  async findAllForUser(
-    userId: string,
-  ): Promise<{
+  async findAllForUser(userId: string): Promise<{
     profile: ProgramProfile;
     events: Array<{ eventId: string; eventName?: string; startDate?: string }>;
   }> {
@@ -298,9 +315,15 @@ export class ProgramsService {
   // deste produtor que ainda não têm conta própria (senão já
   // apareceriam no primeiro grupo) — ver ProgramFormFields no
   // frontend.
-  async findCatalogForUser(createdById: string): Promise<ProgramCatalogEntry[]> {
-    const programUsers = await this.usersService.findAllByRole(UserRole.PROGRAM);
-    const myParticipations = await this.participationsRepo.find({ where: { createdById } });
+  async findCatalogForUser(
+    createdById: string,
+  ): Promise<ProgramCatalogEntry[]> {
+    const programUsers = await this.usersService.findAllByRole(
+      UserRole.PROGRAM,
+    );
+    const myParticipations = await this.participationsRepo.find({
+      where: { createdById },
+    });
     const myUserIds = new Set(
       myParticipations.filter((p) => p.userId).map((p) => p.userId as string),
     );
@@ -311,7 +334,10 @@ export class ProgramsService {
       platformEntries.push({
         source: 'platform',
         userId: user.id,
-        name: profile?.name ?? user.teamOrInstitutionName ?? `${user.firstName} ${user.lastName}`,
+        name:
+          profile?.name ??
+          user.teamOrInstitutionName ??
+          `${user.firstName} ${user.lastName}`,
         email: profile?.contactEmail ?? user.email,
         city: profile?.city ?? null,
         state: profile?.state ?? null,
@@ -353,13 +379,18 @@ export class ProgramsService {
       const user = await this.usersService.findById(userId);
       if (!user) throw new NotFoundException('Usuário não encontrado');
       initial = {
-        name: user.teamOrInstitutionName || `${user.firstName} ${user.lastName}`,
+        name:
+          user.teamOrInstitutionName || `${user.firstName} ${user.lastName}`,
         contactEmail: user.email,
         city: null,
         state: null,
       };
     }
-    const profile = this.profilesRepo.create({ userId, ...initial, logoUrl: null });
+    const profile = this.profilesRepo.create({
+      userId,
+      ...initial,
+      logoUrl: null,
+    });
     return this.profilesRepo.save(profile);
   }
 
@@ -371,7 +402,9 @@ export class ProgramsService {
     participation: ProgramParticipation,
   ): Promise<ProgramParticipation> {
     if (!participation.userId) return participation;
-    const profile = await this.profilesRepo.findOneBy({ userId: participation.userId });
+    const profile = await this.profilesRepo.findOneBy({
+      userId: participation.userId,
+    });
     if (!profile) return participation;
     return {
       ...participation,

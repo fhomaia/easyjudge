@@ -35,10 +35,7 @@ export class RegulationsController {
   }
 
   @Patch()
-  update(
-    @Param('eventId') eventId: string,
-    @Body() dto: UpdateRegulationDto,
-  ) {
+  update(@Param('eventId') eventId: string, @Body() dto: UpdateRegulationDto) {
     return this.regulationsService.updateDeductions(eventId, dto);
   }
 
@@ -51,7 +48,11 @@ export class RegulationsController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Arquivo obrigatório');
-    if (!Object.values(RegulationDocumentKind).includes(kind as RegulationDocumentKind)) {
+    if (
+      !Object.values(RegulationDocumentKind).includes(
+        kind as RegulationDocumentKind,
+      )
+    ) {
       throw new BadRequestException('Tipo de documento inválido');
     }
     return this.regulationsService.uploadDocument(

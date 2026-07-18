@@ -28,9 +28,13 @@ export class Team {
   @Column({ name: 'program_id' })
   programId: string;
 
-  @ManyToOne(() => ProgramParticipation, (participation) => participation.teams, {
-    onDelete: 'CASCADE',
-  })
+  @ManyToOne(
+    () => ProgramParticipation,
+    (participation) => participation.teams,
+    {
+      onDelete: 'CASCADE',
+    },
+  )
   @JoinColumn({ name: 'program_id' })
   program: ProgramParticipation;
 

@@ -34,6 +34,27 @@ export interface RegulationSummary {
   updatedAt: string | null;
 }
 
+// Montado em EventSetupPage a partir de scheduleApi.listDays(id) (todas
+// as entries de todos os dias) + scheduleApi.getUnscheduled(id, dayId)
+// (pares equipe/categoria ainda sem apresentação marcada NAQUELE dia)
+// — ver SchedulePage. Cada equipe/categoria precisa de uma
+// apresentação em CADA dia do evento (não uma vez só no evento inteiro
+// — ver ScheduleService), então `totalPairs`/`unscheduledCount` já vêm
+// somados por todos os dias (tamanho do catálogo × número de dias).
+// `hasScheduledComponent` conta só componentes "de verdade" (Almoço,
+// Contestação de notas, Abertura, Premiação, intervalo personalizado —
+// entries sem linkedEntryId), não os intervalos "Aguardando
+// aquecimento"/"Aguardando disponibilidade da equipe" que o próprio
+// agendamento de uma apresentação insere automaticamente (esses têm
+// linkedEntryId apontando pra ela, ver ScheduleService).
+export interface ScheduleSummary {
+  totalPairs: number;
+  unscheduledCount: number;
+  hasScheduledPresentation: boolean;
+  hasScheduledComponent: boolean;
+  updatedAt: string | null;
+}
+
 // Escala de arbitragem só conta como concluída com as duas condições
 // atendidas — mensagem precisa conforme o que ainda falta.
 function judgePanelDetail(hasLegalityJudge: boolean, allTemplatesJudgingComplete: boolean): string {
@@ -49,12 +70,25 @@ function judgePanelDetail(hasLegalityJudge: boolean, allTemplatesJudgingComplete
   return "Pendente: concluir todos os sistemas de pontuação";
 }
 
+function scheduleDetail(
+  summary: ScheduleSummary,
+  completed: boolean,
+  inProgress: boolean,
+): string {
+  if (completed) return "Todas as apresentações já foram agendadas";
+  if (inProgress) {
+    return `${summary.unscheduledCount} de ${summary.totalPairs} apresentações ainda não agendadas`;
+  }
+  return "Monte a timeline de apresentações do evento";
+}
+
 export function buildSetupSteps(
   event: Event,
   regulation: RegulationSummary | null,
   hasLegalityJudge: boolean,
   allTemplatesJudgingComplete: boolean,
   hasAnyJudge: boolean,
+  schedule: ScheduleSummary,
 ): SetupStep[] {
   const categoriesCount = event.categoriesCount ?? 0;
   const programsCount = event.programsCount ?? 0;
@@ -64,6 +98,9 @@ export function buildSetupSteps(
     regulation.hasOfficialRegulation &&
     regulation.hasSafetyRules &&
     regulation.hasCompleteTemplate;
+  const scheduleCompleted = schedule.totalPairs > 0 && schedule.unscheduledCount === 0;
+  const scheduleInProgress =
+    !scheduleCompleted && (schedule.hasScheduledPresentation || schedule.hasScheduledComponent);
 
   return [
     {
@@ -108,6 +145,23 @@ export function buildSetupSteps(
       href: `/events/${event.id}/programs`,
     },
     {
+      // Cronograma vem antes de Painel de jurados nesta lista (pedido
+      // explícito do usuário) — a ordem do array é o que
+      // `firstIncomplete`/`computeStepState` usam pra decidir a etapa
+      // "recomendada", e também o que define o número do card
+      // (stepNumber = index+1 em EventSetupPage).
+      key: "schedule",
+      title: "Cronograma",
+      shortTitle: "Cronograma",
+      description: "Monte a ordem de apresentação das equipes durante o evento.",
+      completed: scheduleCompleted,
+      inProgress: scheduleInProgress,
+      detail: scheduleDetail(schedule, scheduleCompleted, scheduleInProgress),
+      updatedAt: schedule.updatedAt,
+      actionLabel: scheduleCompleted || scheduleInProgress ? "Editar cronograma" : "Iniciar cadastro",
+      href: `/events/${event.id}/schedule`,
+    },
+    {
       key: "judgePanel",
       title: "Painel de jurados",
       shortTitle: "Painel de jurados",
@@ -118,16 +172,6 @@ export function buildSetupSteps(
       updatedAt: null,
       actionLabel: judgePanelCompleted ? "Editar escala de arbitragem" : "Iniciar cadastro",
       href: `/events/${event.id}/judging`,
-    },
-    {
-      key: "schedule",
-      title: "Cronograma",
-      shortTitle: "Cronograma",
-      description: "Monte a ordem de apresentação das equipes durante o evento.",
-      completed: false,
-      detail: "Disponível em breve",
-      updatedAt: null,
-      actionLabel: "Iniciar cadastro",
     },
   ];
 }

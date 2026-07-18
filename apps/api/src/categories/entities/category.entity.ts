@@ -81,7 +81,11 @@ export class Category {
 
   // Só existem esses dois estados (decisão do usuário) — nada de
   // "rascunho" ou outros status intermediários.
-  @Column({ type: 'enum', enum: CategoryStatus, default: CategoryStatus.ACTIVE })
+  @Column({
+    type: 'enum',
+    enum: CategoryStatus,
+    default: CategoryStatus.ACTIVE,
+  })
   status: CategoryStatus;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

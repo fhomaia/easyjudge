@@ -76,7 +76,10 @@ export class JudgesService {
       await this.getOrCreateProfile(
         userId,
         eligibleUser
-          ? { name: `${eligibleUser.firstName} ${eligibleUser.lastName}`, contactEmail: eligibleUser.email }
+          ? {
+              name: `${eligibleUser.firstName} ${eligibleUser.lastName}`,
+              contactEmail: eligibleUser.email,
+            }
           : undefined,
       );
     }
@@ -99,7 +102,10 @@ export class JudgesService {
     return Promise.all(participations.map((p) => this.toJudgeView(p)));
   }
 
-  async findOneForEvent(eventId: string, id: string): Promise<JudgeParticipation> {
+  async findOneForEvent(
+    eventId: string,
+    id: string,
+  ): Promise<JudgeParticipation> {
     const participation = await this.findJudgeOrThrow(eventId, id);
     return this.toJudgeView(participation);
   }
@@ -144,8 +150,14 @@ export class JudgesService {
   // ProgramsService.findProgramOrThrow. Retorna a linha crua (sem
   // overlay de JudgeProfile) — quem precisa da view de exibição chama
   // toJudgeView em seguida.
-  async findJudgeOrThrow(eventId: string, id: string): Promise<JudgeParticipation> {
-    const participation = await this.participationsRepo.findOneBy({ id, eventId });
+  async findJudgeOrThrow(
+    eventId: string,
+    id: string,
+  ): Promise<JudgeParticipation> {
+    const participation = await this.participationsRepo.findOneBy({
+      id,
+      eventId,
+    });
     if (!participation) throw new NotFoundException('Jurado não encontrado');
     return participation;
   }
@@ -156,11 +168,15 @@ export class JudgesService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('Usuário não encontrado');
     if (user.role === UserRole.PROGRAM) {
-      throw new ConflictException('Uma conta do tipo Programa não pode ser jurado.');
+      throw new ConflictException(
+        'Uma conta do tipo Programa não pode ser jurado.',
+      );
     }
   }
 
-  private async findEligibleJudgeUserByEmail(email: string): Promise<User | null> {
+  private async findEligibleJudgeUserByEmail(
+    email: string,
+  ): Promise<User | null> {
     const user = await this.usersService.findByEmailInsensitive(email);
     if (!user || user.role === UserRole.PROGRAM) return null;
     return user;
@@ -205,10 +221,15 @@ export class JudgesService {
   // algum organizador, userId ainda null) com o mesmo email — em
   // qualquer evento. Chamado por AuthService.setPassword. Também cria
   // o JudgeProfile canônico (se ainda não existir).
-  async linkUnclaimedJudgesByEmail(userId: string, user: JudgeUserInfo): Promise<number> {
+  async linkUnclaimedJudgesByEmail(
+    userId: string,
+    user: JudgeUserInfo,
+  ): Promise<number> {
     const unclaimed = await this.participationsRepo
       .createQueryBuilder('participation')
-      .where('LOWER(participation.email) = LOWER(:email)', { email: user.email })
+      .where('LOWER(participation.email) = LOWER(:email)', {
+        email: user.email,
+      })
       .andWhere('participation.userId IS NULL')
       .getMany();
 
@@ -230,9 +251,7 @@ export class JudgesService {
   }
 
   // A partir daqui, endpoints de "judges/me" (JudgeProfileController).
-  async findAllForUser(
-    userId: string,
-  ): Promise<{
+  async findAllForUser(userId: string): Promise<{
     profile: JudgeProfile;
     events: Array<{ eventId: string; eventName?: string; startDate?: string }>;
   }> {
@@ -252,7 +271,10 @@ export class JudgesService {
     };
   }
 
-  async updateOwnProfile(userId: string, dto: UpdateOwnJudgeDto): Promise<JudgeProfile> {
+  async updateOwnProfile(
+    userId: string,
+    dto: UpdateOwnJudgeDto,
+  ): Promise<JudgeProfile> {
     const profile = await this.getOrCreateProfile(userId);
     Object.assign(profile, stripUndefined(dto));
     return this.profilesRepo.save(profile);
@@ -264,8 +286,12 @@ export class JudgesService {
   // apareceriam no primeiro grupo). Mesmo padrão de
   // ProgramsService.findCatalogForUser, mas sem restringir por role.
   async findCatalogForUser(createdById: string): Promise<JudgeCatalogEntry[]> {
-    const judgeUsers = await this.usersService.findAllExceptRole(UserRole.PROGRAM);
-    const myParticipations = await this.participationsRepo.find({ where: { createdById } });
+    const judgeUsers = await this.usersService.findAllExceptRole(
+      UserRole.PROGRAM,
+    );
+    const myParticipations = await this.participationsRepo.find({
+      where: { createdById },
+    });
     const myUserIds = new Set(
       myParticipations.filter((p) => p.userId).map((p) => p.userId as string),
     );
@@ -319,9 +345,13 @@ export class JudgesService {
   // da linha JudgeParticipation — a linha local vira só um snapshot
   // congelado uma vez que userId é preenchido. Idêntico a
   // ProgramsService.toProgramView.
-  private async toJudgeView(participation: JudgeParticipation): Promise<JudgeParticipation> {
+  private async toJudgeView(
+    participation: JudgeParticipation,
+  ): Promise<JudgeParticipation> {
     if (!participation.userId) return participation;
-    const profile = await this.profilesRepo.findOneBy({ userId: participation.userId });
+    const profile = await this.profilesRepo.findOneBy({
+      userId: participation.userId,
+    });
     if (!profile) return participation;
     return {
       ...participation,

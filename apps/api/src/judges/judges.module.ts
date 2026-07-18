@@ -15,7 +15,11 @@ import { UsersModule } from '../users/users.module';
     EventsModule,
     UsersModule,
   ],
-  controllers: [JudgesController, JudgeProfileController, JudgeCatalogController],
+  controllers: [
+    JudgesController,
+    JudgeProfileController,
+    JudgeCatalogController,
+  ],
   providers: [JudgesService],
   exports: [JudgesService],
 })

@@ -4,9 +4,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // nomenclatura correta é "Programa", não "Ginásio" (nenhum usuário
 // tinha esse role em uso ainda, então é seguro renomear em vez de
 // versionar/migrar dados).
-export class RenameGymRoleToProgram1783989251677
-  implements MigrationInterface
-{
+export class RenameGymRoleToProgram1783989251677 implements MigrationInterface {
   name = 'RenameGymRoleToProgram1783989251677';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

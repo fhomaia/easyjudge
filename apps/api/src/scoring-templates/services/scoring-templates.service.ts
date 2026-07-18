@@ -127,7 +127,8 @@ export class ScoringTemplatesService {
       template.distributedScore = distributedScore;
       const criteria = criteriaByTemplateId.get(template.id) ?? [];
       template.isComplete =
-        distributedScore === template.targetScore && !this.hasEmptyGroup(criteria);
+        distributedScore === template.targetScore &&
+        !this.hasEmptyGroup(criteria);
     }
     return templates;
   }

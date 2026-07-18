@@ -31,7 +31,11 @@ export class JudgingController {
     @Query('templateId') templateId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.judgingService.getAssignments(eventId, templateId, req.user.userId);
+    return this.judgingService.getAssignments(
+      eventId,
+      templateId,
+      req.user.userId,
+    );
   }
 
   @Put('templates/:templateId/criteria/:criterionId/judges')
@@ -80,6 +84,10 @@ export class JudgingController {
     @Param('role') role: SpecialJudgeRole,
     @Body() dto: SetJudgeIdsDto,
   ) {
-    return this.judgingService.setSpecialRoleJudges(eventId, role, dto.judgeIds);
+    return this.judgingService.setSpecialRoleJudges(
+      eventId,
+      role,
+      dto.judgeIds,
+    );
   }
 }

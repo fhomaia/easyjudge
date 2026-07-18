@@ -25,7 +25,9 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
 export class ScoringCriteriaController {
-  constructor(private readonly scoringCriteriaService: ScoringCriteriaService) {}
+  constructor(
+    private readonly scoringCriteriaService: ScoringCriteriaService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -38,8 +40,14 @@ export class ScoringCriteriaController {
   }
 
   @Get()
-  findAll(@Param('templateId') templateId: string, @Req() req: AuthenticatedRequest) {
-    return this.scoringCriteriaService.findAllForTemplate(templateId, req.user.userId);
+  findAll(
+    @Param('templateId') templateId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.scoringCriteriaService.findAllForTemplate(
+      templateId,
+      req.user.userId,
+    );
   }
 
   @Patch(':id')
@@ -49,7 +57,12 @@ export class ScoringCriteriaController {
     @Body() dto: UpdateScoringCriterionDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.scoringCriteriaService.update(templateId, id, dto, req.user.userId);
+    return this.scoringCriteriaService.update(
+      templateId,
+      id,
+      dto,
+      req.user.userId,
+    );
   }
 
   @Delete(':id')
@@ -69,6 +82,11 @@ export class ScoringCriteriaController {
     @Body() dto: MoveScoringCriterionDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.scoringCriteriaService.move(templateId, id, dto, req.user.userId);
+    return this.scoringCriteriaService.move(
+      templateId,
+      id,
+      dto,
+      req.user.userId,
+    );
   }
 }

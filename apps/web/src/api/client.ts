@@ -150,7 +150,10 @@ export interface Event {
 export interface CreateEventPayload {
   name: string;
   startDate: string;
-  competitionDays: number;
+  // Não é mais coletado no formulário de criação — o número de dias
+  // do evento agora é controlado na tela de Cronograma ("+ Dia").
+  // Backend aplica default 1 quando omitido.
+  competitionDays?: number;
   location: string;
 }
 
@@ -652,5 +655,194 @@ export const regulationApi = {
   deleteDocument: (eventId: string, documentId: string) =>
     authRequest<void>(`/events/${eventId}/regulation/documents/${documentId}`, {
       method: "DELETE",
+    }),
+};
+
+export type ScheduleEntryType = "presentation" | "warmup" | "break" | "ceremony" | "award";
+export type ScheduleDistributionStrategy = "balanced" | "sequential";
+
+export interface ScheduleEntry {
+  id: string;
+  resourceId: string;
+  type: ScheduleEntryType;
+  order: number;
+  durationMinutes: number;
+  teamId: string | null;
+  teamName: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  linkedEntryId: string | null;
+  label: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduleResource {
+  id: string;
+  scheduleDayId: string;
+  name: string;
+  color: string | null;
+  supportsPresentations: boolean;
+  order: number;
+  pairedResourceId: string | null;
+  entries: ScheduleEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduleDay {
+  id: string;
+  eventId: string;
+  dayIndex: number;
+  date: string;
+  startMinutes: number;
+  endMinutes: number;
+  defaultWarmupMinutes: number;
+  ignoreUnscheduledPresentations: boolean;
+  resources: ScheduleResource[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateScheduleDayPayload {
+  startMinutes?: number;
+  endMinutes?: number;
+  defaultWarmupMinutes?: number;
+  ignoreUnscheduledPresentations?: boolean;
+}
+
+export interface CreateScheduleResourcePayload {
+  name: string;
+  color?: string;
+  supportsPresentations?: boolean;
+  pairedResourceId?: string;
+}
+
+export interface UpdateScheduleResourcePayload {
+  name?: string;
+  color?: string;
+  supportsPresentations?: boolean;
+  pairedResourceId?: string | null;
+}
+
+export interface MoveScheduleResourcePayload {
+  order: number;
+}
+
+export interface UnscheduledPair {
+  teamId: string;
+  teamName: string;
+  categoryId: string;
+  categoryName: string;
+  durationMinutes: number;
+}
+
+export interface CreateScheduleEntryPayload {
+  resourceId: string;
+  type: ScheduleEntryType;
+  order: number;
+  durationMinutes?: number;
+  teamId?: string;
+  categoryId?: string;
+  label?: string;
+}
+
+export interface MoveScheduleEntryPayload {
+  resourceId: string;
+  order: number;
+}
+
+export interface AutoGenerateSchedulePayload {
+  startMinutes: number;
+  lunchStartMinutes: number;
+  lunchDurationMinutes: number;
+  warmupMinutes: number;
+  distribution: ScheduleDistributionStrategy;
+}
+
+export const scheduleApi = {
+  listDays: (eventId: string) => authRequest<ScheduleDay[]>(`/events/${eventId}/schedule/days`),
+
+  addDay: (eventId: string) =>
+    authRequest<ScheduleDay>(`/events/${eventId}/schedule/days`, { method: "POST" }),
+
+  updateDay: (eventId: string, dayId: string, payload: UpdateScheduleDayPayload) =>
+    authRequest<ScheduleDay>(`/events/${eventId}/schedule/days/${dayId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  removeDay: (eventId: string, dayId: string) =>
+    authRequest<void>(`/events/${eventId}/schedule/days/${dayId}`, {
+      method: "DELETE",
+    }),
+
+  getUnscheduled: (eventId: string, dayId: string) =>
+    authRequest<UnscheduledPair[]>(`/events/${eventId}/schedule/days/${dayId}/unscheduled`),
+
+  createResource: (eventId: string, dayId: string, payload: CreateScheduleResourcePayload) =>
+    authRequest<ScheduleResource>(`/events/${eventId}/schedule/days/${dayId}/resources`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateResource: (
+    eventId: string,
+    dayId: string,
+    resourceId: string,
+    payload: UpdateScheduleResourcePayload,
+  ) =>
+    authRequest<ScheduleResource>(
+      `/events/${eventId}/schedule/days/${dayId}/resources/${resourceId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
+  removeResource: (eventId: string, dayId: string, resourceId: string) =>
+    authRequest<void>(`/events/${eventId}/schedule/days/${dayId}/resources/${resourceId}`, {
+      method: "DELETE",
+    }),
+
+  moveResource: (
+    eventId: string,
+    dayId: string,
+    resourceId: string,
+    payload: MoveScheduleResourcePayload,
+  ) =>
+    authRequest<ScheduleResource[]>(
+      `/events/${eventId}/schedule/days/${dayId}/resources/${resourceId}/move`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
+  createEntry: (eventId: string, dayId: string, payload: CreateScheduleEntryPayload) =>
+    authRequest<ScheduleEntry[]>(`/events/${eventId}/schedule/days/${dayId}/entries`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  moveEntry: (
+    eventId: string,
+    dayId: string,
+    entryId: string,
+    payload: MoveScheduleEntryPayload,
+  ) =>
+    authRequest<ScheduleEntry>(
+      `/events/${eventId}/schedule/days/${dayId}/entries/${entryId}/move`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
+  removeEntry: (eventId: string, dayId: string, entryId: string) =>
+    authRequest<void>(`/events/${eventId}/schedule/days/${dayId}/entries/${entryId}`, {
+      method: "DELETE",
+    }),
+
+  autoGenerate: (eventId: string, dayId: string, payload: AutoGenerateSchedulePayload) =>
+    authRequest<ScheduleDay>(`/events/${eventId}/schedule/days/${dayId}/auto-generate`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  replicateToAllDays: (eventId: string, sourceDayId: string) =>
+    authRequest<ScheduleDay[]>(`/events/${eventId}/schedule/days/${sourceDayId}/replicate`, {
+      method: "POST",
     }),
 };

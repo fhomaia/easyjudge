@@ -13,6 +13,7 @@ import { TeamsModule } from './teams/teams.module';
 import { ScoringTemplatesModule } from './scoring-templates/scoring-templates.module';
 import { RegulationsModule } from './regulations/regulations.module';
 import { JudgingModule } from './judging/judging.module';
+import { ScheduleModule } from './schedule/schedule.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { JudgingModule } from './judging/judging.module';
     ScoringTemplatesModule,
     RegulationsModule,
     JudgingModule,
+    ScheduleModule,
   ],
   controllers: [AppController],
   providers: [AppService],

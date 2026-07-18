@@ -130,7 +130,11 @@ export class RegulationsService {
     const validTypes = new Set<string>(Object.values(DeductionType));
     const filtered: Partial<Record<DeductionType, number>> = {};
     for (const [key, value] of Object.entries(values)) {
-      if (validTypes.has(key) && typeof value === 'number' && !Number.isNaN(value)) {
+      if (
+        validTypes.has(key) &&
+        typeof value === 'number' &&
+        !Number.isNaN(value)
+      ) {
         filtered[key as DeductionType] = value;
       }
     }
@@ -149,8 +153,9 @@ export class RegulationsService {
         type,
         defaultValue: IASF_DEFAULT_DEDUCTIONS[type],
         value:
-          mode === RegulationDeductionMode.CUSTOM && overrides[type] !== undefined
-            ? overrides[type]!
+          mode === RegulationDeductionMode.CUSTOM &&
+          overrides[type] !== undefined
+            ? overrides[type]
             : IASF_DEFAULT_DEDUCTIONS[type],
       }),
     );

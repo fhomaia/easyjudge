@@ -2,7 +2,7 @@
 // templates de pontuação, equipes, ...). A cor é determinística (hash
 // do id/nome) — o mesmo item sempre cai na mesma cor, só "parece
 // aleatória" entre itens diferentes; não muda a cada re-render/reload.
-const VIBRANT_COLORS = [
+export const VIBRANT_COLORS = [
   "#ef4444", // red
   "#f97316", // orange
   "#f59e0b", // amber

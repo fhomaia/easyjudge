@@ -24,11 +24,16 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
 export class ScoringTemplatesController {
-  constructor(private readonly scoringTemplatesService: ScoringTemplatesService) {}
+  constructor(
+    private readonly scoringTemplatesService: ScoringTemplatesService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateScoringTemplateDto, @Req() req: AuthenticatedRequest) {
+  create(
+    @Body() dto: CreateScoringTemplateDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.scoringTemplatesService.create(dto, req.user.userId);
   }
 

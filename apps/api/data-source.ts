@@ -16,6 +16,9 @@ import { Regulation } from './src/regulations/entities/regulation.entity';
 import { RegulationDocument } from './src/regulations/entities/regulation-document.entity';
 import { CriterionJudgeAssignment } from './src/judging/entities/criterion-judge-assignment.entity';
 import { SpecialRoleAssignment } from './src/judging/entities/special-role-assignment.entity';
+import { ScheduleDay } from './src/schedule/entities/schedule-day.entity';
+import { ScheduleResource } from './src/schedule/entities/schedule-resource.entity';
+import { ScheduleEntry } from './src/schedule/entities/schedule-entry.entity';
 
 config(); // carrega o .env
 
@@ -39,6 +42,9 @@ export default new DataSource({
     RegulationDocument,
     CriterionJudgeAssignment,
     SpecialRoleAssignment,
+    ScheduleDay,
+    ScheduleResource,
+    ScheduleEntry,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,
