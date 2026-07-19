@@ -27,6 +27,7 @@ import {
 import { assignmentKey, getDescendantLeafIds, parseAssignmentKey } from "@/lib/judgingAssignments";
 import { SPECIAL_JUDGE_ROLES } from "@/lib/specialJudgeRoles";
 import { fetchTemplateJudgingStats, isTemplateJudgingComplete } from "@/lib/templateJudgingProgress";
+import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import {
   categoriesApi,
   judgesApi,
@@ -44,6 +45,7 @@ import { useAuthStore } from "@/store/auth";
 
 export function JudgingPage() {
   const { id } = useParams<{ id: string }>();
+  useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
@@ -54,6 +56,12 @@ export function JudgingPage() {
   const [criteria, setCriteria] = useState<ScoringCriterion[]>([]);
   const [judges, setJudges] = useState<Judge[]>([]);
   const [assignments, setAssignments] = useState<CriterionAssignmentsState | null>(null);
+  // O template a que `assignments` pertence de fato — `getAssignments`
+  // não devolve o templateId, e sem isso o efeito de sincronia
+  // "ao vivo" (ver mais abaixo) não tem como saber se `assignments`
+  // já corresponde ao `selectedTemplateId` atual ou ainda é do
+  // template anterior (fetch em andamento).
+  const [assignmentsTemplateId, setAssignmentsTemplateId] = useState<string | null>(null);
   const [specialRoles, setSpecialRoles] = useState<
     Array<{ role: SpecialJudgeRole; resourceId: string; judgeIds: string[] }>
   >([]);
@@ -145,9 +153,13 @@ export function JudgingPage() {
 
   function refetchAssignments() {
     if (!id || !selectedTemplateId) return;
+    const templateId = selectedTemplateId;
     judgingApi
-      .getAssignments(id, selectedTemplateId)
-      .then(setAssignments)
+      .getAssignments(id, templateId)
+      .then((data) => {
+        setAssignments(data);
+        setAssignmentsTemplateId(templateId);
+      })
       .catch(() => setError("Não foi possível carregar as atribuições."));
   }
 
@@ -284,15 +296,25 @@ export function JudgingPage() {
 
   // Mantém o progresso do template selecionado sincronizado com o
   // estado ao vivo (otimista) da tela, sem esperar o próximo fetch em
-  // segundo plano de todos os templates.
+  // segundo plano de todos os templates. Crítico: `criteria` e
+  // `assignments` só terminam de carregar de forma assíncrona depois
+  // que `selectedTemplateId` muda — sem os dois guards abaixo, esse
+  // efeito rodava com os valores (vazios) do template anterior/inicial
+  // no meio do caminho e sobrescrevia as estatísticas corretas (já
+  // buscadas em segundo plano) com total=0, derrubando o template da
+  // lista de opções (`templateOptions`) e travando `selectedTemplateId`
+  // em `null` pra sempre — bug real reportado pelo usuário (Group
+  // Stunt "sumia" do painel mesmo com apresentações agendadas).
   useEffect(() => {
     if (!selectedTemplateId) return;
+    if (criteria.length === 0 || criteria[0].templateId !== selectedTemplateId) return;
+    if (assignmentsTemplateId !== selectedTemplateId) return;
     setTemplateStats((prev) => {
       const next = new Map(prev);
       next.set(selectedTemplateId, { total: allDaysTotalSlots, assigned: allDaysAssignedSlots });
       return next;
     });
-  }, [selectedTemplateId, allDaysTotalSlots, allDaysAssignedSlots]);
+  }, [selectedTemplateId, allDaysTotalSlots, allDaysAssignedSlots, criteria, assignmentsTemplateId]);
 
   const completedTemplatesCount = templateOptions.filter((option) =>
     isTemplateJudgingComplete(templateStats.get(option.templateId)),

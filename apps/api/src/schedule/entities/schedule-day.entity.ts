@@ -54,7 +54,11 @@ export class ScheduleDay {
   // Não afeta o dia em si (o painel "Equipes não agendadas" continua
   // mostrando as pendências normalmente, é só a contagem de conclusão
   // do setup que ignora).
-  @Column({ name: 'ignore_unscheduled_presentations', type: 'boolean', default: false })
+  @Column({
+    name: 'ignore_unscheduled_presentations',
+    type: 'boolean',
+    default: false,
+  })
   ignoreUnscheduledPresentations: boolean;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

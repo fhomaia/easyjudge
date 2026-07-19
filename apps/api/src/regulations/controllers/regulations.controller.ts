@@ -22,10 +22,14 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { documentUploadOptions } from '../../common/config/document-upload.config';
+import { EventMemberGuard } from '../../events/guards/event-member.guard';
+import { EventRoles } from '../../events/decorators/event-roles.decorator';
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 
 @Controller('events/:eventId/regulation')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
+@EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR)
 export class RegulationsController {
   constructor(private readonly regulationsService: RegulationsService) {}
 

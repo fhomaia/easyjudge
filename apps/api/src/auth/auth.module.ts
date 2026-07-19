@@ -12,12 +12,14 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { ProgramsModule } from '../programs/programs.module';
 import { JudgesModule } from '../judges/judges.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
   imports: [
     UsersModule,
     ProgramsModule,
     JudgesModule,
+    EventsModule,
     TypeOrmModule.forFeature([EmailVerification]),
     PassportModule,
     JwtModule.registerAsync({

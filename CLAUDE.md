@@ -24,6 +24,15 @@ qualquer evento" — isso era o comportamento antigo, revisado a pedido
 do usuário). Ver seção "Eventos: versionamento e membership" mais
 abaixo pra detalhes.
 
+**Atualização (2026-07-19): `EventMember` virou uma linha por pessoa,
+não por papel.** `role` (um só) virou `roles: EventMemberRole[]`
+(array) — dá pra acumular mais de um papel no mesmo evento (ex.
+ADMIN+ASSESSOR). `PARTICIPANT` foi renomeado pra `ASSESSOR`. `userId`
+agora é nullable: dá pra adicionar alguém ao roster por nome+email
+antes de ela ter conta na plataforma ("convite pendente"), reclamado
+automaticamente no cadastro. Ver seção "Gerenciamento de acessos do
+evento (`event-staff`)" mais abaixo pra detalhes.
+
 Uso inicial: **somente desktop**. Mobile não é prioridade na POC.
 
 ## Requisitos não-negociáveis
@@ -83,8 +92,8 @@ migrarmos para produção — ainda não implementado.
 ## Estrutura do repositório
 
 Cada domínio (`auth`, `users`, `events`, `categories`, `programs`,
-`teams`, `judges`, `scoring-templates`, `regulations`, ...) é uma pasta
-autocontida em
+`teams`, `judges`, `judging`, `schedule`, `scoring-templates`,
+`regulations`, ...) é uma pasta autocontida em
 `apps/api/src/`, com `controllers/` e `services/` como subpastas
 próprias dentro dele (não pastas globais compartilhadas entre
 domínios). `dto/`, `entities/`, `*.module.ts` ficam na raiz de cada
@@ -105,9 +114,12 @@ easyjudge/
 │       │   │   ├── services/
 │       │   │   ├── entities/
 │       │   │   └── users.module.ts
-│       │   ├── events/         # Event (jornada "criar evento", parte 1)
-│       │   │   ├── controllers/ services/ dto/ entities/
-│       │   │   └── events.module.ts   # exporta EventsService (usado por categories/teams)
+│       │   ├── events/         # Event (jornada "criar evento", parte 1) +
+│       │   │   │                # EventMember (roster/acesso, ver event-staff)
+│       │   │   ├── controllers/ services/ dto/ entities/ enums/
+│       │   │   ├── guards/     # EventMemberGuard (checa EventMember.roles pro :eventId da rota)
+│       │   │   ├── decorators/ # @EventRoles (espelha @Roles, mas por evento)
+│       │   │   └── events.module.ts   # exporta EventsService (usado por vários domínios filhos)
 │       │   ├── categories/     # Category, aninhada em /events/:eventId/categories
 │       │   │   ├── controllers/ services/ dto/ entities/
 │       │   │   └── categories.module.ts
@@ -118,13 +130,21 @@ easyjudge/
 │       │   │   └── programs.module.ts  # exporta ProgramsService (usado por teams/auth)
 │       │   ├── teams/          # Team, aninhada em
 │       │   │   │                # /events/:eventId/programs/:programId/teams
+│       │   │   │                # (+ EventTeamsController: todas as equipes do evento)
 │       │   │   ├── controllers/ services/ dto/ entities/
 │       │   │   └── teams.module.ts
-│       │   ├── judges/         # JudgeParticipation + JudgeProfile — mesmo padrão
-│       │   │   │                # de programs/ aplicado a jurados (só backend, sem
-│       │   │   │                # tela ainda)
+│       │   ├── judges/         # JudgeParticipation + JudgeProfile — catálogo/perfil
+│       │   │   │                # canônico de jurados (quem é jurado no evento)
 │       │   │   ├── controllers/ services/ dto/ entities/
 │       │   │   └── judges.module.ts
+│       │   ├── judging/        # CriterionJudgeAssignment + SpecialRoleAssignment —
+│       │   │   │                # escala de arbitragem (quem julga o quê, em qual pista)
+│       │   │   ├── controllers/ services/ dto/ entities/ enums/
+│       │   │   └── judging.module.ts
+│       │   ├── schedule/       # ScheduleDay + ScheduleResource + ScheduleEntry —
+│       │   │   │                # cronograma/timeline de apresentações do evento
+│       │   │   ├── controllers/ services/ dto/ entities/ enums/
+│       │   │   └── schedule.module.ts
 │       │   ├── scoring-templates/  # ScoringTemplate + ScoringCriterion (árvore),
 │       │   │   │                    # biblioteca pessoal do usuário, não presa a evento
 │       │   │   ├── controllers/ services/ dto/ entities/ enums/
@@ -142,12 +162,15 @@ easyjudge/
 │       ├── src/
 │       │   ├── api/            # client.ts — fetch wrapper para a API (via proxy /api)
 │       │   ├── store/          # auth.ts — Zustand + persist (JWT no localStorage)
-│       │   ├── pages/          # LoginPage, HomePage, EventSetupPage, CategoriesPage,
-│       │   │   │                # RegulationPage, ScoringTemplatesListPage/BuilderPage
+│       │   ├── pages/          # LoginPage, HomePage, EventSetupPage, EventStaffPage,
+│       │   │   │                # CategoriesPage, ProgramsPage, RegulationPage,
+│       │   │   │                # JudgingPage, SchedulePage,
+│       │   │   │                # ScoringTemplatesListPage/BuilderPage
 │       │   ├── components/     # RegisterDialog, ProtectedRoute, GuestRoute, FormError,
 │       │   │   │                # BrandBackdrop (raio riscando a tela -> clarão -> split azul/amarelo)
 │       │   │   └── ui/         # componentes shadcn/ui (gerados via CLI, editáveis)
-│       │   ├── lib/utils.ts    # helper `cn` (shadcn)
+│       │   ├── lib/utils.ts    # helper `cn` (shadcn), scheduleTime.ts, scheduleConflicts.ts,
+│       │   │   │                # dndProjection.ts, useEventSetupGuard.ts, eventMemberRoles.ts
 │       │   └── App.tsx         # rotas
 │       ├── public/
 │       │   ├── logo.png        # logo (fornecida pelo usuário, ver "Status atual")
@@ -167,9 +190,13 @@ que cada um vê/faz depois de logado (controlado por `role` + guards).
 Ordem de construção definida:
 1. **Auth + User** — ✅ feito (ver "Status atual" abaixo)
 2. **Jornada do jurado** — login → ver evento/rotinas atribuídas → atribuir
-   notas em tempo real (ainda não iniciado)
+   notas em tempo real (a *escala* de arbitragem — quem julga o quê, em
+   qual pista — já existe, ver módulo `judging`; falta a tela do jurado
+   pra efetivamente lançar notas, que ainda não existe)
 3. **Jornada do produtor** — criar evento, cadastrar jurados/rotinas, painel
-   de acompanhamento em tempo real, apuração de resultado (ainda não iniciado)
+   de acompanhamento em tempo real, apuração de resultado (o setup do
+   evento, catálogo de jurados/programas e cronograma já existem; falta o
+   painel de acompanhamento em tempo real e a apuração de resultado)
 4. **Jornada do atleta** — ver própria nota + resultado geral das categorias
    em que competiu (ainda não iniciado)
 
@@ -1061,10 +1088,10 @@ número, caractere especial) + confirmar senha → conta criada e já loga
   (`apps/api/src/judges/`), sem abstração compartilhada com
   `programs/` (mesma convenção do projeto — cada domínio é
   autocontido; duplicar a mesma estrutura 1x não justificou extrair
-  uma base genérica). **Ainda não existe tela** — o placeholder
-  "Painel de jurados"/"Disponível em breve" em `eventSetupSteps.ts`
-  continua como está; a tela real (+ "o que cada jurado julga em cada
-  sistema de pontuação") fica pra quando for pedida.
+  uma base genérica). Na época desta seção (2026-07-15) ainda não
+  existia tela — a tela de escala de arbitragem ("Painel de jurados")
+  foi construída depois, junto do módulo `judging`, ver seção "Módulo
+  `judging`" mais abaixo.
 
 - **Setup do evento ganhou 2 etapas placeholder + tag "recomendado"
   dinâmica (2026-07-14).** `EventSetupPage` tinha 3 etapas
@@ -1081,7 +1108,16 @@ número, caractere especial) + confirmar senha → conta criada e já loga
   pra crescer sem mudança de lógica, só `steps.length`.
   **Tag "RECOMENDADO"**: antes fixa em `index === 0`; agora acompanha
   `firstIncomplete` (primeira etapa não concluída), calculado uma vez
-  e reusado tanto pro banner quanto pro card.
+  e reusado tanto pro banner quanto pro card. **Atualização
+  (2026-07-18):** os dois placeholders viraram telas reais —
+  `judgePanel` aponta pra `/events/:id/judging` (`JudgingPage`, ver
+  módulo `judging` abaixo) e `schedule` pra `/events/:id/schedule`
+  (`SchedulePage`, ver módulo `schedule` abaixo). Na lista de
+  `buildSetupSteps` (`apps/web/src/lib/eventSetupSteps.ts`), a ordem
+  ficou `regulation` → `categories` → `programs` → `schedule` →
+  `judgePanel` (cronograma antes do painel de jurados, pedido
+  explícito do usuário — a ordem do array é o que define tanto o
+  número do card quanto a etapa "recomendada").
 - **Terminologia "template" → "sistema de pontuação" (2026-07-14):**
   a pedido do usuário, referências a "template(s) de pontuação" na UI
   viraram "sistema(s) de pontuação" (heading da seção 3 do
@@ -1105,36 +1141,205 @@ número, caractere especial) + confirmar senha → conta criada e já loga
   sidebar e usa `min-h-svh` de propósito pra centralizar o card com
   espaço pra crescer).
 
+- **Módulo `schedule` — cronograma/timeline de apresentações
+  (2026-07-18).** Etapa "Cronograma" do setup do evento, virou tela de
+  verdade. Modela o cronograma **operacional** do evento (quando e
+  onde cada equipe se apresenta/aquece, e onde entram intervalos,
+  cerimônias e premiações) — não é a escala de jurados (isso é
+  `judging`, ver abaixo), mas `judging` referencia os recursos daqui.
+  - **Entidades**: `ScheduleDay` (um por `eventId`+`dayIndex`, nasce
+    via get-or-create — `date`, janela `startMinutes`/`endMinutes`,
+    `defaultWarmupMinutes`, `ignoreUnscheduledPresentations`) →
+    `ScheduleResource` (linha nomeada livremente pelo organizador
+    dentro de um dia, ex. "Tapete Azul" — `color`,
+    `supportsPresentations` controla se aceita apresentação,
+    `pairedResourceId` liga um recurso de aquecimento à pista que ele
+    atende) → `ScheduleEntry` (o card da timeline —
+    `type`: `presentation`/`warmup`/`break`/`ceremony`/`award`,
+    `order`, `durationMinutes`, `teamId`/`categoryId` quando aplicável,
+    `linkedEntryId` agrupa apresentação+aquecimento+intervalos
+    automáticos de espera gerados junto).
+  - **Horário nunca é persistido** — sempre `order` × `durationMinutes`
+    calculado no cliente (`lib/scheduleTime.ts`). Criar/mover/remover
+    uma entry dispara reconciliação (`reconcileWarmupDelays`/
+    `reconcileMatGaps`, loops de convergência com limite de
+    passes — não é ponto fixo garantido em todos os casos extremos,
+    ex. 3+ apresentações intercaladas da mesma equipe).
+  - **Endpoints** (`/events/:eventId/schedule`): CRUD de
+    `days`/`resources`/`entries` (+ `move` pra reordenar), `GET
+    days/:dayId/unscheduled` (pares equipe/categoria pendentes
+    naquele dia — "já agendado" é validado **por dia**, não por
+    evento inteiro, já que cada equipe precisa se apresentar em cada
+    dia do evento), `POST days/:dayId/auto-generate` (gera cronograma
+    automático, **destrutivo**: apaga todas as entries do dia antes)
+    e `POST days/:dayId/replicate` (copia o dia inteiro pros demais
+    dias, **destrutivo no destino**).
+  - **Frontend (`SchedulePage`)**: timeline drag-and-drop (`@dnd-kit`,
+    visão linha do tempo ou tabela) — arrastar equipe não agendada pra
+    um recurso cria apresentação+aquecimento automaticamente; arrastar
+    componentes da biblioteca (Almoço, Abertura, Premiação,
+    Contestação, custom); editar/criar recursos; configurar
+    horário/tempo de aquecimento padrão do dia; "repetir em todos os
+    dias"; gerar automaticamente; detecção visual de conflitos
+    (`lib/scheduleConflicts.ts`) e aviso de estouro de horário do dia.
+  - Migrations em sequência mostram evolução em fase de POC:
+    `CreateSchedule` → `GenericScheduleResources` →
+    `AddColorToScheduleResources` → `FlipMatWarmupPairingDirection`
+    (inverteu a direção do vínculo aquecimento→pista) →
+    `AddIgnoreUnscheduledPresentationsToScheduleDays`. `dayIndex`
+    nunca é renumerado ao excluir um dia (buracos na sequência são
+    inofensivos).
+
+- **Módulo `judging` — escala de arbitragem, complementar a `judges`
+  (2026-07-15, atualizado 2026-07-18).** `judges/`
+  (`JudgeParticipation`/`JudgeProfile`) é o **catálogo de pessoas**
+  (quem é jurado neste evento); `judging/` é a **escala** — quem julga
+  o quê, em qual pista. Referencia `JudgeParticipation` existentes, não
+  cria jurados. Não guarda nota nenhuma (não existe módulo de
+  lançamento de notas ainda) — só monta o painel de arbitragem.
+  - **Entidades**: `CriterionJudgeAssignment` (liga um
+    `ScoringCriterion` **folha**, tipo `score_item`, +
+    `ScheduleResource` + `JudgeParticipation`; único por
+    critério+recurso+jurado) e `SpecialRoleAssignment` (liga `eventId`
+    + `role` — enum `SpecialJudgeRole`: `legality_judge`/`head_judge`
+    — + `ScheduleResource` + `JudgeParticipation`; guarda `eventId`
+    porque função especial não pertence a um template de pontuação).
+    Ambas assumem que um jurado não pode estar em duas pistas ao mesmo
+    tempo, por isso a atribuição é sempre por `ScheduleResource` (o
+    dia fica implícito via recurso). A migration
+    `AddResourceToCriterionJudgeAssignments`/
+    `AddResourceToSpecialRoleAssignments` (2026-07-18) trocou o
+    vínculo antigo por `schedule_day_id` pra `resource_id` — **fez
+    `DELETE FROM` nas tabelas antes**, aceitável só por ainda ser fase
+    de POC sem dado real em produção.
+  - **Endpoints** (`/events/:eventId/judging`): `GET /` (`?templateId=`,
+    retorna dias/recursos relevantes + atribuições da árvore de
+    critérios), `PUT
+    .../criteria/:criterionId/resources/:resourceId/judges` (substitui
+    o conjunto de jurados de uma folha), `POST .../bulk-assign`
+    (atribui um jurado a todas as folhas descendentes de um grupo,
+    estratégia `unassigned_only`/`replace`/`add`), `GET
+    resources/:resourceId/special-roles` / `PUT
+    resources/:resourceId/special-roles/:role`.
+  - **Frontend (`JudgingPage`, "Painel de jurados")**: escolhe sistema
+    de pontuação (só os já usados por categoria com apresentação
+    agendada) e dia; mostra progresso geral e do dia; drag-and-drop
+    (`@dnd-kit`) de um jurado do painel lateral pra uma célula
+    critério×pista (soltar num grupo abre diálogo de conflito com
+    estratégia de merge); sheet de checkboxes ao clicar numa célula;
+    card de "Funções especiais" (tabela função×recurso); cria jurado
+    inline via `CreateJudgeDialog`.
+  - Um template só é "usável" no painel se alguma `Category` do evento
+    o referencia **e** tem apresentação agendada no cronograma —
+    acopla `judging` a `schedule` além de `scoring-templates`.
+
+- **Gerenciamento de acessos do evento (`event-staff`, 2026-07-19).**
+  Refatoração do `EventMember` (ver "Atualização 2026-07-19" no topo
+  deste arquivo) + tela nova pra gerenciar quem tem acesso a um evento
+  e com qual papel — antes só quem criava o evento tinha
+  membership/acesso; agora o admin pode convidar mais gente.
+  - **`EventMember` por pessoa, não por papel**: `roles:
+    EventMemberRole[]` (array — dá pra acumular ex. ADMIN+ASSESSOR);
+    `userId` nullable (convite por nome+email antes de existir conta —
+    mesmo padrão de `JudgeParticipation`/`ProgramParticipation`);
+    `firstName`/`lastName`/`email` viram o snapshot de exibição
+    enquanto pendente. `PARTICIPANT` renomeado pra **ASSESSOR** (papel
+    de quem ajuda a configurar o evento — edita, mas não mexe em
+    acessos/pessoas).
+  - **Auto-claim por email**: `EventsService.linkUnclaimedMembersByEmail`
+    é chamado em `AuthService.setPassword` — ao completar o cadastro,
+    reclama incondicionalmente qualquer `EventMember` pendente
+    (`userId` null) com aquele email. Roda **antes** de
+    `JudgesService.linkUnclaimedJudgesByEmail` de propósito: este
+    último busca a linha do roster pelo `userId` já vinculado — se a
+    ordem fosse invertida, criaria linha duplicada. Também há
+    sincronia automática nos dois sentidos: criar/remover uma
+    `JudgeParticipation` faz `upsertMemberRole`/`removeMemberRole` do
+    papel JUDGE no roster do evento (sem tela própria pra isso).
+  - **`EventMemberGuard` + `@EventRoles`** (`events/guards/`,
+    `events/decorators/`): espelham `RolesGuard`/`@Roles`, mas checam
+    `EventMember.roles` (papel *dentro do evento*, via `:eventId` da
+    rota) em vez do papel global da conta. Substituiu autorização que
+    antes ficava espalhada nos services (ex.: `judging.service.ts`
+    recebia `userId` e checava ownership do template) — agora os
+    controllers de `categories`/`judges`/`judging`/`programs`/
+    `regulations`/`schedule`/`teams` usam
+    `@UseGuards(JwtAuthGuard, EventMemberGuard)` + `@EventRoles(...)`,
+    e os services correspondentes perderam os parâmetros `userId` (há
+    métodos "unchecked" novos, ex. `findAllForTemplateUnchecked`).
+    Padrão geral: ADMIN+ASSESSOR escrevem, JUDGE só lê onde aplicável
+    (`JudgesController` é exceção: ASSESSOR tem CRUD completo do
+    catálogo de jurados mesmo sem poder mexer no roster de acessos).
+  - **Endpoints**: `GET/POST /events/:eventId/staff` (listar roster /
+    adicionar pessoa com `roles[]`), `PATCH
+    /events/:eventId/staff/:memberId` (trocar papéis), `DELETE
+    /events/:eventId/staff/:memberId`. Mais `GET /events/:eventId/teams`
+    (`EventTeamsController`, novo) — todas as equipes do evento
+    (qualquer programa), usado pela aba "Visão geral das categorias"
+    nova em `ProgramsPage` (`CategoriesOverviewPanel`).
+  - **Frontend (`EventStaffPage`, `/events/:id/access`)**: lista o
+    roster com badges de papéis, indica dono do evento e convite
+    pendente; admin pode adicionar (`CreateEventStaffMemberDialog`),
+    editar papéis (`EditEventStaffRolesDialog`) e remover — com
+    proteção de que só o próprio dono pode alterar/remover a si mesmo.
+    `useEventSetupGuard` (novo, `lib/`) centraliza o redirect de quem
+    não é admin/assessor pra Home nas páginas de setup — faz um `GET
+    /events/:id` próprio, redundante com o que cada página já busca no
+    `useEffect`, ineficiência aceita conscientemente em troca de um
+    guard único.
+  - **Fluxo de publicação ganhou celebração**: `PublishEventCard`
+    (card novo no fim do `EventSetupPage`) dispara `POST
+    /events/:id/publish` de verdade só quando todas as etapas do setup
+    estão completas; `PublishCelebrationOverlay` reaproveita a
+    animação do `BrandBackdrop` (que ganhou props `className`/
+    `onDone` pra isso) como overlay por cima da página, revelando
+    "Prontos para o show!" — antes não havia nem card dedicado nem
+    celebração pra publicar.
+  - **Bug de republicação corrigido nesta rodada** (embutido no mesmo
+    diff de `events.service.ts`, não é sobre staff): `publishEvent`
+    agora "adota" `Category`/`ProgramParticipation`/`ScheduleDay`/
+    `Regulation`/`JudgeParticipation`/`SpecialRoleAssignment` pra
+    versão nova publicada — antes, republicar um evento editado fazia
+    ele aparecer com 0 categorias/programas na versão nova.
+  - **Ponta solta**: `JudgesService.create` joga o `dto.name` inteiro
+    pra `firstName` do `EventMember` (via `upsertMemberRole`), com
+    `lastName` null — inconsistente com `CreateEventStaffMemberDto`,
+    que exige nome e sobrenome separados. Vale unificar se isso virar
+    fonte de bug visual no roster.
+
 ## Próximos passos (não iniciados ainda)
 
-1. Modelar o restante da jornada do jurado: `Routine` (rotinas/equipes
-   competindo em uma categoria), `ScoreEvent` (event sourcing das notas),
-   `Result`
-2. Construir as telas de "Painel de jurados" e "Cronograma" no setup
-   do evento (hoje são placeholders "Disponível em breve" — ver
-   `eventSetupSteps.ts`); cronograma vai consumir
-   `Category.presentationTimeSeconds`. O backend de "Painel de
-   Jurados" já existe (módulo `judges/`, catálogo + dedup + merge
-   automático, ver seção acima) — falta só a tela
-3. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
+1. **Lançamento de notas em si.** Toda a escala de arbitragem já existe
+   (módulo `judging` — quem julga o quê, em qual pista) e o cronograma
+   já existe (módulo `schedule`), mas ninguém ainda lança uma nota de
+   verdade. Falta modelar `ScoreEvent` (event sourcing, append-only,
+   ver "Requisitos não-negociáveis") e `Result` (apuração), e construir
+   a tela do jurado que consome as `CriterionJudgeAssignment` dele pra
+   saber o que julgar, com optimistic UI + buffer local (IndexedDB) +
+   fila de retry.
+2. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
    Supabase Realtime) para o painel do produtor
-4. Transição de status `completed` ("concluir evento") — `created` ⇄
+3. Transição de status `completed` ("concluir evento") — `created` ⇄
    `published` → `started` já existem (`PATCH /events/:id`, `POST
    /events/:id/publish`, `POST /events/:id/start`); falta decidir a
    regra de "concluir" (manual pelo admin? automático quando os
    `competitionDays` terminam?)
-5. Endpoint pra adicionar participante/espectador/jurado como
-   `EventMember` de verdade (hoje só quem cria o evento tem
-   membership/acesso — decisão explícita do usuário de deixar isso
-   fora desta rodada). Vincular uma `ProgramParticipation`/
-   `JudgeParticipation` a um usuário (`userId`) hoje só afeta exibição
-   de dados, não dá `EventMember`/acesso ao evento — são conceitos
-   separados
-6. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
+4. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
    é por `id` de versão específica — ver gotcha de versionamento
    acima) e propagar o conceito de `aliasId`/versionamento pra
    `categories`/`teams`, que hoje ainda resolvem o evento pai só pelo
    `id`, sem membership nem versionamento
+5. Cobertura de testes automatizados: nenhum dos services/guards novos
+   (`schedule`, `judging`, `event-staff`, `EventMemberGuard`) tem
+   `.spec.ts` ainda — todo o backend segue validado só manualmente
+   (curl/navegador), o que já escalou mal o suficiente pra virar risco
+   real com esse volume de domínios interdependentes
+6. Jornada do atleta/espectador (consulta de nota e resultado) — o
+   papel `SPECTATOR` já existe no `EventMemberRole` e `JudgingController`/
+   `EventTeamsController` já liberam leitura pra `JUDGE`, mas não há
+   nenhuma tela pra esses papéis ainda; todas as páginas de setup
+   redirecionam quem não é admin/assessor pra Home
+   (`useEventSetupGuard`)
 
 ## Gotchas / decisões técnicas já resolvidas (não repetir o troubleshooting)
 

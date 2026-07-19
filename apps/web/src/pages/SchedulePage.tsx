@@ -32,6 +32,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ScheduleOverflowDialog } from "@/components/ScheduleOverflowDialog";
 import { findScheduleConflicts } from "@/lib/scheduleConflicts";
 import { computeResourceTimes } from "@/lib/scheduleTime";
+import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import {
   scheduleApi,
   usersApi,
@@ -47,6 +48,7 @@ import { useAuthStore } from "@/store/auth";
 
 export function SchedulePage() {
   const { id } = useParams<{ id: string }>();
+  useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 

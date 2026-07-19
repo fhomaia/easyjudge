@@ -37,6 +37,23 @@ export class TeamsService {
     });
   }
 
+  // Todas as equipes do evento, de qualquer programa — usado pela aba
+  // "Visão geral das categorias" da tela de Programas e equipes (conta
+  // quantas equipes, de quaisquer programas, estão inscritas em cada
+  // categoria). `program` vem só com id/name (select parcial): a
+  // listagem só precisa identificar de qual programa é cada equipe,
+  // não expor email/cidade/logo de novo aqui.
+  async findAllForEvent(eventId: string): Promise<Team[]> {
+    return this.teamsRepo
+      .createQueryBuilder('team')
+      .innerJoin('team.program', 'program')
+      .addSelect(['program.id', 'program.name'])
+      .leftJoinAndSelect('team.categories', 'categories')
+      .where('program.eventId = :eventId', { eventId })
+      .orderBy('team.createdAt', 'ASC')
+      .getMany();
+  }
+
   async update(
     eventId: string,
     programId: string,

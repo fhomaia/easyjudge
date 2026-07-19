@@ -174,6 +174,20 @@ export class ScoringTemplatesService {
     return template;
   }
 
+  // Só confere que o template existe, SEM checar dono — usado por
+  // JudgingService (escala de arbitragem), onde a autorização de quem
+  // pode ver/mexer já é garantida pelo EventMemberGuard (papel no
+  // evento) + a checagem de "o template está em uso por uma categoria
+  // deste evento" (ver JudgingService.assertTemplateUsableForEvent).
+  // Ownership por createdById só faz sentido pra quem está EDITANDO o
+  // template em si (o construtor, /scoring-templates/*), não pra quem
+  // só está escalando jurados num evento que usa esse template.
+  async findTemplateOrThrow(id: string): Promise<ScoringTemplate> {
+    const template = await this.templatesRepo.findOneBy({ id });
+    if (!template) throw new NotFoundException('Template não encontrado');
+    return template;
+  }
+
   async getDistributedScore(templateId: string): Promise<number> {
     const result = await this.criteriaRepo
       .createQueryBuilder('criterion')

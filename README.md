@@ -110,26 +110,41 @@ a API (configurado em `apps/web/vite.config.ts`).
   automático quando o programa cria conta na plataforma. `Team` é um
   domínio próprio aninhado (equipes de um programa, ligadas a
   categorias)
-- **Painel de jurados (base no backend)**: mesmo padrão de
-  catálogo/perfil canônico/dedup dos programas aplicado a jurados
-  (`judges`) — ainda sem tela própria, só a API
+- **Cronograma** (`schedule`): timeline de apresentações do evento por
+  dia/pista, com drag-and-drop, geração automática, detecção de
+  conflitos e cálculo de horário (nunca persistido, sempre derivado da
+  ordem + duração de cada card)
+- **Painel de jurados** (`judges` + `judging`): catálogo de jurados do
+  evento (perfil canônico, dedup, merge automático ao criar conta —
+  mesmo padrão de programas) + escala de arbitragem (quem julga qual
+  critério, em qual pista do cronograma, com drag-and-drop e
+  atribuição em lote) + funções especiais (Jurado de Legalidade, Head
+  Judge)
+- **Gerenciamento de acessos do evento**: o admin pode convidar mais
+  gente pro evento com papéis específicos (admin/jurado/assessor/
+  espectador, acumuláveis) — inclusive por nome+email antes da pessoa
+  ter conta na plataforma, vinculado automaticamente quando ela se
+  cadastra
+- **Publicar evento**: fluxo dedicado (card no fim do setup + animação
+  de celebração) que só libera quando todas as etapas do checklist
+  estão completas
 
 ### 🚧 Em andamento / próximos passos
 
-1. Modelar `Routine`, `ScoreEvent` (event sourcing das notas) e `Result`
-2. Construir as telas de "Painel de jurados" e "Cronograma" (hoje
-   placeholders no checklist de setup do evento)
-3. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
+1. Lançamento de notas em si: modelar `ScoreEvent` (event sourcing) e
+   `Result`, e construir a tela do jurado (a escala de arbitragem e o
+   cronograma já existem, mas ninguém lança nota de verdade ainda)
+2. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
    Supabase Realtime) para o painel do produtor
-4. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje é
+3. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje é
    pelo `id` de uma versão específica)
+4. Cobertura de testes automatizados (hoje é tudo validado manualmente)
 
 ### 📋 Backlog (não iniciado)
 
-- Jornada do jurado em si (ver evento/rotinas atribuídas, atribuir notas
-  em tempo real)
+- Jornada do atleta/espectador (consulta de nota e resultado — o papel
+  já existe no schema, falta a tela)
 - Painel de acompanhamento em tempo real e apuração de resultado
-- Jornada do atleta (consulta de nota e resultado)
 - Verificar domínio próprio no Resend (hoje só entrega email pra
   `easyjudgepro@gmail.com`, a conta usada pra criar a API key)
 - Deploy (Neon/Supabase para Postgres em produção)
@@ -144,8 +159,9 @@ a API (configurado em `apps/web/vite.config.ts`).
 ## Estrutura do repositório
 
 Cada domínio em `apps/api/src/` (`auth`, `users`, `events`, `categories`,
-`teams`, ...) é autocontido, com `controllers/` e `services/` como
-subpastas próprias.
+`programs`, `teams`, `judges`, `judging`, `schedule`,
+`scoring-templates`, `regulations`, ...) é autocontido, com
+`controllers/` e `services/` como subpastas próprias.
 
 ```
 easyjudge/
@@ -154,9 +170,14 @@ easyjudge/
 │       ├── src/
 │       │   ├── auth/           # registro, verificação de email, senha, login, JWT
 │       │   ├── users/          # entidade User e CRUD básico
-│       │   ├── events/         # Event + jornada "criar evento"
+│       │   ├── events/         # Event + jornada "criar evento" + EventMember
+│       │   │                    # (roster/acesso por evento, guards/decorators próprios)
 │       │   ├── categories/     # Category (aninhada em /events/:eventId/categories)
-│       │   ├── teams/          # Team (aninhada em /events/:eventId/teams)
+│       │   ├── programs/       # ProgramParticipation + ProgramProfile (programas/instituições)
+│       │   ├── teams/          # Team (aninhada em /events/:eventId/programs/:id/teams)
+│       │   ├── judges/         # JudgeParticipation + JudgeProfile (catálogo de jurados)
+│       │   ├── judging/        # escala de arbitragem (quem julga o quê, em qual pista)
+│       │   ├── schedule/       # cronograma/timeline de apresentações do evento
 │       │   ├── scoring-templates/  # ScoringTemplate + ScoringCriterion (árvore de pontuação)
 │       │   ├── regulations/    # Regulation + RegulationDocument (1:1 com Event)
 │       │   ├── common/         # enums, validators e config compartilhados
@@ -167,8 +188,9 @@ easyjudge/
 │       └── src/
 │           ├── api/            # client.ts — chamadas à API
 │           ├── store/          # auth.ts — sessão (Zustand + persist)
-│           ├── pages/          # LoginPage, HomePage, EventSetupPage, CategoriesPage,
-│           │                    # RegulationPage, ScoringTemplatesListPage/BuilderPage
+│           ├── pages/          # LoginPage, HomePage, EventSetupPage, EventStaffPage,
+│           │                    # CategoriesPage, ProgramsPage, RegulationPage, JudgingPage,
+│           │                    # SchedulePage, ScoringTemplatesListPage/BuilderPage
 │           └── components/     # RegisterDialog, rotas protegidas, BrandBackdrop, ui/ (shadcn)
 ├── packages/                   # vazio por enquanto (shared-types entra quando fizer sentido)
 ├── docker-compose.yml          # Postgres local

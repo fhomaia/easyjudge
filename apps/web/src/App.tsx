@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "@/pages/LoginPage";
 import { HomePage } from "@/pages/HomePage";
 import { EventSetupPage } from "@/pages/EventSetupPage";
+import { EventStaffPage } from "@/pages/EventStaffPage";
 import { RegulationPage } from "@/pages/RegulationPage";
 import { CategoriesPage } from "@/pages/CategoriesPage";
 import { ProgramsPage } from "@/pages/ProgramsPage";
@@ -21,6 +22,7 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/events/:id/setup" element={<EventSetupPage />} />
+        <Route path="/events/:id/access" element={<EventStaffPage />} />
         <Route path="/events/:id/regulation" element={<RegulationPage />} />
         <Route path="/events/:id/categories" element={<CategoriesPage />} />
         <Route path="/events/:id/programs" element={<ProgramsPage />} />

@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 import { UsersService } from '../../users/services/users.service';
 import { ProgramsService } from '../../programs/services/programs.service';
 import { JudgesService } from '../../judges/services/judges.service';
+import { EventsService } from '../../events/services/events.service';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { MailService } from './mail.service';
 import { EmailVerification } from '../entities/email-verification.entity';
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly programsService: ProgramsService,
     private readonly judgesService: JudgesService,
+    private readonly eventsService: EventsService,
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
   ) {}
@@ -147,6 +149,15 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
     await this.usersService.setPasswordHash(user.id, passwordHash);
+
+    // Reclama qualquer convite pendente no roster de acessos de evento
+    // (EventMember com userId ainda null, ver EventStaffController) com
+    // esse email, incondicional (qualquer role) — precisa rodar ANTES
+    // dos links abaixo: JudgesService.linkUnclaimedJudgesByEmail também
+    // grava no roster (papel "jurado"), e faz isso buscando a linha
+    // pelo userId já vinculado — se essa chamada rodasse antes, criaria
+    // uma linha duplicada em vez de achar a pendente.
+    await this.eventsService.linkUnclaimedMembersByEmail(user.id, user.email);
 
     // Cadastro só é considerado completo aqui (com senha definida) —
     // é o momento certo pra vincular automaticamente qualquer

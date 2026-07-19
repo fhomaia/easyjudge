@@ -23,11 +23,15 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { logoUploadOptions } from '../../common/config/logo-upload.config';
+import { EventMemberGuard } from '../../events/guards/event-member.guard';
+import { EventRoles } from '../../events/decorators/event-roles.decorator';
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
 @Controller('events/:eventId/programs')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
+@EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR)
 export class ProgramsController {
   constructor(private readonly programsService: ProgramsService) {}
 

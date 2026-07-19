@@ -91,7 +91,12 @@ export class ScheduleService {
     eventId: string,
     categoryIds: string[],
   ): Promise<
-    Array<{ id: string; date: string; dayIndex: number; resources: Array<{ id: string; name: string }> }>
+    Array<{
+      id: string;
+      date: string;
+      dayIndex: number;
+      resources: Array<{ id: string; name: string }>;
+    }>
   > {
     if (categoryIds.length === 0) return [];
     const days = await this.daysRepo.find({
@@ -118,10 +123,16 @@ export class ScheduleService {
             categoryId: In(categoryIds),
           },
         });
-        if (scheduledCount > 0) matching.push({ id: resource.id, name: resource.name });
+        if (scheduledCount > 0)
+          matching.push({ id: resource.id, name: resource.name });
       }
       if (matching.length > 0) {
-        result.push({ id: day.id, date: day.date, dayIndex: day.dayIndex, resources: matching });
+        result.push({
+          id: day.id,
+          date: day.date,
+          dayIndex: day.dayIndex,
+          resources: matching,
+        });
       }
     }
     return result;
@@ -1582,10 +1593,7 @@ export class ScheduleService {
   // Público — usado por JudgingService pra validar que um dayId de
   // função especial (ver SpecialRoleAssignment) pertence de fato ao
   // evento antes de gravar a atribuição.
-  async findDayOrThrow(
-    eventId: string,
-    dayId: string,
-  ): Promise<ScheduleDay> {
+  async findDayOrThrow(eventId: string, dayId: string): Promise<ScheduleDay> {
     await this.eventsService.findEventOrThrow(eventId);
     const day = await this.daysRepo.findOneBy({ id: dayId, eventId });
     if (!day) throw new NotFoundException('Dia do cronograma não encontrado');

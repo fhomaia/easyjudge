@@ -17,20 +17,24 @@ import { CategoryTable } from "@/components/CategoryTable";
 import { CategoryGridItem } from "@/components/CategoryGridItem";
 import { CreateCategoryDialog } from "@/components/CreateCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog";
+import { CategoryTeamsSheet } from "@/components/CategoryTeamsSheet";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Pagination } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/formatDate";
 import { listVariants } from "@/lib/motionVariants";
+import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import {
   ApiError,
   categoriesApi,
   eventsApi,
   scoringTemplatesApi,
+  teamsApi,
   usersApi,
   type Category,
   type Event,
   type ScoringTemplate,
+  type TeamWithProgram,
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
@@ -51,6 +55,7 @@ function sortCategories(categories: Category[], sort: CategorySortOption): Categ
 
 export function CategoriesPage() {
   const { id } = useParams<{ id: string }>();
+  useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
@@ -58,9 +63,11 @@ export function CategoriesPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [scoringTemplates, setScoringTemplates] = useState<ScoringTemplate[]>([]);
+  const [teams, setTeams] = useState<TeamWithProgram[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Category | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
+  const [teamsTarget, setTeamsTarget] = useState<Category | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -96,6 +103,10 @@ export function CategoriesPage() {
         setScoringTemplates(templates.filter((t) => t.isComplete)),
       )
       .catch(() => setScoringTemplates([]));
+    teamsApi
+      .listForEvent(id)
+      .then(setTeams)
+      .catch(() => setTeams([]));
   }, [id]);
 
   useEffect(() => {
@@ -113,6 +124,24 @@ export function CategoriesPage() {
     });
     return sortCategories(filtered, sort);
   }, [categories, search, statusFilter, modalityFilter, sort]);
+
+  const teamsByCategory = useMemo(() => {
+    const map = new Map<string, TeamWithProgram[]>();
+    for (const team of teams) {
+      for (const category of team.categories) {
+        map.set(category.id, [...(map.get(category.id) ?? []), team]);
+      }
+    }
+    return map;
+  }, [teams]);
+
+  const teamCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const [categoryId, categoryTeams] of teamsByCategory) {
+      counts.set(categoryId, categoryTeams.length);
+    }
+    return counts;
+  }, [teamsByCategory]);
 
   const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -227,8 +256,10 @@ export function CategoriesPage() {
                   ) : view === "list" ? (
                     <CategoryTable
                       categories={paginatedCategories}
+                      teamCounts={teamCounts}
                       onEdit={setEditTarget}
                       onDelete={setDeleteTarget}
+                      onViewTeams={setTeamsTarget}
                     />
                   ) : (
                     <motion.div
@@ -295,6 +326,12 @@ export function CategoriesPage() {
           scoringTemplates={scoringTemplates}
         />
       )}
+
+      <CategoryTeamsSheet
+        category={teamsTarget}
+        teams={teamsTarget ? (teamsByCategory.get(teamsTarget.id) ?? []) : []}
+        onOpenChange={(open) => !open && setTeamsTarget(null)}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}

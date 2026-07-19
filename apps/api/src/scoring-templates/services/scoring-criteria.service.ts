@@ -56,6 +56,20 @@ export class ScoringCriteriaService {
     });
   }
 
+  // Variante sem checagem de dono — usada por JudgingService (ver
+  // ScoringTemplatesService.findTemplateOrThrow pro raciocínio
+  // completo: quem pode ver a escala de um evento não é
+  // necessariamente quem criou o template).
+  async findAllForTemplateUnchecked(
+    templateId: string,
+  ): Promise<ScoringCriterion[]> {
+    await this.templatesService.findTemplateOrThrow(templateId);
+    return this.criteriaRepo.find({
+      where: { templateId },
+      order: { order: 'ASC' },
+    });
+  }
+
   async update(
     templateId: string,
     id: string,

@@ -21,7 +21,11 @@ export interface JudgingDayView {
 
 export interface CriterionAssignmentsState {
   days: JudgingDayView[];
-  criterionAssignments: Array<{ criterionId: string; resourceId: string; judgeIds: string[] }>;
+  criterionAssignments: Array<{
+    criterionId: string;
+    resourceId: string;
+    judgeIds: string[];
+  }>;
 }
 
 @Injectable()
@@ -42,12 +46,10 @@ export class JudgingService {
   async getAssignments(
     eventId: string,
     templateId: string,
-    userId: string,
   ): Promise<CriterionAssignmentsState> {
     const criteria = await this.assertTemplateUsableForEvent(
       eventId,
       templateId,
-      userId,
     );
     const criterionIds = criteria.map((c) => c.id);
     const days = await this.getRelevantDays(eventId, templateId);
@@ -118,7 +120,9 @@ export class JudgingService {
     resourceId: string,
   ): Promise<void> {
     const days = await this.getRelevantDays(eventId, templateId);
-    const valid = days.some((d) => d.resources.some((r) => r.id === resourceId));
+    const valid = days.some((d) =>
+      d.resources.some((r) => r.id === resourceId),
+    );
     if (!valid) {
       throw new BadRequestException(
         'Este recurso não tem apresentações agendadas para este sistema de pontuação',
@@ -163,12 +167,10 @@ export class JudgingService {
     criterionId: string,
     resourceId: string,
     judgeIds: string[],
-    userId: string,
   ): Promise<void> {
     const criteria = await this.assertTemplateUsableForEvent(
       eventId,
       templateId,
-      userId,
     );
     const criterion = criteria.find((c) => c.id === criterionId);
     if (!criterion) {
@@ -196,12 +198,10 @@ export class JudgingService {
     resourceId: string,
     judgeParticipationId: string,
     strategy: BulkAssignStrategy,
-    userId: string,
   ): Promise<void> {
     const criteria = await this.assertTemplateUsableForEvent(
       eventId,
       templateId,
-      userId,
     );
     const group = criteria.find((c) => c.id === groupCriterionId);
     if (!group) {
@@ -327,20 +327,18 @@ export class JudgingService {
     }
   }
 
-  // Confere que o template pertence ao usuário (via
-  // ScoringCriteriaService.findAllForTemplate, que já valida ownership)
-  // E que está de fato em uso por alguma Category deste evento — não
-  // basta ser "um template meu qualquer".
+  // Confere que o template existe (sem checar dono — ver
+  // ScoringTemplatesService.findTemplateOrThrow: a autorização de quem
+  // pode ver/mexer na escala de um evento já é do EventMemberGuard, não
+  // de ser o criador do template) E que está de fato em uso por alguma
+  // Category deste evento — não basta ser "um template qualquer".
   private async assertTemplateUsableForEvent(
     eventId: string,
     templateId: string,
-    userId: string,
   ) {
     await this.eventsService.findEventOrThrow(eventId);
-    const criteria = await this.scoringCriteriaService.findAllForTemplate(
-      templateId,
-      userId,
-    );
+    const criteria =
+      await this.scoringCriteriaService.findAllForTemplateUnchecked(templateId);
     const inUse = await this.categoriesRepo.count({
       where: { eventId, scoringTemplateId: templateId },
     });

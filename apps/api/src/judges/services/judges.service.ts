@@ -12,6 +12,7 @@ import { CreateJudgeParticipationDto } from '../dto/create-judge-participation.d
 import { UpdateJudgeParticipationDto } from '../dto/update-judge-participation.dto';
 import { UpdateOwnJudgeDto } from '../dto/update-own-judge.dto';
 import { EventsService } from '../../events/services/events.service';
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { UsersService } from '../../users/services/users.service';
 import type { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../common/enums/user-role.enum';
@@ -52,7 +53,7 @@ export class JudgesService {
     dto: CreateJudgeParticipationDto,
     createdById: string,
   ): Promise<JudgeParticipation> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     let userId = dto.userId ?? null;
     let eligibleUser: User | null = null;
     if (userId) {
@@ -90,6 +91,16 @@ export class JudgesService {
       createdById,
     });
     const saved = await this.participationsRepo.save(participation);
+
+    // Todo jurado vinculado ao evento já entra no roster de acessos
+    // (Gerenciar acessos) com o papel "jurado" — sem tela própria pra
+    // isso, é automático (2026-07-19, a pedido do usuário).
+    await this.eventsService.upsertMemberRole(
+      event.aliasId,
+      EventMemberRole.JUDGE,
+      { userId, email: dto.email, firstName: dto.name },
+    );
+
     return this.toJudgeView(saved);
   }
 
@@ -142,7 +153,16 @@ export class JudgesService {
 
   async remove(eventId: string, id: string): Promise<void> {
     const participation = await this.findJudgeOrThrow(eventId, id);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     await this.participationsRepo.remove(participation);
+    await this.eventsService.removeMemberRole(
+      event.aliasId,
+      EventMemberRole.JUDGE,
+      {
+        userId: participation.userId,
+        email: participation.email,
+      },
+    );
   }
 
   // Usado por outros domínios (futuro) pra validar que o jurado existe
@@ -246,6 +266,28 @@ export class JudgesService {
       .set({ userId })
       .where('id IN (:...ids)', { ids: unclaimed.map((p) => p.id) })
       .execute();
+
+    // Também garante o papel "jurado" no roster de acessos de cada
+    // evento recém-reclamado (ver EventStaffController) — dedupe por
+    // aliasId, já que o roster é por aliasId, não por id de versão.
+    const distinctEventIds = Array.from(
+      new Set(unclaimed.map((p) => p.eventId)),
+    );
+    const claimedAliasIds = new Set<string>();
+    for (const eventId of distinctEventIds) {
+      const event = await this.eventsService.findEventOrThrow(eventId);
+      if (claimedAliasIds.has(event.aliasId)) continue;
+      claimedAliasIds.add(event.aliasId);
+      await this.eventsService.upsertMemberRole(
+        event.aliasId,
+        EventMemberRole.JUDGE,
+        {
+          userId,
+          email: user.email,
+          firstName: `${user.firstName} ${user.lastName}`,
+        },
+      );
+    }
 
     return unclaimed.length;
   }

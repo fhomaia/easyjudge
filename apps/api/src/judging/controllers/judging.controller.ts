@@ -6,7 +6,6 @@ import {
   Put,
   Post,
   Query,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JudgingService } from '../services/judging.service';
@@ -17,35 +16,38 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
-import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
+import { EventMemberGuard } from '../../events/guards/event-member.guard';
+import { EventRoles } from '../../events/decorators/event-roles.decorator';
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
+
+const WRITE_ROLES = [EventMemberRole.ADMIN, EventMemberRole.ASSESSOR];
+const READ_ROLES = [...WRITE_ROLES, EventMemberRole.JUDGE];
 
 @Controller('events/:eventId/judging')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
 export class JudgingController {
   constructor(private readonly judgingService: JudgingService) {}
 
   @Get()
+  @EventRoles(...READ_ROLES)
   getAssignments(
     @Param('eventId') eventId: string,
     @Query('templateId') templateId: string,
-    @Req() req: AuthenticatedRequest,
   ) {
-    return this.judgingService.getAssignments(
-      eventId,
-      templateId,
-      req.user.userId,
-    );
+    return this.judgingService.getAssignments(eventId, templateId);
   }
 
-  @Put('templates/:templateId/criteria/:criterionId/resources/:resourceId/judges')
+  @Put(
+    'templates/:templateId/criteria/:criterionId/resources/:resourceId/judges',
+  )
+  @EventRoles(...WRITE_ROLES)
   setCriterionJudges(
     @Param('eventId') eventId: string,
     @Param('templateId') templateId: string,
     @Param('criterionId') criterionId: string,
     @Param('resourceId') resourceId: string,
     @Body() dto: SetJudgeIdsDto,
-    @Req() req: AuthenticatedRequest,
   ) {
     return this.judgingService.setCriterionJudges(
       eventId,
@@ -53,18 +55,19 @@ export class JudgingController {
       criterionId,
       resourceId,
       dto.judgeIds,
-      req.user.userId,
     );
   }
 
-  @Post('templates/:templateId/criteria/:criterionId/resources/:resourceId/bulk-assign')
+  @Post(
+    'templates/:templateId/criteria/:criterionId/resources/:resourceId/bulk-assign',
+  )
+  @EventRoles(...WRITE_ROLES)
   bulkAssign(
     @Param('eventId') eventId: string,
     @Param('templateId') templateId: string,
     @Param('criterionId') criterionId: string,
     @Param('resourceId') resourceId: string,
     @Body() dto: BulkAssignDto,
-    @Req() req: AuthenticatedRequest,
   ) {
     return this.judgingService.bulkAssign(
       eventId,
@@ -73,11 +76,11 @@ export class JudgingController {
       resourceId,
       dto.judgeParticipationId,
       dto.strategy,
-      req.user.userId,
     );
   }
 
   @Get('resources/:resourceId/special-roles')
+  @EventRoles(...READ_ROLES)
   getSpecialRoles(
     @Param('eventId') eventId: string,
     @Param('resourceId') resourceId: string,
@@ -86,6 +89,7 @@ export class JudgingController {
   }
 
   @Put('resources/:resourceId/special-roles/:role')
+  @EventRoles(...WRITE_ROLES)
   setSpecialRoleJudges(
     @Param('eventId') eventId: string,
     @Param('resourceId') resourceId: string,

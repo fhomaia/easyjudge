@@ -20,9 +20,11 @@ import {
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 
 export function RegulationPage() {
   const { id } = useParams<{ id: string }>();
+  useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 

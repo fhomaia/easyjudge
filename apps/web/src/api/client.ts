@@ -126,7 +126,7 @@ export const usersApi = {
 };
 
 export type EventStatus = "created" | "published" | "started" | "completed";
-export type EventMemberRole = "admin" | "judge" | "participant" | "spectator";
+export type EventMemberRole = "admin" | "assessor" | "judge" | "spectator";
 
 export interface Event {
   id: string;
@@ -140,7 +140,11 @@ export interface Event {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  // Papel mais "forte" (admin > assessor > judge > spectator) — telas
+  // antigas (Home) só entendem um papel só. `currentUserRoles` (array
+  // completo) é o que telas novas devem usar (ver useEventSetupGuard).
   currentUserRole: EventMemberRole;
+  currentUserRoles: EventMemberRole[];
   categoriesCount?: number;
   programsCount?: number;
   categoriesUpdatedAt?: string | null;
@@ -190,6 +194,59 @@ export const eventsApi = {
     formData.append("file", file);
     return authUpload<Event>(`/events/${id}/logo`, formData);
   },
+};
+
+// Roster de acessos do evento ("Gerenciar acessos") — quem faz parte
+// do evento e com qual(is) papel(is). Uma pessoa pode ter mais de um
+// papel (roles é um array). Jurados já vinculados via Painel de
+// Jurados aparecem aqui automaticamente com o papel "judge" (sem
+// precisar cadastrar de novo) — ver EventStaffPage.
+export interface EventStaffMember {
+  id: string;
+  userId: string | null;
+  firstName: string;
+  lastName: string;
+  email: string;
+  roles: EventMemberRole[];
+  isOwner: boolean;
+  isPending: boolean;
+}
+
+export interface CreateEventStaffMemberPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  roles: EventMemberRole[];
+}
+
+export interface UpdateEventStaffMemberPayload {
+  roles: EventMemberRole[];
+}
+
+export const eventStaffApi = {
+  list: (eventId: string) =>
+    authRequest<EventStaffMember[]>(`/events/${eventId}/staff`),
+
+  create: (eventId: string, payload: CreateEventStaffMemberPayload) =>
+    authRequest<EventStaffMember>(`/events/${eventId}/staff`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateRoles: (
+    eventId: string,
+    memberId: string,
+    payload: UpdateEventStaffMemberPayload,
+  ) =>
+    authRequest<EventStaffMember>(`/events/${eventId}/staff/${memberId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (eventId: string, memberId: string) =>
+    authRequest<void>(`/events/${eventId}/staff/${memberId}`, {
+      method: "DELETE",
+    }),
 };
 
 export type CategoryStatus = "active" | "inactive";
@@ -333,9 +390,18 @@ export interface TeamPayload {
   name: string;
 }
 
+export interface TeamWithProgram extends Team {
+  program: { id: string; name: string };
+}
+
 export const teamsApi = {
   list: (eventId: string, programId: string) =>
     authRequest<Team[]>(`/events/${eventId}/programs/${programId}/teams`),
+
+  // Todas as equipes do evento, de qualquer programa — usado pela
+  // gaveta de equipes na tabela de categorias.
+  listForEvent: (eventId: string) =>
+    authRequest<TeamWithProgram[]>(`/events/${eventId}/teams`),
 
   create: (eventId: string, programId: string, payload: TeamPayload) =>
     authRequest<Team>(`/events/${eventId}/programs/${programId}/teams`, {

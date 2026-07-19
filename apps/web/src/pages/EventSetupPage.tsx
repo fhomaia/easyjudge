@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserCog } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { Button } from "@/components/ui/button";
 import { SetupProgressSummary } from "@/components/SetupProgressSummary";
 import { SetupStepCard } from "@/components/SetupStepCard";
 import { SetupRecommendedBanner } from "@/components/SetupRecommendedBanner";
+import { PublishEventCard } from "@/components/PublishEventCard";
+import { PublishCelebrationOverlay } from "@/components/PublishCelebrationOverlay";
 import { buildSetupSteps, type RegulationSummary, type ScheduleSummary } from "@/lib/eventSetupSteps";
+import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import {
   fetchTemplateJudgingStats,
   isTemplateJudgingComplete,
@@ -33,6 +37,7 @@ import { useAuthStore } from "@/store/auth";
 
 export function EventSetupPage() {
   const { id } = useParams<{ id: string }>();
+  useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
@@ -51,6 +56,7 @@ export function EventSetupPage() {
     Map<string, { total: number; assigned: number }>
   >(new Map());
   const [error, setError] = useState<string | null>(null);
+  const [publishCelebrationOpen, setPublishCelebrationOpen] = useState(false);
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -260,6 +266,7 @@ export function EventSetupPage() {
       )
     : [];
   const firstIncomplete = steps.find((s) => !s.completed);
+  const allStepsCompleted = steps.length > 0 && steps.every((s) => s.completed);
 
   return (
     <div className="flex h-svh bg-background">
@@ -283,18 +290,32 @@ export function EventSetupPage() {
 
           {event && (
             <div className="grid gap-6">
-              <div>
-                <h1 className="mt-4 text-2xl font-semibold text-foreground">
-                  Configuração do evento
-                </h1>
-                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  Prepare &quot;{event.name}&quot; em {steps.length} etapas. Você pode
-                  iniciá-las em qualquer ordem, mas recomendamos seguir a sequência para
-                  facilitar o processo.
-                </p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="mt-4 text-2xl font-semibold text-foreground">
+                    Configuração do evento
+                  </h1>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    Prepare &quot;{event.name}&quot; em {steps.length + 1} etapas. Você pode
+                    iniciá-las em qualquer ordem, mas recomendamos seguir a sequência para
+                    facilitar o processo.
+                  </p>
+                </div>
+
+                {(event.currentUserRoles.includes("admin") ||
+                  event.currentUserRoles.includes("assessor")) && (
+                  <Button
+                    variant="outline"
+                    className="mt-4 shrink-0"
+                    onClick={() => navigate(`/events/${id}/access`)}
+                  >
+                    <UserCog data-icon="inline-start" />
+                    Gerenciar acessos
+                  </Button>
+                )}
               </div>
 
-              <SetupProgressSummary steps={steps} />
+              <SetupProgressSummary steps={steps} published={event.status !== "created"} />
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {steps.map((step, index) => (
@@ -305,6 +326,16 @@ export function EventSetupPage() {
                     recommended={step.key === firstIncomplete?.key}
                   />
                 ))}
+
+                <PublishEventCard
+                  event={event}
+                  stepNumber={steps.length + 1}
+                  allStepsCompleted={allStepsCompleted}
+                  onPublished={(updated) => {
+                    setEvent(updated);
+                    setPublishCelebrationOpen(true);
+                  }}
+                />
               </div>
 
               {firstIncomplete && <SetupRecommendedBanner step={firstIncomplete} />}
@@ -317,6 +348,11 @@ export function EventSetupPage() {
           )}
         </div>
       </main>
+
+      <PublishCelebrationOverlay
+        open={publishCelebrationOpen}
+        onGoHome={() => navigate("/")}
+      />
     </div>
   );
 }

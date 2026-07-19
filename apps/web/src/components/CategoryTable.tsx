@@ -6,11 +6,19 @@ import type { Category } from "@/api/client";
 
 interface CategoryTableProps {
   categories: Category[];
+  teamCounts: Map<string, number>;
   onEdit: (category: Category) => void;
   onDelete: (category: Category) => void;
+  onViewTeams: (category: Category) => void;
 }
 
-export function CategoryTable({ categories, onEdit, onDelete }: CategoryTableProps) {
+export function CategoryTable({
+  categories,
+  teamCounts,
+  onEdit,
+  onDelete,
+  onViewTeams,
+}: CategoryTableProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border/60 bg-card">
       <table className="w-full text-left text-sm">
@@ -23,6 +31,7 @@ export function CategoryTable({ categories, onEdit, onDelete }: CategoryTablePro
             <th className="px-4 py-3 font-medium">Nível</th>
             <th className="px-4 py-3 font-medium">Tempo</th>
             <th className="px-4 py-3 font-medium">Sistema de pontuação</th>
+            <th className="px-4 py-3 font-medium">Equipes</th>
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 text-right font-medium">Ações</th>
           </tr>
@@ -63,6 +72,16 @@ export function CategoryTable({ categories, onEdit, onDelete }: CategoryTablePro
               </td>
               <td className="px-4 py-3 text-muted-foreground">
                 {category.scoringTemplate?.name ?? "—"}
+              </td>
+              <td className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => onViewTeams(category)}
+                  className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                >
+                  {teamCounts.get(category.id) ?? 0}{" "}
+                  {(teamCounts.get(category.id) ?? 0) === 1 ? "equipe" : "equipes"}
+                </button>
               </td>
               <td className="px-4 py-3">
                 <CategoryStatusBadge status={category.status} />

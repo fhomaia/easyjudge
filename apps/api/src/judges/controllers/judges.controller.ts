@@ -18,11 +18,18 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { EventMemberGuard } from '../../events/guards/event-member.guard';
+import { EventRoles } from '../../events/decorators/event-roles.decorator';
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
+// Assessor tem CRUD completo aqui (mesmo não podendo mexer em
+// acessos/pessoas no roster do evento, ver EventStaffController) —
+// cadastro de jurados é uma exceção explícita pedida pelo usuário.
 @Controller('events/:eventId/judges')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
+@EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR)
 export class JudgesController {
   constructor(private readonly judgesService: JudgesService) {}
 
