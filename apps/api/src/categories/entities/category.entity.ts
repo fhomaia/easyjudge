@@ -8,7 +8,6 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Event } from '../../events/entities/event.entity';
 import { ScoringTemplate } from '../../scoring-templates/entities/scoring-template.entity';
 import { CategoryStatus } from '../enums/category-status.enum';
 import { CategoryModality } from '../enums/category-modality.enum';
@@ -20,15 +19,12 @@ export class Category {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Identifica o evento pelo aliasId (estável entre versões), não pelo
+  // id de uma versão específica — sem FK, mesmo padrão de
+  // EventMember.aliasId. Ver migration AddAliasIdToEventScopedChildEntities.
   @Index()
-  @Column({ name: 'event_id' })
-  eventId: string;
-
-  @ManyToOne(() => Event, (event) => event.categories, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'event_id' })
-  event: Event;
+  @Column({ name: 'alias_id', type: 'uuid' })
+  aliasId: string;
 
   @Column({ length: 150 })
   name: string;

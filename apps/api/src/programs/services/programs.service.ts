@@ -11,6 +11,7 @@ import { ProgramProfile } from '../entities/program-profile.entity';
 import { CreateProgramParticipationDto } from '../dto/create-program-participation.dto';
 import { UpdateProgramParticipationDto } from '../dto/update-program-participation.dto';
 import { UpdateOwnProgramDto } from '../dto/update-own-program.dto';
+import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
 import { UsersService } from '../../users/services/users.service';
 import type { User } from '../../users/entities/user.entity';
@@ -52,7 +53,7 @@ export class ProgramsService {
     dto: CreateProgramParticipationDto,
     createdById: string,
   ): Promise<ProgramParticipation> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     let userId = dto.userId ?? null;
     let eligibleUser: User | null = null;
     if (userId) {
@@ -91,7 +92,7 @@ export class ProgramsService {
     const participation = this.participationsRepo.create({
       ...dto,
       userId,
-      eventId,
+      aliasId: event.aliasId,
       createdById,
     });
     const saved = await this.participationsRepo.save(participation);
@@ -99,14 +100,14 @@ export class ProgramsService {
   }
 
   async findAllForEvent(eventId: string): Promise<ProgramParticipation[]> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const participations = await this.participationsRepo
       .createQueryBuilder('participation')
       .loadRelationCountAndMap(
         'participation.teamsCount',
         'participation.teams',
       )
-      .where('participation.eventId = :eventId', { eventId })
+      .where('participation.aliasId = :aliasId', { aliasId: event.aliasId })
       .orderBy('participation.createdAt', 'DESC')
       .getMany();
     return Promise.all(participations.map((p) => this.toProgramView(p)));
@@ -116,8 +117,9 @@ export class ProgramsService {
     eventId: string,
     id: string,
   ): Promise<ProgramParticipation> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const participation = await this.participationsRepo.findOne({
-      where: { id, eventId },
+      where: { id, aliasId: event.aliasId },
       relations: ['teams', 'teams.categories'],
     });
     if (!participation) throw new NotFoundException('Programa não encontrado');
@@ -178,9 +180,10 @@ export class ProgramsService {
     eventId: string,
     id: string,
   ): Promise<ProgramParticipation> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const participation = await this.participationsRepo.findOneBy({
       id,
-      eventId,
+      aliasId: event.aliasId,
     });
     if (!participation) throw new NotFoundException('Programa não encontrado');
     return participation;
@@ -287,17 +290,36 @@ export class ProgramsService {
     events: Array<{ eventId: string; eventName?: string; startDate?: string }>;
   }> {
     const profile = await this.getOrCreateProfile(userId);
-    const participations = await this.participationsRepo.find({
-      where: { userId },
-      relations: ['event'],
-      order: { createdAt: 'DESC' },
-    });
+    // ProgramParticipation não tem mais relação TypeORM com Event (só
+    // aliasId, sem FK) — join manual pela versão ATIVA de cada aliasId,
+    // já que o eventId devolvido pro frontend precisa continuar sendo o
+    // id de uma versão navegável (rotas continuam endereçadas por id de
+    // versão, não por aliasId).
+    const rows = await this.participationsRepo
+      .createQueryBuilder('p')
+      .leftJoin(
+        Event,
+        'event',
+        'event.aliasId = p.aliasId AND event.active = true',
+      )
+      .where('p.userId = :userId', { userId })
+      .select('p.id', 'id')
+      .addSelect('event.id', 'eventId')
+      .addSelect('event.name', 'eventName')
+      .addSelect('event.startDate', 'startDate')
+      .orderBy('p.createdAt', 'DESC')
+      .getRawMany<{
+        id: string;
+        eventId: string | null;
+        eventName: string | null;
+        startDate: string | null;
+      }>();
     return {
       profile,
-      events: participations.map((p) => ({
-        eventId: p.eventId,
-        eventName: p.event?.name,
-        startDate: p.event?.startDate,
+      events: rows.map((r) => ({
+        eventId: r.eventId ?? '',
+        eventName: r.eventName ?? undefined,
+        startDate: r.startDate ?? undefined,
       })),
     };
   }

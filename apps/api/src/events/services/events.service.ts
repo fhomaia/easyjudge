@@ -11,9 +11,11 @@ import { Event } from '../entities/event.entity';
 import { EventMember } from '../entities/event-member.entity';
 import { EventMemberRole } from '../enums/event-member-role.enum';
 import { EventStatus } from '../enums/event-status.enum';
+import { EventActivityAction } from '../enums/event-activity-action.enum';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { stripUndefined } from '../../common/utils/strip-undefined';
+import { EventActivityLogService } from './event-activity-log.service';
 import { UsersService } from '../../users/services/users.service';
 import { Category } from '../../categories/entities/category.entity';
 import { ProgramParticipation } from '../../programs/entities/program-participation.entity';
@@ -22,16 +24,20 @@ import { Regulation } from '../../regulations/entities/regulation.entity';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
 import { SpecialRoleAssignment } from '../../judging/entities/special-role-assignment.entity';
 
-// Entidades filhas endereçadas diretamente pelo `id` da versão do
-// evento (não pelo `aliasId` estável, ver comentário em `publishEvent`
-// abaixo) — republicar precisa "adotar" essas linhas pra nova versão,
-// senão elas ficam presas na versão antiga (agora inativa) e o evento
-// publicado aparece "zerado" (0 categorias, 0 programas etc.) mesmo
-// tendo todo o setup feito. `criterion_judge_assignments` e as tabelas
-// de `schedule_resources`/`schedule_entries`/`teams` não têm `eventId`
-// próprio — migram de graça por já dependerem, em cascata, de
-// `scheduleDayId`/`programId`/`judgeParticipationId`, que por sua vez
-// já apontam pra linhas cujo `eventId` é atualizado aqui.
+// Entidades filhas endereçadas pelo `aliasId` do evento (estável entre
+// versões, não pelo `id` de uma versão específica — ver
+// AddAliasIdToEventScopedChildEntities). Como `aliasId` nunca muda numa
+// republicação, elas não precisam de nenhuma "adoção" em publishEvent
+// (diferente do esquema antigo, que causou um bug real: evento
+// republicado aparecendo com 0 categorias/0 programas porque as linhas
+// filhas ficavam presas na versão antiga). Usado hoje só por
+// deleteEvent, pra limpeza explícita — sem FK pra `events`, não existe
+// mais `ON DELETE CASCADE` cuidando disso sozinho.
+// `criterion_judge_assignments` e as tabelas de
+// `schedule_resources`/`schedule_entries`/`teams` não têm `aliasId`
+// próprio — saem junto via cascata normal de FK a partir de
+// `schedule_days`/`judge_participations`/`program_participations`
+// (que são excluídas aqui).
 const EVENT_SCOPED_ENTITIES = [
   Category,
   ProgramParticipation,
@@ -91,9 +97,14 @@ export class EventsService {
     private readonly eventsRepo: Repository<Event>,
     @InjectRepository(EventMember)
     private readonly membersRepo: Repository<EventMember>,
+    @InjectRepository(Category)
+    private readonly categoriesRepo: Repository<Category>,
+    @InjectRepository(ProgramParticipation)
+    private readonly programsRepo: Repository<ProgramParticipation>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly usersService: UsersService,
+    private readonly activityLogService: EventActivityLogService,
   ) {}
 
   // Cria a v1 do evento (aliasId = id, já que é a primeira versão) e o
@@ -102,7 +113,7 @@ export class EventsService {
   async createEvent(dto: CreateEventDto, createdById: string): Promise<Event> {
     const id = randomUUID();
     const creator = await this.usersService.findById(createdById);
-    return this.dataSource.transaction(async (manager) => {
+    const saved = await this.dataSource.transaction(async (manager) => {
       const event = manager.create(Event, {
         ...dto,
         competitionDays: dto.competitionDays ?? 1,
@@ -127,6 +138,12 @@ export class EventsService {
 
       return saved;
     });
+    await this.activityLogService.record(
+      id,
+      createdById,
+      EventActivityAction.CREATED,
+    );
+    return saved;
   }
 
   // Lista só os eventos em que o usuário tem membership — admin/jurado
@@ -137,8 +154,24 @@ export class EventsService {
   async findAllForUser(userId: string): Promise<EventWithRole[]> {
     const { entities, raw } = await this.eventsRepo
       .createQueryBuilder('event')
-      .loadRelationCountAndMap('event.categoriesCount', 'event.categories')
-      .loadRelationCountAndMap('event.programsCount', 'event.programs')
+      .addSelect(
+        (qb) =>
+          qb
+            .subQuery()
+            .select('COUNT(*)', 'count')
+            .from(Category, 'c')
+            .where('c.aliasId = event.aliasId'),
+        'categories_count',
+      )
+      .addSelect(
+        (qb) =>
+          qb
+            .subQuery()
+            .select('COUNT(*)', 'count')
+            .from(ProgramParticipation, 'p')
+            .where('p.aliasId = event.aliasId'),
+        'programs_count',
+      )
       .innerJoin(
         EventMember,
         'member',
@@ -166,15 +199,14 @@ export class EventsService {
         ...event,
         currentUserRole: highestRole(roles),
         currentUserRoles: roles,
+        categoriesCount: Number(raw[i].categories_count),
+        programsCount: Number(raw[i].programs_count),
       };
     });
   }
 
   async findOneForUser(id: string, userId: string): Promise<EventWithRole> {
-    const event = await this.eventsRepo.findOne({
-      where: { id },
-      relations: ['categories', 'programs'],
-    });
+    const event = await this.eventsRepo.findOneBy({ id });
     if (!event) throw new NotFoundException('Evento não encontrado');
 
     const member = await this.membersRepo.findOneBy({
@@ -185,14 +217,19 @@ export class EventsService {
       throw new ForbiddenException('Você não tem acesso a este evento');
     }
 
+    const [categories, programs] = await Promise.all([
+      this.categoriesRepo.find({ where: { aliasId: event.aliasId } }),
+      this.programsRepo.find({ where: { aliasId: event.aliasId } }),
+    ]);
+
     return {
       ...event,
       currentUserRole: highestRole(member.roles),
       currentUserRoles: member.roles,
-      categoriesCount: event.categories.length,
-      programsCount: event.programs.length,
-      categoriesUpdatedAt: latestUpdatedAt(event.categories),
-      programsUpdatedAt: latestUpdatedAt(event.programs),
+      categoriesCount: categories.length,
+      programsCount: programs.length,
+      categoriesUpdatedAt: latestUpdatedAt(categories),
+      programsUpdatedAt: latestUpdatedAt(programs),
     };
   }
 
@@ -227,19 +264,26 @@ export class EventsService {
     }
 
     const saved = await this.eventsRepo.save(event);
+    await this.activityLogService.record(
+      saved.aliasId,
+      userId,
+      EventActivityAction.UPDATED,
+    );
     return this.attachRole(saved, userId);
   }
 
   // Publica (ou republica) o evento: desativa a versão atual e insere
   // uma nova linha com o mesmo aliasId e version + 1. As entidades
   // filhas (categorias, programas, regulamento, cronograma, jurados,
-  // funções especiais — ver EVENT_SCOPED_ENTITIES) são "adotadas" pela
-  // nova versão nessa mesma transação: elas são endereçadas pelo `id`
-  // específico da versão (não pelo `aliasId`, ver gotcha de
-  // versionamento no CLAUDE.md), então sem isso todo o setup do evento
-  // ficaria preso na versão antiga (agora inativa) e o evento publicado
-  // apareceria "zerado" — bug real reportado pelo usuário ("Easy Judge
-  // Cup" com 0 programas e 0 categorias depois de publicar).
+  // funções especiais) não precisam de nenhum passo extra aqui — são
+  // endereçadas pelo `aliasId` (estável entre versões, ver
+  // EVENT_SCOPED_ENTITIES e a migration AddAliasIdToEventScopedChildEntities),
+  // não pelo `id` da versão, então continuam "grudadas" no evento certo
+  // sozinhas. Isso substitui um esquema antigo que precisava "adotar"
+  // cada linha filha pra nova versão nesta mesma transação — schema
+  // que causou um bug real ("Easy Judge Cup" aparecendo com 0
+  // categorias/0 programas depois de republicar, porque o passo de
+  // adoção não existia ainda naquela época).
   async publishEvent(id: string, userId: string): Promise<EventWithRole> {
     const event = await this.getOwnEventOrThrow(id, userId);
 
@@ -258,6 +302,7 @@ export class EventsService {
         startDate: event.startDate,
         competitionDays: event.competitionDays,
         location: event.location,
+        venue: event.venue,
         logoUrl: event.logoUrl,
         createdById: event.createdById,
         id: randomUUID(),
@@ -266,18 +311,13 @@ export class EventsService {
         active: true,
         status: EventStatus.PUBLISHED,
       });
-      const saved = await manager.save(newVersion);
-
-      for (const entity of EVENT_SCOPED_ENTITIES) {
-        await manager.update(
-          entity,
-          { eventId: event.id },
-          { eventId: saved.id },
-        );
-      }
-
-      return saved;
+      return manager.save(newVersion);
     });
+    await this.activityLogService.record(
+      newVersion.aliasId,
+      userId,
+      EventActivityAction.PUBLISHED,
+    );
     return this.attachRole(newVersion, userId);
   }
 
@@ -291,7 +331,43 @@ export class EventsService {
     }
 
     event.status = EventStatus.STARTED;
+    event.startedAt = new Date();
     const saved = await this.eventsRepo.save(event);
+    await this.activityLogService.record(
+      saved.aliasId,
+      userId,
+      EventActivityAction.STARTED,
+    );
+    return this.attachRole(saved, userId);
+  }
+
+  // Reverte a publicação (published -> created), in-place — mesmo
+  // raciocínio do revert automático em updateEvent, só que como ação
+  // explícita (o admin ou assessor quer voltar a editar as
+  // configurações sem mexer em nenhum campo). Só a partir de
+  // "published": um evento já "started" não tem caminho de volta
+  // ainda (decisão consciente — reverter um evento ao vivo é bem mais
+  // delicado que desfazer uma publicação, fica pra quando isso for
+  // pedido).
+  async unpublishEvent(id: string, userId: string): Promise<EventWithRole> {
+    const event = await this.getOwnEventOrThrow(id, userId, [
+      EventMemberRole.ADMIN,
+      EventMemberRole.ASSESSOR,
+    ]);
+
+    if (event.status !== EventStatus.PUBLISHED) {
+      throw new ConflictException(
+        'Só é possível reverter um evento com status "publicado".',
+      );
+    }
+
+    event.status = EventStatus.CREATED;
+    const saved = await this.eventsRepo.save(event);
+    await this.activityLogService.record(
+      saved.aliasId,
+      userId,
+      EventActivityAction.UNPUBLISHED,
+    );
     return this.attachRole(saved, userId);
   }
 
@@ -318,15 +394,32 @@ export class EventsService {
   }
 
   // Exclui o evento por completo: todas as versões (histórico) do
-  // aliasId, não só a ativa, e todos os memberships. Categories/teams
-  // de cada versão já saem junto via ON DELETE CASCADE na FK delas.
+  // aliasId, não só a ativa, e todos os memberships. As 6 entidades de
+  // EVENT_SCOPED_ENTITIES não têm mais FK pra `events` (endereçadas por
+  // aliasId, sem ON DELETE CASCADE possível) — por isso são apagadas
+  // explicitamente aqui, mesmo padrão já usado pra EventMember.
+  // ScheduleResource/ScheduleEntry/Team/CriterionJudgeAssignment saem
+  // de graça via cascata das próprias FKs deles (scheduleDayId/
+  // programId/judgeParticipationId), sem precisar de mais nada aqui.
   async deleteEvent(id: string, userId: string): Promise<void> {
     const event = await this.getOwnEventOrThrow(id, userId);
 
     await this.dataSource.transaction(async (manager) => {
+      for (const entity of EVENT_SCOPED_ENTITIES) {
+        await manager.delete(entity, { aliasId: event.aliasId });
+      }
       await manager.delete(EventMember, { aliasId: event.aliasId });
       await manager.delete(Event, { aliasId: event.aliasId });
     });
+    // Gravado depois da transação, fora dela: o log não tem FK pra
+    // `events` (endereçado por aliasId, ver EventActivityLog) então
+    // sobrevive de propósito à exclusão do evento — é histórico, não
+    // dado do evento em si.
+    await this.activityLogService.record(
+      event.aliasId,
+      userId,
+      EventActivityAction.DELETED,
+    );
   }
 
   async setEventLogo(id: string, file: Express.Multer.File) {

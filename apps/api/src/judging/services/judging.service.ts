@@ -104,12 +104,13 @@ export class JudgingService {
     eventId: string,
     templateId: string,
   ): Promise<JudgingDayView[]> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const categories = await this.categoriesRepo.find({
-      where: { eventId, scoringTemplateId: templateId },
+      where: { aliasId: event.aliasId, scoringTemplateId: templateId },
       select: ['id'],
     });
     return this.scheduleService.findResourcesWithScheduledCategories(
-      eventId,
+      event.aliasId,
       categories.map((c) => c.id),
     );
   }
@@ -142,9 +143,10 @@ export class JudgingService {
     eventId: string,
     resourceId: string,
   ): Promise<Array<{ role: SpecialJudgeRole; judgeIds: string[] }>> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     await this.scheduleService.findResourceInEventOrThrow(eventId, resourceId);
     const specialRoleRows = await this.specialRoleAssignmentsRepo.find({
-      where: { eventId, resourceId },
+      where: { aliasId: event.aliasId, resourceId },
     });
     const byRole = new Map<SpecialJudgeRole, string[]>();
     for (const row of specialRoleRows) {
@@ -254,17 +256,18 @@ export class JudgingService {
     resourceId: string,
     judgeIds: string[],
   ): Promise<void> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     await this.scheduleService.findResourceInEventOrThrow(eventId, resourceId);
     await this.assertJudgesBelongToEvent(eventId, judgeIds);
     await this.specialRoleAssignmentsRepo.delete({
-      eventId,
+      aliasId: event.aliasId,
       role,
       resourceId,
     });
     if (judgeIds.length === 0) return;
     const rows = judgeIds.map((judgeParticipationId) =>
       this.specialRoleAssignmentsRepo.create({
-        eventId,
+        aliasId: event.aliasId,
         resourceId,
         role,
         judgeParticipationId,
@@ -336,11 +339,11 @@ export class JudgingService {
     eventId: string,
     templateId: string,
   ) {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const criteria =
       await this.scoringCriteriaService.findAllForTemplateUnchecked(templateId);
     const inUse = await this.categoriesRepo.count({
-      where: { eventId, scoringTemplateId: templateId },
+      where: { aliasId: event.aliasId, scoringTemplateId: templateId },
     });
     if (inUse === 0) {
       throw new BadRequestException(

@@ -113,7 +113,7 @@ export function ScheduleTableView({
   );
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-card">
+    <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-card">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border/60">

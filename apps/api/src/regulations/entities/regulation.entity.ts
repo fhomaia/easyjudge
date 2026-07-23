@@ -5,11 +5,8 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
-  OneToOne,
-  JoinColumn,
   OneToMany,
 } from 'typeorm';
-import { Event } from '../../events/entities/event.entity';
 import { RegulationDocument } from './regulation-document.entity';
 import { RegulationDeductionMode } from '../enums/regulation-deduction-mode.enum';
 import { DeductionType } from '../enums/deduction-type.enum';
@@ -23,13 +20,14 @@ export class Regulation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Identifica o evento pelo aliasId (estável entre versões), não pelo
+  // id de uma versão específica — sem FK, mesmo padrão de
+  // EventMember.aliasId. Único (1:1 com o evento, agora "por aliasId"
+  // em vez de "por versão"). Ver migration
+  // AddAliasIdToEventScopedChildEntities.
   @Index({ unique: true })
-  @Column({ name: 'event_id' })
-  eventId: string;
-
-  @OneToOne(() => Event, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'event_id' })
-  event: Event;
+  @Column({ name: 'alias_id', type: 'uuid' })
+  aliasId: string;
 
   @Column({
     name: 'deduction_mode',

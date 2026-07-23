@@ -29,4 +29,9 @@ export class UpdateEventDto {
   @IsNotEmpty()
   @MaxLength(150)
   location?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  venue?: string;
 }

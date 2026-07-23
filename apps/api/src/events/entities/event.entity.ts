@@ -7,11 +7,8 @@ import {
   Index,
   ManyToOne,
   JoinColumn,
-  OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Category } from '../../categories/entities/category.entity';
-import { ProgramParticipation } from '../../programs/entities/program-participation.entity';
 import { EventStatus } from '../enums/event-status.enum';
 
 @Entity('events')
@@ -31,11 +28,22 @@ export class Event {
   @Column({ length: 150 })
   location: string;
 
+  // Nome do local físico (ex. "Expominas"), separado de `location`
+  // (cidade/UF). Opcional — nem todo evento informa.
+  @Column({ type: 'varchar', nullable: true })
+  venue: string | null;
+
   @Column({ name: 'logo_url', type: 'varchar', nullable: true })
   logoUrl: string | null;
 
   @Column({ type: 'enum', enum: EventStatus, default: EventStatus.CREATED })
   status: EventStatus;
+
+  // Preenchido por EventsService.startEvent quando o evento vira
+  // "started" — não faz parte do publishEvent (reseta a cada nova
+  // versão publicada, já que uma versão nova ainda não foi iniciada).
+  @Column({ name: 'started_at', type: 'timestamptz', nullable: true })
+  startedAt: Date | null;
 
   // Identidade lógica do evento através das versões — o `id` é
   // específico de cada linha/versão, o `aliasId` é o mesmo em todas as
@@ -63,15 +71,12 @@ export class Event {
   @JoinColumn({ name: 'created_by_id' })
   createdBy: User;
 
-  @OneToMany(() => Category, (category) => category.event)
-  categories: Category[];
-
-  @OneToMany(() => ProgramParticipation, (participation) => participation.event)
-  programs: ProgramParticipation[];
-
   // Não são colunas — populadas por EventsService (findAllForUser via
-  // loadRelationCountAndMap; findOneForUser derivando das relations já
-  // carregadas), só para telas de listagem/configuração do evento.
+  // subquery de COUNT; findOneForUser buscando Category/
+  // ProgramParticipation direto pelo aliasId), só para telas de
+  // listagem/configuração do evento. Category/ProgramParticipation não
+  // têm mais relação TypeORM com Event (endereçadas por aliasId, sem
+  // FK) — ver migration AddAliasIdToEventScopedChildEntities.
   categoriesCount?: number;
   programsCount?: number;
   categoriesUpdatedAt?: Date | null;

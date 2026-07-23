@@ -87,7 +87,7 @@ function OptionCard({
         }
       }}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-muted px-5 py-4 text-base font-medium text-foreground/70 transition-colors",
+        "flex w-full cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-muted px-5 py-4 text-base font-medium text-foreground/70 transition-colors short:py-2.5",
         "hover:bg-primary/10 hover:text-foreground",
         "has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/10 has-[[data-checked]]:text-foreground",
       )}
@@ -279,7 +279,7 @@ export function RegisterDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="gap-7 p-10 sm:max-w-lg">
+      <DialogContent className="gap-7 p-10 short:gap-3 short:p-5 sm:max-w-lg">
         <DialogTitle className="sr-only">Criar conta</DialogTitle>
 
         <div className="flex items-center gap-3">
@@ -300,7 +300,19 @@ export function RegisterDialog({
 
         <FormError message={error} />
 
-        <div className="relative min-h-[340px] overflow-hidden">
+        {/* short: em telas baixas, alguns passos (ex. "role", com 4
+            opções) ficam mais altos que cabe na viewport mesmo já
+            compactos — como os passos são posicionados via `absolute`
+            (evita "pulo" de layout na troca de passo, ver comentário do
+            AnimatePresence abaixo), a altura deste wrapper nunca é
+            dirigida pelo conteúdo. Com overflow-hidden, isso cortava o
+            passo mais alto sem barra de rolagem nenhuma. Em vez de um
+            min-h "mágico" recalibrado a cada mudança de conteúdo (mesma
+            armadilha documentada no CLAUDE.md pro min-h-[340px] do
+            desktop), deixamos o overflow visível no modo short — o
+            excesso vira scroll do <Dialog> (que já tem
+            overflow-y-auto), sem depender de nenhum número fixo. */}
+        <div className="relative min-h-[340px] overflow-hidden short:min-h-[200px] short:overflow-visible">
           <AnimatePresence mode="wait" custom={direction} initial={false}>
             <motion.div
               key={step}
@@ -313,8 +325,8 @@ export function RegisterDialog({
               className="absolute inset-0"
             >
               {step === "role" && (
-                <div className="grid gap-5">
-                  <h3 className="text-xl font-medium">Qual será seu tipo de conta?</h3>
+                <div className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">Qual será seu tipo de conta?</h3>
                   <RadioGroup
                     value={form.role}
                     onValueChange={(v) => {
@@ -336,8 +348,8 @@ export function RegisterDialog({
               )}
 
               {step === "firstName" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5">
-                  <h3 className="text-xl font-medium">Qual é o seu nome?</h3>
+                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">Qual é o seu nome?</h3>
                   <Input
                     autoFocus
                     aria-label="Nome"
@@ -352,8 +364,8 @@ export function RegisterDialog({
               )}
 
               {step === "lastName" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5">
-                  <h3 className="text-xl font-medium">E o seu sobrenome?</h3>
+                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">E o seu sobrenome?</h3>
                   <Input
                     autoFocus
                     aria-label="Sobrenome"
@@ -368,8 +380,8 @@ export function RegisterDialog({
               )}
 
               {step === "document" && (
-                <form onSubmit={submitDocument} className="grid gap-5">
-                  <h3 className="text-xl font-medium">Qual é o seu documento?</h3>
+                <form onSubmit={submitDocument} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">Qual é o seu documento?</h3>
                   <RadioGroup
                     value={form.documentType}
                     onValueChange={(v) => {
@@ -413,8 +425,8 @@ export function RegisterDialog({
               )}
 
               {step === "email" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5">
-                  <h3 className="text-xl font-medium">Qual é o seu email?</h3>
+                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">Qual é o seu email?</h3>
                   <Input
                     autoFocus
                     aria-label="Email"
@@ -430,8 +442,8 @@ export function RegisterDialog({
               )}
 
               {step === "team" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5">
-                  <h3 className="text-xl font-medium">
+                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">
                     Qual sua equipe ou instituição?{" "}
                     <span className="text-sm font-normal text-muted-foreground">
                       (opcional)
@@ -450,8 +462,8 @@ export function RegisterDialog({
               )}
 
               {step === "summary" && (
-                <div className="grid gap-5">
-                  <h3 className="text-xl font-medium">Confere se está tudo certo:</h3>
+                <div className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">Confere se está tudo certo:</h3>
                   <dl className="grid gap-2 rounded-lg border p-3 text-sm">
                     <SummaryRow label="Papel" value={ROLE_LABELS[form.role]} />
                     <SummaryRow
@@ -480,8 +492,8 @@ export function RegisterDialog({
               )}
 
               {step === "verify" && (
-                <form onSubmit={submitVerify} className="grid gap-5">
-                  <h3 className="text-xl font-medium">
+                <form onSubmit={submitVerify} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">
                     Enviamos um código pro seu email. Qual é?
                   </h3>
                   <p className="text-sm text-muted-foreground">
@@ -510,8 +522,8 @@ export function RegisterDialog({
               )}
 
               {step === "password" && (
-                <form onSubmit={submitPassword} className="grid gap-5">
-                  <h3 className="text-xl font-medium">Agora, crie uma senha:</h3>
+                <form onSubmit={submitPassword} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">Agora, crie uma senha:</h3>
 
                   <div className="grid gap-2.5">
                     <Input

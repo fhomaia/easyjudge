@@ -23,6 +23,7 @@ const initialForm = {
   name: "",
   startDate: "",
   location: "",
+  venue: "",
 };
 
 const ACCEPTED_LOGO_TYPES = "image/png,image/jpeg,image/webp,image/svg+xml";
@@ -86,6 +87,7 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
         name: form.name,
         startDate: form.startDate,
         location: form.location,
+        venue: form.venue,
       });
       if (photo) {
         event = await eventsApi.uploadLogo(event.id, photo);

@@ -61,36 +61,41 @@ export function EventFiltersBar({
         />
       </div>
 
-      <Select
-        value={statusFilter}
-        onValueChange={(value) => onStatusFilterChange(value as EventStatusFilter)}
-      >
-        <SelectTrigger className="sm:w-48">
-          <SelectValue>{(value: EventStatusFilter) => STATUS_FILTER_LABELS[value]}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.keys(STATUS_FILTER_LABELS) as EventStatusFilter[]).map((key) => (
-            <SelectItem key={key} value={key}>
-              {STATUS_FILTER_LABELS[key]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex gap-3">
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => onStatusFilterChange(value as EventStatusFilter)}
+        >
+          <SelectTrigger className="flex-1 sm:w-48 sm:flex-none">
+            <SelectValue>{(value: EventStatusFilter) => STATUS_FILTER_LABELS[value]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(STATUS_FILTER_LABELS) as EventStatusFilter[]).map((key) => (
+              <SelectItem key={key} value={key}>
+                {STATUS_FILTER_LABELS[key]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      <Select value={sort} onValueChange={(value) => onSortChange(value as EventSortOption)}>
-        <SelectTrigger className="sm:w-44">
-          <SelectValue>{(value: EventSortOption) => SORT_LABELS[value]}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.keys(SORT_LABELS) as EventSortOption[]).map((key) => (
-            <SelectItem key={key} value={key}>
-              {SORT_LABELS[key]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <Select value={sort} onValueChange={(value) => onSortChange(value as EventSortOption)}>
+          <SelectTrigger className="flex-1 sm:w-44 sm:flex-none">
+            <SelectValue>{(value: EventSortOption) => SORT_LABELS[value]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(SORT_LABELS) as EventSortOption[]).map((key) => (
+              <SelectItem key={key} value={key}>
+                {SORT_LABELS[key]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+      {/* Toggle lista/grade: só no desktop — no mobile a visão é sempre
+          em quadro (ver `effectiveView` na HomePage), então a opção de
+          lista não existe ali. */}
+      <div className="hidden items-center gap-1 rounded-lg bg-muted p-1 sm:flex">
         <button
           type="button"
           onClick={() => onViewChange("list")}

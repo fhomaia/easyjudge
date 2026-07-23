@@ -21,6 +21,7 @@ function toFormValues(event: Event): EventFormValues {
     name: event.name,
     startDate: event.startDate,
     location: event.location,
+    venue: event.venue ?? "",
   };
 }
 
@@ -59,6 +60,7 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
         name: form.name,
         startDate: form.startDate,
         location: form.location,
+        venue: form.venue,
       });
       onUpdated(updated);
       handleOpenChange(false);

@@ -74,6 +74,12 @@ export class EventsController {
     return this.eventsService.startEvent(id, req.user.userId);
   }
 
+  @Post(':id/unpublish')
+  @HttpCode(HttpStatus.OK)
+  unpublish(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.eventsService.unpublishEvent(id, req.user.userId);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {

@@ -1326,9 +1326,19 @@ número, caractere especial) + confirmar senha → conta criada e já loga
    `competitionDays` terminam?)
 4. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
    é por `id` de versão específica — ver gotcha de versionamento
-   acima) e propagar o conceito de `aliasId`/versionamento pra
-   `categories`/`teams`, que hoje ainda resolvem o evento pai só pelo
-   `id`, sem membership nem versionamento
+   acima). **Atualização (2026-07-19):** o refactor de endereçar as
+   entidades filhas do evento por `aliasId` internamente (não mais por
+   `id` de versão) já foi feito — `categories`/`program_participations`/
+   `schedule_days`/`regulations`/`judge_participations`/
+   `special_role_assignments` agora guardam `alias_id` (sem FK, mesmo
+   padrão de `EventMember.aliasId`), e `EventsService.publishEvent`
+   não precisa mais "adotar" entidades filhas numa republicação (ver
+   seção "Gerenciamento de acessos do evento" mais abaixo pro contexto
+   do bug que motivou isso). O que falta de verdade agora é só o
+   endereçamento HTTP em si: as rotas continuam usando o `id` de uma
+   versão específica (`/events/:eventId/...`), não o `aliasId` —
+   trocar isso é mudança maior (afeta como o frontend guarda/navega
+   links de evento) e continua fora de escopo por enquanto.
 5. Cobertura de testes automatizados: nenhum dos services/guards novos
    (`schedule`, `judging`, `event-staff`, `EventMemberGuard`) tem
    `.spec.ts` ainda — todo o backend segue validado só manualmente

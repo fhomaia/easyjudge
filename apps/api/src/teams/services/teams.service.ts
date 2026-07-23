@@ -6,6 +6,7 @@ import { Category } from '../../categories/entities/category.entity';
 import { CreateTeamDto } from '../dto/create-team.dto';
 import { UpdateTeamDto } from '../dto/update-team.dto';
 import { ProgramsService } from '../../programs/services/programs.service';
+import { EventsService } from '../../events/services/events.service';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class TeamsService {
     @InjectRepository(Category)
     private readonly categoriesRepo: Repository<Category>,
     private readonly programsService: ProgramsService,
+    private readonly eventsService: EventsService,
   ) {}
 
   async create(
@@ -44,12 +46,13 @@ export class TeamsService {
   // listagem só precisa identificar de qual programa é cada equipe,
   // não expor email/cidade/logo de novo aqui.
   async findAllForEvent(eventId: string): Promise<Team[]> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     return this.teamsRepo
       .createQueryBuilder('team')
       .innerJoin('team.program', 'program')
       .addSelect(['program.id', 'program.name'])
       .leftJoinAndSelect('team.categories', 'categories')
-      .where('program.eventId = :eventId', { eventId })
+      .where('program.aliasId = :aliasId', { aliasId: event.aliasId })
       .orderBy('team.createdAt', 'ASC')
       .getMany();
   }
@@ -80,10 +83,11 @@ export class TeamsService {
     teamId: string,
     categoryId: string,
   ): Promise<Team> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     await this.findTeamOrThrow(eventId, programId, teamId);
     const category = await this.categoriesRepo.findOneBy({
       id: categoryId,
-      eventId,
+      aliasId: event.aliasId,
     });
     if (!category) throw new NotFoundException('Categoria não encontrada');
 

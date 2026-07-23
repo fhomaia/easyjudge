@@ -57,9 +57,12 @@ export function EventStatCards({ events }: { events: Event[] }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
       {stats.map(({ key, label, subtitle, icon: Icon, iconClassName, value }) => (
-        <Card key={key} className="flex-row items-center gap-4 p-5">
+        <Card
+          key={key}
+          className="min-w-[70%] shrink-0 snap-start flex-row items-center gap-4 p-5 sm:min-w-0 sm:shrink"
+        >
           <div
             className={cn(
               "flex size-11 shrink-0 items-center justify-center rounded-full",

@@ -19,6 +19,7 @@ import { EventGridItem } from "@/components/EventGridItem";
 import { Pagination } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
 import { listVariants } from "@/lib/motionVariants";
+import { useIsMobile } from "@/lib/useIsMobile";
 import { ApiError, eventsApi, usersApi, type Event, type UserProfile } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 
@@ -54,6 +55,13 @@ export function HomePage() {
   const [sort, setSort] = useState<EventSortOption>("recent");
   const [view, setView] = useState<EventViewMode>("list");
   const [page, setPage] = useState(1);
+
+  // No mobile só faz sentido a visão em quadro (grade) — a de lista foi
+  // pensada pra linhas largas de desktop. `view`/`setView` continuam
+  // guardando a preferência de desktop normalmente; isso só decide o que
+  // é efetivamente renderizado.
+  const isMobile = useIsMobile();
+  const effectiveView: EventViewMode = isMobile ? "grid" : view;
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -136,12 +144,12 @@ export function HomePage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="flex justify-end px-10 pt-6">
+      <main className="flex-1 overflow-y-auto pt-14 sm:pt-0">
+        <div className="flex justify-end px-4 pt-4 sm:px-10 sm:pt-6">
           <NotificationBell />
         </div>
 
-        <div className="px-10 pb-10">
+        <div className="px-4 pb-6 sm:px-10 sm:pb-10">
           <AnimatePresence mode="wait">
             {events !== null && (
               <motion.div key="events" initial="hidden" animate="show" exit={{ opacity: 0 }}>
@@ -182,18 +190,18 @@ export function HomePage() {
                         </p>
                       ) : (
                         <motion.div
-                          key={view}
+                          key={effectiveView}
                           variants={listVariants}
                           initial="hidden"
                           animate="show"
                           className={
-                            view === "list"
+                            effectiveView === "list"
                               ? "grid gap-3"
                               : "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
                           }
                         >
                           {paginatedEvents.map((event) =>
-                            view === "list" ? (
+                            effectiveView === "list" ? (
                               <EventListItem
                                 key={event.id}
                                 event={event}

@@ -1,26 +1,6 @@
-import { addDays, endOfDay, isWithinInterval, parseISO, startOfDay } from "date-fns";
-import { cn } from "@/lib/utils";
+import { BlinkingDot } from "@/components/BlinkingDot";
+import { isEventDay } from "@/lib/eventDates";
 import type { Event } from "@/api/client";
-
-function isEventDay(event: Event): boolean {
-  const start = startOfDay(parseISO(event.startDate));
-  const end = endOfDay(addDays(start, event.competitionDays - 1));
-  return isWithinInterval(new Date(), { start, end });
-}
-
-function BlinkingDot({ colorClassName }: { colorClassName: string }) {
-  return (
-    <span className="relative flex size-2">
-      <span
-        className={cn(
-          "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
-          colorClassName,
-        )}
-      />
-      <span className={cn("relative inline-flex size-2 rounded-full", colorClassName)} />
-    </span>
-  );
-}
 
 interface EventLifecycleActionProps {
   event: Event;

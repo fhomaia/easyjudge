@@ -4,6 +4,20 @@
 @import "@fontsource-variable/plus-jakarta-sans";
 
 @custom-variant dark (&:is(.dark *));
+/* Telas baixas (celular em paisagem, ex. ~375-430px de altura) — usa
+   altura, não orientação, porque monitor de desktop também é "paisagem"
+   e não deve entrar nessa regra. */
+@custom-variant short (@media (max-height: 560px));
+
+/* Esconde a barra de rolagem mantendo o scroll funcional — usado nos
+   carrosséis horizontais do mobile (ex. KPIs da Home). */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 @theme inline {
     --font-heading: var(--font-sans);

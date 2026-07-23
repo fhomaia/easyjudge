@@ -8,7 +8,6 @@ import {
   JoinColumn,
   Unique,
 } from 'typeorm';
-import { Event } from '../../events/entities/event.entity';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
 import { ScheduleResource } from '../../schedule/entities/schedule-resource.entity';
 import { SpecialJudgeRole } from '../enums/special-judge-role.enum';
@@ -24,20 +23,19 @@ import { SpecialJudgeRole } from '../enums/special-judge-role.enum';
 // (mesmo raciocínio de CriterionJudgeAssignment). Ao contrário de
 // CriterionJudgeAssignment, esta guarda o próprio eventId: não deriva
 // de nenhum critério/template (função especial não é por sistema de
-// pontuação).
+// pontuação). Identificado pelo aliasId do evento (estável entre
+// versões), não pelo id de uma versão específica — sem FK, mesmo
+// padrão de EventMember.aliasId. Ver migration
+// AddAliasIdToEventScopedChildEntities.
 @Entity('special_role_assignments')
-@Unique(['eventId', 'role', 'resourceId', 'judgeParticipationId'])
+@Unique(['aliasId', 'role', 'resourceId', 'judgeParticipationId'])
 export class SpecialRoleAssignment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Index()
-  @Column({ name: 'event_id' })
-  eventId: string;
-
-  @ManyToOne(() => Event, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'event_id' })
-  event: Event;
+  @Column({ name: 'alias_id', type: 'uuid' })
+  aliasId: string;
 
   @Index()
   @Column({ name: 'resource_id' })

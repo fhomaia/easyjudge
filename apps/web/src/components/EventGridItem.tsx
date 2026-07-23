@@ -31,15 +31,23 @@ export function EventGridItem({
   const isAdmin = event.currentUserRole === "admin";
   const navigate = useNavigate();
   const isConfigurable = event.status === "created";
+  const isLive = event.status === "published" || event.status === "started";
+  const isClickable = isConfigurable || isLive;
 
   return (
     <motion.div
       variants={listItemVariants}
       whileHover={{ y: -2 }}
-      onClick={isConfigurable ? () => navigate(`/events/${event.id}/setup`) : undefined}
+      onClick={
+        isConfigurable
+          ? () => navigate(`/events/${event.id}/setup`)
+          : isLive
+            ? () => navigate(`/events/${event.id}/live`)
+            : undefined
+      }
       className={cn(
         "flex flex-col gap-3 rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:shadow-md",
-        isConfigurable && "cursor-pointer",
+        isClickable && "cursor-pointer",
       )}
     >
       <div className="flex items-start justify-between gap-2">

@@ -11,6 +11,7 @@ import { JudgeProfile } from '../entities/judge-profile.entity';
 import { CreateJudgeParticipationDto } from '../dto/create-judge-participation.dto';
 import { UpdateJudgeParticipationDto } from '../dto/update-judge-participation.dto';
 import { UpdateOwnJudgeDto } from '../dto/update-own-judge.dto';
+import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { UsersService } from '../../users/services/users.service';
@@ -87,7 +88,7 @@ export class JudgesService {
     const participation = this.participationsRepo.create({
       ...dto,
       userId,
-      eventId,
+      aliasId: event.aliasId,
       createdById,
     });
     const saved = await this.participationsRepo.save(participation);
@@ -105,9 +106,9 @@ export class JudgesService {
   }
 
   async findAllForEvent(eventId: string): Promise<JudgeParticipation[]> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const participations = await this.participationsRepo.find({
-      where: { eventId },
+      where: { aliasId: event.aliasId },
       order: { createdAt: 'DESC' },
     });
     return Promise.all(participations.map((p) => this.toJudgeView(p)));
@@ -174,9 +175,10 @@ export class JudgesService {
     eventId: string,
     id: string,
   ): Promise<JudgeParticipation> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const participation = await this.participationsRepo.findOneBy({
       id,
-      eventId,
+      aliasId: event.aliasId,
     });
     if (!participation) throw new NotFoundException('Jurado não encontrado');
     return participation;
@@ -269,17 +271,13 @@ export class JudgesService {
 
     // Também garante o papel "jurado" no roster de acessos de cada
     // evento recém-reclamado (ver EventStaffController) — dedupe por
-    // aliasId, já que o roster é por aliasId, não por id de versão.
-    const distinctEventIds = Array.from(
-      new Set(unclaimed.map((p) => p.eventId)),
-    );
-    const claimedAliasIds = new Set<string>();
-    for (const eventId of distinctEventIds) {
-      const event = await this.eventsService.findEventOrThrow(eventId);
-      if (claimedAliasIds.has(event.aliasId)) continue;
-      claimedAliasIds.add(event.aliasId);
+    // aliasId, que já é a própria coluna de JudgeParticipation (não
+    // precisa mais resolver eventId -> aliasId aqui, um lookup por
+    // linha).
+    const distinctAliasIds = new Set(unclaimed.map((p) => p.aliasId));
+    for (const aliasId of distinctAliasIds) {
       await this.eventsService.upsertMemberRole(
-        event.aliasId,
+        aliasId,
         EventMemberRole.JUDGE,
         {
           userId,
@@ -298,17 +296,36 @@ export class JudgesService {
     events: Array<{ eventId: string; eventName?: string; startDate?: string }>;
   }> {
     const profile = await this.getOrCreateProfile(userId);
-    const participations = await this.participationsRepo.find({
-      where: { userId },
-      relations: ['event'],
-      order: { createdAt: 'DESC' },
-    });
+    // JudgeParticipation não tem mais relação TypeORM com Event (só
+    // aliasId, sem FK) — join manual pela versão ATIVA de cada aliasId,
+    // já que o eventId devolvido pro frontend precisa continuar sendo o
+    // id de uma versão navegável (rotas continuam endereçadas por id de
+    // versão, não por aliasId).
+    const rows = await this.participationsRepo
+      .createQueryBuilder('p')
+      .leftJoin(
+        Event,
+        'event',
+        'event.aliasId = p.aliasId AND event.active = true',
+      )
+      .where('p.userId = :userId', { userId })
+      .select('p.id', 'id')
+      .addSelect('event.id', 'eventId')
+      .addSelect('event.name', 'eventName')
+      .addSelect('event.startDate', 'startDate')
+      .orderBy('p.createdAt', 'DESC')
+      .getRawMany<{
+        id: string;
+        eventId: string | null;
+        eventName: string | null;
+        startDate: string | null;
+      }>();
     return {
       profile,
-      events: participations.map((p) => ({
-        eventId: p.eventId,
-        eventName: p.event?.name,
-        startDate: p.event?.startDate,
+      events: rows.map((r) => ({
+        eventId: r.eventId ?? '',
+        eventName: r.eventName ?? undefined,
+        startDate: r.startDate ?? undefined,
       })),
     };
   }

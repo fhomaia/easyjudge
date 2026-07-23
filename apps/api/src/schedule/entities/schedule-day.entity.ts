@@ -5,29 +5,25 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
-  ManyToOne,
-  JoinColumn,
   Unique,
 } from 'typeorm';
-import { Event } from '../../events/entities/event.entity';
 
 // Um dia de competição dentro do evento. Nasce por get-or-create (ver
 // ScheduleService.getDays) — `dayIndex` 1..event.competitionDays na
 // primeira chamada; dias extras (além da contagem original do evento)
 // entram via `ScheduleService.addDay`.
 @Entity('schedule_days')
-@Unique(['eventId', 'dayIndex'])
+@Unique(['aliasId', 'dayIndex'])
 export class ScheduleDay {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Identifica o evento pelo aliasId (estável entre versões), não pelo
+  // id de uma versão específica — sem FK, mesmo padrão de
+  // EventMember.aliasId. Ver migration AddAliasIdToEventScopedChildEntities.
   @Index()
-  @Column({ name: 'event_id' })
-  eventId: string;
-
-  @ManyToOne(() => Event, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'event_id' })
-  event: Event;
+  @Column({ name: 'alias_id', type: 'uuid' })
+  aliasId: string;
 
   @Column({ name: 'day_index', type: 'int' })
   dayIndex: number;

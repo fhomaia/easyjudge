@@ -70,7 +70,7 @@ export class ScheduleService {
   async getDays(eventId: string): Promise<ScheduleDayView[]> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     let days = await this.daysRepo.find({
-      where: { eventId },
+      where: { aliasId: event.aliasId },
       order: { dayIndex: 'ASC' },
     });
     if (days.length === 0) {
@@ -88,7 +88,7 @@ export class ScheduleService {
   // estável entre dias, ver ScheduleResource) — por isso a atribuição
   // de jurado por recurso também é por dia, não por evento inteiro.
   async findResourcesWithScheduledCategories(
-    eventId: string,
+    aliasId: string,
     categoryIds: string[],
   ): Promise<
     Array<{
@@ -100,7 +100,7 @@ export class ScheduleService {
   > {
     if (categoryIds.length === 0) return [];
     const days = await this.daysRepo.find({
-      where: { eventId },
+      where: { aliasId },
       order: { dayIndex: 'ASC' },
     });
     const result: Array<{
@@ -141,7 +141,7 @@ export class ScheduleService {
   async addDay(eventId: string): Promise<ScheduleDayView> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const existing = await this.daysRepo.find({
-      where: { eventId },
+      where: { aliasId: event.aliasId },
       order: { dayIndex: 'DESC' },
       take: 1,
     });
@@ -159,7 +159,9 @@ export class ScheduleService {
   // maior índice existente + 1, nunca colide).
   async removeDay(eventId: string, dayId: string): Promise<void> {
     const day = await this.findDayOrThrow(eventId, dayId);
-    const totalDays = await this.daysRepo.count({ where: { eventId } });
+    const totalDays = await this.daysRepo.count({
+      where: { aliasId: day.aliasId },
+    });
     if (totalDays <= 1) {
       throw new ConflictException(
         'O evento precisa de pelo menos um dia — não é possível excluir o último.',
@@ -333,15 +335,15 @@ export class ScheduleService {
     eventId: string,
     dayId: string,
   ): Promise<UnscheduledPairView[]> {
-    await this.findDayOrThrow(eventId, dayId);
+    const day = await this.findDayOrThrow(eventId, dayId);
 
     const teams = await this.teamsRepo
       .createQueryBuilder('team')
-      .innerJoin('team.program', 'program', 'program.eventId = :eventId', {
-        eventId,
+      .innerJoin('team.program', 'program', 'program.aliasId = :aliasId', {
+        aliasId: day.aliasId,
       })
       .leftJoinAndSelect('team.categories', 'category')
-      .where('program.eventId = :eventId', { eventId })
+      .where('program.aliasId = :aliasId', { aliasId: day.aliasId })
       .getMany();
 
     const scheduled = await this.entriesRepo
@@ -388,7 +390,6 @@ export class ScheduleService {
 
     if (dto.type === ScheduleEntryType.PRESENTATION) {
       const entries = await this.createPresentationWithWarmup(
-        eventId,
         day,
         resource,
         dto,
@@ -439,7 +440,7 @@ export class ScheduleService {
     // apresentação atrás) — o usuário pode reposicionar o aquecimento
     // de forma independente sem afetar quando a equipe se apresenta.
     if (entry.type === ScheduleEntryType.PRESENTATION) {
-      return this.movePresentationWithWarmup(eventId, day, entry, dto);
+      return this.movePresentationWithWarmup(day, entry, dto);
     }
 
     await this.findResourceOrThrow(dayId, dto.resourceId);
@@ -474,7 +475,6 @@ export class ScheduleService {
   // essa lógica evita duplicar as regras de "não sobrepor a equipe" e
   // "aquecimento sempre termina a tempo" para o caso de mover.
   private async movePresentationWithWarmup(
-    eventId: string,
     day: ScheduleDay,
     presentation: ScheduleEntry,
     dto: MoveScheduleEntryDto,
@@ -520,7 +520,6 @@ export class ScheduleService {
     await this.reconcileWarmupDelays(day.id);
 
     const [newPresentation] = await this.createPresentationWithWarmup(
-      eventId,
       day,
       targetResource,
       {
@@ -819,11 +818,10 @@ export class ScheduleService {
     eventId: string,
     sourceDayId: string,
   ): Promise<ScheduleDayView[]> {
-    await this.eventsService.findEventOrThrow(eventId);
     const sourceDay = await this.findDayOrThrow(eventId, sourceDayId);
 
     const allDays = await this.daysRepo.find({
-      where: { eventId },
+      where: { aliasId: sourceDay.aliasId },
       order: { dayIndex: 'ASC' },
     });
     const targetDays = allDays.filter((d) => d.id !== sourceDayId);
@@ -933,7 +931,6 @@ export class ScheduleService {
   }
 
   private async createPresentationWithWarmup(
-    eventId: string,
     day: ScheduleDay,
     resource: ScheduleResource,
     dto: CreateScheduleEntryDto,
@@ -950,7 +947,7 @@ export class ScheduleService {
     }
 
     const { category } = await this.validateSchedulablePair(
-      eventId,
+      day.aliasId,
       day.id,
       dto.teamId,
       dto.categoryId,
@@ -1348,21 +1345,21 @@ export class ScheduleService {
   }
 
   private async validateSchedulablePair(
-    eventId: string,
+    aliasId: string,
     dayId: string,
     teamId: string,
     categoryId: string,
   ): Promise<{ team: Team; category: Category }> {
     const category = await this.categoriesRepo.findOneBy({
       id: categoryId,
-      eventId,
+      aliasId,
     });
     if (!category) throw new NotFoundException('Categoria não encontrada');
 
     const team = await this.teamsRepo
       .createQueryBuilder('team')
-      .innerJoin('team.program', 'program', 'program.eventId = :eventId', {
-        eventId,
+      .innerJoin('team.program', 'program', 'program.aliasId = :aliasId', {
+        aliasId,
       })
       .innerJoin('team.categories', 'category', 'category.id = :categoryId', {
         categoryId,
@@ -1494,7 +1491,7 @@ export class ScheduleService {
   ): Promise<ScheduleDay> {
     const date = addDaysToDateString(event.startDate, dayIndex - 1);
     const day = this.daysRepo.create({
-      eventId: event.id,
+      aliasId: event.aliasId,
       dayIndex,
       date,
       startMinutes: 480,
@@ -1594,8 +1591,11 @@ export class ScheduleService {
   // função especial (ver SpecialRoleAssignment) pertence de fato ao
   // evento antes de gravar a atribuição.
   async findDayOrThrow(eventId: string, dayId: string): Promise<ScheduleDay> {
-    await this.eventsService.findEventOrThrow(eventId);
-    const day = await this.daysRepo.findOneBy({ id: dayId, eventId });
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const day = await this.daysRepo.findOneBy({
+      id: dayId,
+      aliasId: event.aliasId,
+    });
     if (!day) throw new NotFoundException('Dia do cronograma não encontrado');
     return day;
   }

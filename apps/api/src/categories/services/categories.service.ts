@@ -22,20 +22,23 @@ export class CategoriesService {
     dto: CreateCategoryDto,
     userId: string,
   ): Promise<Category> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     await this.scoringTemplatesService.assertUsableTemplate(
       dto.scoringTemplateId,
       userId,
     );
-    const category = this.categoriesRepo.create({ ...dto, eventId });
+    const category = this.categoriesRepo.create({
+      ...dto,
+      aliasId: event.aliasId,
+    });
     const saved = await this.categoriesRepo.save(category);
     return this.findCategoryWithTemplate(saved.id);
   }
 
   async findAllForEvent(eventId: string): Promise<Category[]> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     return this.categoriesRepo.find({
-      where: { eventId },
+      where: { aliasId: event.aliasId },
       relations: ['scoringTemplate'],
       order: { createdAt: 'DESC' },
     });
@@ -68,7 +71,11 @@ export class CategoriesService {
     eventId: string,
     id: string,
   ): Promise<Category> {
-    const category = await this.categoriesRepo.findOneBy({ id, eventId });
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const category = await this.categoriesRepo.findOneBy({
+      id,
+      aliasId: event.aliasId,
+    });
     if (!category) throw new NotFoundException('Categoria não encontrada');
     return category;
   }

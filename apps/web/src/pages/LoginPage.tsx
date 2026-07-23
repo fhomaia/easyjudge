@@ -39,7 +39,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-svh items-center justify-center overflow-hidden p-4">
+    <div className="relative flex min-h-svh items-center justify-center overflow-x-hidden overflow-y-auto p-4">
       <BrandBackdrop />
 
       <motion.div
@@ -48,19 +48,19 @@ export function LoginPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 1, duration: 0.5, ease: "easeOut" }}
       >
-        <Card className="w-full gap-0 border-none py-10 shadow-2xl shadow-black/10 [--card-spacing:--spacing(10)]">
-          <CardHeader className="justify-items-center gap-5 text-center">
+        <Card className="w-full gap-0 border-none py-10 shadow-2xl shadow-black/10 [--card-spacing:--spacing(10)] short:py-4 short:[--card-spacing:--spacing(4)]">
+          <CardHeader className="justify-items-center gap-5 text-center short:gap-2">
             <img
               src="/logo.png"
               alt="easyJudge"
-              className="mx-auto w-full max-w-[220px]"
+              className="mx-auto w-full max-w-[220px] short:max-w-[130px]"
             />
-            <CardDescription className="text-base">
+            <CardDescription className="text-base short:hidden">
               Entre na sua conta para continuar.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
-            <CardContent className="grid gap-6 pt-8">
+            <CardContent className="grid gap-6 pt-8 short:gap-3 short:pt-4">
               <FormError message={error} />
               <div className="grid gap-2.5">
                 <Label htmlFor="email">Email</Label>
@@ -85,7 +85,7 @@ export function LoginPage() {
                 />
               </div>
             </CardContent>
-            <div className="grid gap-4 px-(--card-spacing) pt-2 pb-(--card-spacing)">
+            <div className="grid gap-4 px-(--card-spacing) pt-2 pb-(--card-spacing) short:gap-2">
               <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
                 <Button type="submit" disabled={loading} className="w-full">
                   {loading ? "Entrando..." : "Entrar"}

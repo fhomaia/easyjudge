@@ -135,8 +135,10 @@ export interface Event {
   startDate: string;
   competitionDays: number;
   location: string;
+  venue: string | null;
   logoUrl: string | null;
   status: EventStatus;
+  startedAt: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -159,6 +161,7 @@ export interface CreateEventPayload {
   // Backend aplica default 1 quando omitido.
   competitionDays?: number;
   location: string;
+  venue?: string;
 }
 
 export type UpdateEventPayload = Partial<CreateEventPayload>;
@@ -185,6 +188,9 @@ export const eventsApi = {
 
   start: (id: string) =>
     authRequest<Event>(`/events/${id}/start`, { method: "POST" }),
+
+  unpublish: (id: string) =>
+    authRequest<Event>(`/events/${id}/unpublish`, { method: "POST" }),
 
   remove: (id: string) =>
     authRequest<void>(`/events/${id}`, { method: "DELETE" }),

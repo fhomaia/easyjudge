@@ -41,9 +41,9 @@ export class RegulationsService {
   ) {}
 
   async getForEvent(eventId: string): Promise<RegulationView> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const regulation = await this.regulationsRepo.findOne({
-      where: { eventId },
+      where: { aliasId: event.aliasId },
       relations: ['documents'],
     });
     return this.toView(eventId, regulation);
@@ -97,7 +97,10 @@ export class RegulationsService {
   }
 
   async deleteDocument(eventId: string, documentId: string): Promise<void> {
-    const regulation = await this.regulationsRepo.findOneBy({ eventId });
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const regulation = await this.regulationsRepo.findOneBy({
+      aliasId: event.aliasId,
+    });
     if (!regulation) throw new NotFoundException('Documento não encontrado');
 
     const document = await this.documentsRepo.findOneBy({ id: documentId });
@@ -109,15 +112,15 @@ export class RegulationsService {
   }
 
   private async getOrCreateForEvent(eventId: string): Promise<Regulation> {
-    await this.eventsService.findEventOrThrow(eventId);
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const existing = await this.regulationsRepo.findOne({
-      where: { eventId },
+      where: { aliasId: event.aliasId },
       relations: ['documents'],
     });
     if (existing) return existing;
 
     const regulation = this.regulationsRepo.create({
-      eventId,
+      aliasId: event.aliasId,
       deductionMode: RegulationDeductionMode.IASF,
       deductionValues: null,
     });

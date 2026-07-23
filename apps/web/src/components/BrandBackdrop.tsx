@@ -81,23 +81,25 @@ export function BrandBackdrop({ className, variant = "split", onDone }: BrandBac
             animate={{ opacity: phase === "strike" ? 0 : 1 }}
             transition={{ duration: 0.2 }}
           >
-            <g clipPath="url(#bolt-clip-left)">
-              {/* bg-left.webp já vem pré-recortada (via PIL, a partir do
-                  arquivo original em alta resolução) com a atleta
-                  posicionada à esquerda do quadro — não precisa de zoom
-                  nem deslocamento aqui. width=100 é exatamente a largura
-                  da região visível (cobertura mínima, sem upscale extra
-                  que perderia nitidez); a altura sobra (153 > 100) e
-                  estoura pro rodapé, então a foto aparece cortada embaixo
-                  e sobra uma faixa fina da cor no topo em vez de vazio. */}
+            {/* Mobile (<sm): em telas estreitas/retrato, o "slice" do
+                <svg> pai já corta as laterais do viewBox pra cobrir a
+                altura — a faixa central que sobra visível cai bem em
+                cima da linha divisória, então nenhuma das duas fotos do
+                split aparece de fato. Sem split aqui: só a foto da
+                esquerda, cobrindo o viewBox inteiro. */}
+            <g className="sm:hidden">
               <rect x={0} y={0} width={160} height={100} fill="var(--brand-blue)" />
+              {/* "xMidYMin" (não "YMid"): alinha pelo topo da foto — o
+                  rosto/tronco da atleta fica perto do topo do arquivo
+                  pré-recortado (ver bg-left.webp), então cover
+                  centralizado (YMid) cortava a cabeça e sobrava perna. */}
               <image
                 href="/bg-left.webp"
                 x={0}
-                y={-5}
-                width={100}
-                height={153}
-                preserveAspectRatio="xMidYMid slice"
+                y={0}
+                width={160}
+                height={100}
+                preserveAspectRatio="xMidYMin slice"
               />
               <rect
                 x={0}
@@ -108,24 +110,55 @@ export function BrandBackdrop({ className, variant = "split", onDone }: BrandBac
                 opacity={0.55}
               />
             </g>
-            <g clipPath="url(#bolt-clip-right)">
-              <rect x={0} y={0} width={160} height={100} fill="var(--brand-yellow)" />
-              <image
-                href="/bg-right.webp"
-                x={44}
-                y={9}
-                width={122}
-                height={81}
-                preserveAspectRatio="xMidYMid slice"
-              />
-              <rect
-                x={0}
-                y={0}
-                width={160}
-                height={100}
-                fill="var(--brand-yellow)"
-                opacity={0.55}
-              />
+
+            {/* Desktop (>=sm): tela dividida azul/amarelo, como antes. */}
+            <g className="hidden sm:block">
+              <g clipPath="url(#bolt-clip-left)">
+                {/* bg-left.webp já vem pré-recortada (via PIL, a partir do
+                    arquivo original em alta resolução) com a atleta
+                    posicionada à esquerda do quadro — não precisa de zoom
+                    nem deslocamento aqui. width=100 é exatamente a largura
+                    da região visível (cobertura mínima, sem upscale extra
+                    que perderia nitidez); a altura sobra (153 > 100) e
+                    estoura pro rodapé, então a foto aparece cortada embaixo
+                    e sobra uma faixa fina da cor no topo em vez de vazio. */}
+                <rect x={0} y={0} width={160} height={100} fill="var(--brand-blue)" />
+                <image
+                  href="/bg-left.webp"
+                  x={0}
+                  y={-5}
+                  width={100}
+                  height={153}
+                  preserveAspectRatio="xMidYMid slice"
+                />
+                <rect
+                  x={0}
+                  y={0}
+                  width={160}
+                  height={100}
+                  fill="var(--brand-blue)"
+                  opacity={0.55}
+                />
+              </g>
+              <g clipPath="url(#bolt-clip-right)">
+                <rect x={0} y={0} width={160} height={100} fill="var(--brand-yellow)" />
+                <image
+                  href="/bg-right.webp"
+                  x={44}
+                  y={9}
+                  width={122}
+                  height={81}
+                  preserveAspectRatio="xMidYMid slice"
+                />
+                <rect
+                  x={0}
+                  y={0}
+                  width={160}
+                  height={100}
+                  fill="var(--brand-yellow)"
+                  opacity={0.55}
+                />
+              </g>
             </g>
           </motion.g>
         )}
@@ -151,7 +184,9 @@ export function BrandBackdrop({ className, variant = "split", onDone }: BrandBac
         {/* No variant "plain" o contorno branco só aparece durante o
             flash — na fase "done" o raio já deve ter sumido da tela
             (pedido do usuário), diferente do variant "split" onde ele
-            fica marcando a divisão azul/amarelo permanentemente. */}
+            fica marcando a divisão azul/amarelo permanentemente. No
+            mobile (<sm) não há split (ver grupo "sm:hidden" acima), então
+            esse traço fica sem sentido ali — escondido nesse caso. */}
         {(phase === "flash" || (phase === "done" && variant === "split")) && (
           <motion.polyline
             points={BOLT_LINE}
@@ -160,6 +195,9 @@ export function BrandBackdrop({ className, variant = "split", onDone }: BrandBac
             strokeWidth={0.9}
             strokeLinecap="round"
             strokeLinejoin="round"
+            className={
+              phase === "done" && variant === "split" ? "hidden sm:block" : undefined
+            }
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.2 }}
