@@ -184,6 +184,19 @@ export class JudgesService {
     return participation;
   }
 
+  // Usado por JudgingService (GET .../judging/me) pra resolver "quem sou
+  // eu, como jurado, neste evento" a partir do userId do token — ao
+  // contrário de findJudgeOrThrow, não lança 404: o usuário logado pode
+  // legitimamente não ser jurado neste evento (admin/assessor acessando a
+  // tela de Notas, por exemplo).
+  async findParticipationByUserId(
+    eventId: string,
+    userId: string,
+  ): Promise<JudgeParticipation | null> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    return this.participationsRepo.findOneBy({ aliasId: event.aliasId, userId });
+  }
+
   // Qualquer usuário pode assumir o papel de jurado num evento, exceto
   // contas PROGRAM (a instituição/academia, não uma pessoa que julga).
   private async assertJudgeUser(userId: string): Promise<void> {

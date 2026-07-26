@@ -64,6 +64,7 @@ const ROLE_PRECEDENCE = [
   EventMemberRole.ADMIN,
   EventMemberRole.ASSESSOR,
   EventMemberRole.JUDGE,
+  EventMemberRole.PROGRAM,
   EventMemberRole.SPECTATOR,
 ];
 
@@ -425,6 +426,40 @@ export class EventsService {
   async setEventLogo(id: string, file: Express.Multer.File) {
     const event = await this.findEventOrThrow(id);
     event.logoUrl = `/uploads/logos/${file.filename}`;
+    return this.eventsRepo.save(event);
+  }
+
+  // Liberação de notas/contestação/resultado pra equipe/atletas — ação
+  // global do evento (ver ScoringService, que é quem chama isto a
+  // partir de AdminScoringController). Cascata: ligar contestação liga
+  // notas junto (não dá pra contestar sem poder ver a nota); desligar
+  // notas desliga contestação junto. `resultsReleased` não participa
+  // dessa cascata — resultado final é uma liberação independente das
+  // outras duas (ver Event.resultsReleasedAt).
+  async setReleaseFlags(
+    id: string,
+    changes: {
+      scoresReleased?: boolean;
+      contestationReleased?: boolean;
+      resultsReleased?: boolean;
+    },
+  ): Promise<Event> {
+    const event = await this.findEventOrThrow(id);
+    if (changes.scoresReleased !== undefined) {
+      event.scoresReleasedAt = changes.scoresReleased ? new Date() : null;
+      if (!changes.scoresReleased) event.contestationReleasedAt = null;
+    }
+    if (changes.contestationReleased !== undefined) {
+      event.contestationReleasedAt = changes.contestationReleased
+        ? new Date()
+        : null;
+      if (changes.contestationReleased && !event.scoresReleasedAt) {
+        event.scoresReleasedAt = new Date();
+      }
+    }
+    if (changes.resultsReleased !== undefined) {
+      event.resultsReleasedAt = changes.resultsReleased ? new Date() : null;
+    }
     return this.eventsRepo.save(event);
   }
 

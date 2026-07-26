@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Download, FileSpreadsheet, FileText, Search } from "lucide-react";
+import { CalendarDays, Download, FileSpreadsheet, FileText, MapPin, Search, Trophy } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ENTRY_VISUALS, EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
+import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
+import { resolveCenterTab } from "@/lib/eventNavPriority";
 import { formatDate } from "@/lib/formatDate";
+import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatMinutes } from "@/lib/scheduleTime";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import {
@@ -57,7 +59,7 @@ export function EventLiveSchedulePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  useEventSetupGuard(id);
+  useEventLiveGuard(id);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
@@ -179,6 +181,9 @@ export function EventLiveSchedulePage() {
     current: "cronograma",
     onNavigateHome: () => navigate(`/events/${event.id}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
+    onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
+    onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
+    centerTab: resolveCenterTab(event.currentUserRoles),
   });
 
   return (
@@ -186,12 +191,30 @@ export function EventLiveSchedulePage() {
       <AppSidebar profile={profile} onLogout={handleLogout} eventNavItems={eventNavTabs} />
 
       <main className="flex flex-1 flex-col overflow-hidden pt-14 sm:pt-0">
+        <header className="border-b border-border bg-card px-4 py-5 sm:px-8">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600">
+              <Trophy className="size-6 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-bold text-foreground">{event.name}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="size-4" />
+                  {formatEventDateRange(event.startDate, event.competitionDays)}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="size-4" />
+                  {event.location}
+                </span>
+              </div>
+            </div>
+          </div>
+        </header>
+
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-4 sm:px-8 sm:py-6">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Cronograma completo</h1>
-              <p className="mt-1 text-sm text-muted-foreground">{event.name}</p>
-            </div>
+            <h2 className="text-lg font-bold text-foreground">Cronograma completo</h2>
 
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" />}>

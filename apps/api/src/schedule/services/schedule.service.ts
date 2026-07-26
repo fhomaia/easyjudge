@@ -1626,6 +1626,52 @@ export class ScheduleService {
     return resource;
   }
 
+  // Público — usado por ScoringService (tela de lançar notas) pra
+  // validar um entryId sem já saber de qual dia/recurso ele é (mesmo
+  // raciocínio de findResourceInEventOrThrow). Só entries de
+  // apresentação fazem sentido pra pontuação, mas a checagem de `type`
+  // fica por conta de quem chama, não daqui.
+  async findEntryInEventOrThrow(
+    eventId: string,
+    entryId: string,
+  ): Promise<ScheduleEntry> {
+    const entry = await this.entriesRepo.findOneBy({ id: entryId });
+    if (!entry)
+      throw new NotFoundException('Item do cronograma não encontrado');
+    await this.findResourceInEventOrThrow(eventId, entry.resourceId);
+    return entry;
+  }
+
+  // Grava quando a equipe solicitou contestação (ver
+  // ScoringService.requestContestation, que já validou dono +
+  // liberação antes de chamar isto) — idempotente, não sobrescreve um
+  // pedido já registrado.
+  async setContestationRequested(
+    eventId: string,
+    entryId: string,
+  ): Promise<void> {
+    const entry = await this.findEntryInEventOrThrow(eventId, entryId);
+    if (entry.contestationRequestedAt) return;
+    entry.contestationRequestedAt = new Date();
+    await this.entriesRepo.save(entry);
+  }
+
+  // Jurado marca a contestação como resolvida (ver
+  // ScoringService.resolveContestation, que já validou que a
+  // apresentação tem contestação solicitada antes de chamar isto) —
+  // idempotente, não sobrescreve uma resolução já registrada.
+  // `contestationRequestedAt` nunca é limpo (é o que trava "uma única
+  // contestação por apresentação").
+  async setContestationResolved(
+    eventId: string,
+    entryId: string,
+  ): Promise<void> {
+    const entry = await this.findEntryInEventOrThrow(eventId, entryId);
+    if (entry.contestationResolvedAt) return;
+    entry.contestationResolvedAt = new Date();
+    await this.entriesRepo.save(entry);
+  }
+
   // Busca a entry SEM popular a relação `resource` de propósito — se
   // ela viesse hidratada e depois mudássemos só a coluna crua
   // `entry.resourceId` (ver moveEntry), o TypeORM monta o UPDATE a

@@ -6,6 +6,7 @@ import {
   Put,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JudgingService } from '../services/judging.service';
@@ -19,6 +20,7 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { EventMemberGuard } from '../../events/guards/event-member.guard';
 import { EventRoles } from '../../events/decorators/event-roles.decorator';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
+import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
 const WRITE_ROLES = [EventMemberRole.ADMIN, EventMemberRole.ASSESSOR];
 const READ_ROLES = [...WRITE_ROLES, EventMemberRole.JUDGE];
@@ -36,6 +38,15 @@ export class JudgingController {
     @Query('templateId') templateId: string,
   ) {
     return this.judgingService.getAssignments(eventId, templateId);
+  }
+
+  @Get('me')
+  @EventRoles(...READ_ROLES)
+  getMyAssignments(
+    @Param('eventId') eventId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.judgingService.getMyAssignments(eventId, req.user.userId);
   }
 
   @Put(

@@ -7,6 +7,7 @@ export const EVENT_MEMBER_ROLE_LABELS: Record<EventMemberRole, string> = {
   assessor: "Assessor",
   judge: "Jurado",
   spectator: "Espectador",
+  program: "Programa",
 };
 
 export const EVENT_MEMBER_ROLE_DESCRIPTIONS: Record<EventMemberRole, string> = {
@@ -17,8 +18,13 @@ export const EVENT_MEMBER_ROLE_DESCRIPTIONS: Record<EventMemberRole, string> = {
   judge:
     "Só enxerga o evento depois de publicado. Não edita configurações — visualiza os sistemas de pontuação.",
   spectator: "Só enxerga o evento depois de publicado. Não edita nada.",
+  program:
+    "Concedido automaticamente a programas vinculados ao evento — vê só as notas das próprias equipes, quando liberadas.",
 };
 
+// "program" fica de fora — é concedido automaticamente (ver
+// ProgramsService), não é um papel que o admin atribui manualmente
+// pelo roster de acessos (EventStaffPage).
 export const EVENT_MEMBER_ROLES_ORDER: EventMemberRole[] = [
   "admin",
   "assessor",

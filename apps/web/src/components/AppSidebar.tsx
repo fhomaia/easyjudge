@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { LogOut, Menu } from "lucide-react";
+import { Eye, LogOut, Menu, UserCog } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/roleLabels";
+import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
 import { BrandMark, MobileNavSheet, NAV_ITEMS, type EventNavItem } from "@/components/MobileNavSheet";
+import { ImpersonateDialog } from "@/components/ImpersonateDialog";
+import { useAuthStore } from "@/store/auth";
 import type { UserProfile } from "@/api/client";
 
 interface AppSidebarProps {
@@ -95,8 +98,44 @@ function ProfileFooter({
   profile: UserProfile | null;
   onLogout: () => void;
 }) {
+  const [impersonateOpen, setImpersonateOpen] = useState(false);
+  const canImpersonate = profile?.email.toLowerCase() === IMPERSONATOR_EMAIL;
+  const impersonatorToken = useAuthStore((s) => s.impersonatorToken);
+  const impersonatingLabel = useAuthStore((s) => s.impersonatingLabel);
+  const stopImpersonation = useAuthStore((s) => s.stopImpersonation);
+
+  function handleStopImpersonation() {
+    stopImpersonation();
+    window.location.href = "/";
+  }
+
   return (
-    <div className="flex items-center justify-between gap-2 border-t border-white/10 p-3">
+    <div className="border-t border-white/10 p-3">
+      {/* Vem pro rodapé da sidebar (2026-07-24, a pedido do usuário) —
+          antes era uma faixa fixa no topo de qualquer página
+          (ImpersonationBanner), mas atrapalhava a visualização em
+          telas operacionais (ex: EventLiveScoringPage, que nem sequer
+          renderiza esta sidebar — nesse caso específico não há
+          indicador de impersonation nenhum, aceitável por ser uma
+          ferramenta de uso do próprio dono da conta). */}
+      {impersonatorToken && (
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-amber-500/15 px-2.5 py-2">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-amber-300">
+            <Eye className="size-3.5 shrink-0" />
+            <span className="truncate">
+              Vendo como <span className="font-semibold">{impersonatingLabel}</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleStopImpersonation}
+            className="shrink-0 text-xs font-medium text-amber-200 hover:underline"
+          >
+            Voltar
+          </button>
+        </div>
+      )}
+    <div className="flex items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-2.5">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow text-sm font-semibold text-brand-navy">
           {profile ? getUserInitials(profile) : "…"}
@@ -110,14 +149,31 @@ function ProfileFooter({
           </p>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onLogout}
-        aria-label="Sair"
-        className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-      >
-        <LogOut className="size-4" />
-      </button>
+      <div className="flex shrink-0 items-center gap-1">
+        {canImpersonate && (
+          <>
+            <button
+              type="button"
+              onClick={() => setImpersonateOpen(true)}
+              aria-label="Entrar como outro usuário"
+              title="Entrar como outro usuário"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <UserCog className="size-4" />
+            </button>
+            <ImpersonateDialog open={impersonateOpen} onOpenChange={setImpersonateOpen} />
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onLogout}
+          aria-label="Sair"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <LogOut className="size-4" />
+        </button>
+      </div>
+    </div>
     </div>
   );
 }

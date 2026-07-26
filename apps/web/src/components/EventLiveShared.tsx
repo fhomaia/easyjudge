@@ -56,12 +56,13 @@ export const MOCK_ALERTS = [
 
 // Abas "NESTE EVENTO" — reaproveitadas pelo menu lateral de desktop
 // (AppSidebar), pelo drawer mobile (MobileNavSheet) e pelo menu inferior
-// mobile de EventLiveDashboardPage. Só "Início" e "Cronograma" têm tela
-// de verdade hoje — Resultados/Notas/Alertas/Histórico continuam
+// mobile de EventLiveDashboardPage. "Início"/"Cronograma"/"Notas"/
+// "Resultados" têm tela de verdade — Alertas/Histórico continuam
 // placeholder (sem onClick, ficam desabilitadas) até ganharem sua
-// própria página. "Notas" é onde o jurado vai lançar nota por
-// apresentação (e a equipe vai ver a própria nota) quando esse módulo
-// existir — hoje só reserva o lugar no menu.
+// própria página.
+// "Notas" (EventLiveNotesPage) é o hub do jurado com as apresentações
+// que ele julga — o formulário de lançar nota em si ainda não existe
+// (botão "Lançar notas" fica desabilitado dentro dela).
 export interface EventNavTab {
   key: string;
   label: string;
@@ -82,7 +83,33 @@ export function buildEventNavTabs(opts: {
   current: "inicio" | "cronograma" | "resultados" | "notas" | "alertas" | "historico";
   onNavigateHome: () => void;
   onNavigateSchedule: () => void;
+  onNavigateNotes: () => void;
+  onNavigateResults: () => void;
+  // Qual aba (Resultados ou Notas) cai na posição central dos 5 slots
+  // do menu inferior — ver lib/eventNavPriority.ts. Default "resultados"
+  // (comportamento de sempre) pra quem já chama sem passar isso.
+  centerTab?: "resultados" | "notas";
 }): EventNavTab[] {
+  const resultadosTab: EventNavTab = {
+    key: "resultados",
+    label: "Resultados",
+    icon: Trophy,
+    current: opts.current === "resultados",
+    onClick: opts.onNavigateResults,
+  };
+  const notasTab: EventNavTab = {
+    key: "notas",
+    label: "Notas",
+    icon: ClipboardList,
+    current: opts.current === "notas",
+    onClick: opts.onNavigateNotes,
+  };
+  // Ordem padrão é [..., resultados, notas, ...] (Resultados centralizada,
+  // 3ª de 5 posições) — quando `centerTab` é "notas" (jurado, ver
+  // resolveCenterTab), inverte pra Notas cair na posição central.
+  const [middleLeft, middleRight] =
+    opts.centerTab === "notas" ? [notasTab, resultadosTab] : [resultadosTab, notasTab];
+
   return [
     { key: "inicio", label: "Início", icon: Home, current: opts.current === "inicio", onClick: opts.onNavigateHome },
     {
@@ -92,8 +119,8 @@ export function buildEventNavTabs(opts: {
       current: opts.current === "cronograma",
       onClick: opts.onNavigateSchedule,
     },
-    { key: "resultados", label: "Resultados", icon: Trophy, current: opts.current === "resultados" },
-    { key: "notas", label: "Notas", icon: ClipboardList, current: opts.current === "notas" },
+    middleLeft,
+    middleRight,
     {
       key: "alertas",
       label: "Alertas",
@@ -259,4 +286,52 @@ export function StatTile({
   }
 
   return <div className={className}>{content}</div>;
+}
+
+// Tile compacto da faixa de métricas do topo de EventLiveNotesPage
+// (Horário atual/Apresentações/Minhas funções/Progresso do dia) —
+// formato diferente de StatTile (sem barra de progresso, ícone menor,
+// e "Minhas funções" precisa mostrar 1-2 linhas de texto em vez de um
+// número só), por isso não reaproveita StatTile diretamente.
+export function MetricTile({
+  icon: Icon,
+  iconClassName,
+  label,
+  value,
+  sub,
+  lines,
+}: {
+  icon: typeof CalendarDays;
+  iconClassName: string;
+  label: string;
+  value?: string;
+  // Segunda linha menor/discreta abaixo do valor (ex. a data, sob o
+  // horário atual) — só usado no modo `value`, não em `lines`.
+  sub?: string;
+  lines?: string[];
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <div className="flex items-center gap-1.5">
+        <div className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", iconClassName)}>
+          <Icon className="size-3.5" />
+        </div>
+        <p className="truncate text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
+      </div>
+      {lines && lines.length > 0 ? (
+        <div className="mt-1 space-y-0.5">
+          {lines.map((line) => (
+            <p key={line} className="truncate text-sm font-bold text-foreground">
+              {line}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <>
+          <p className="mt-1 truncate text-lg font-bold text-foreground">{value}</p>
+          {sub && <p className="truncate text-[11px] text-muted-foreground">{sub}</p>}
+        </>
+      )}
+    </div>
+  );
 }

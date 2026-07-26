@@ -14,6 +14,7 @@ import { ScoringTemplatesModule } from './scoring-templates/scoring-templates.mo
 import { RegulationsModule } from './regulations/regulations.module';
 import { JudgingModule } from './judging/judging.module';
 import { ScheduleModule } from './schedule/schedule.module';
+import { ScoringModule } from './scoring/scoring.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { ScheduleModule } from './schedule/schedule.module';
     RegulationsModule,
     JudgingModule,
     ScheduleModule,
+    ScoringModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -33,7 +33,13 @@ import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 export class ScheduleController {
   constructor(private readonly scheduleService: ScheduleService) {}
 
+  // Override do @EventRoles de classe (ADMIN/ASSESSOR) só pra esta
+  // rota — jurado precisa LER o cronograma pra saber o que julgar
+  // (telas "Início"/"Notas" do evento ao vivo), mas continua sem poder
+  // editar nada aqui (as outras rotas deste controller continuam
+  // admin/assessor only).
   @Get('days')
+  @EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR, EventMemberRole.JUDGE)
   getDays(@Param('eventId') eventId: string) {
     return this.scheduleService.getDays(eventId);
   }

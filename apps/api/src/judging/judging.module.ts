@@ -24,5 +24,6 @@ import { ScheduleModule } from '../schedule/schedule.module';
   ],
   controllers: [JudgingController],
   providers: [JudgingService],
+  exports: [JudgingService],
 })
 export class JudgingModule {}

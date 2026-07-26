@@ -13,6 +13,7 @@ import { UpdateProgramParticipationDto } from '../dto/update-program-participati
 import { UpdateOwnProgramDto } from '../dto/update-own-program.dto';
 import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { UsersService } from '../../users/services/users.service';
 import type { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../common/enums/user-role.enum';
@@ -96,6 +97,19 @@ export class ProgramsService {
       createdById,
     });
     const saved = await this.participationsRepo.save(participation);
+
+    // Todo programa vinculado ao evento já entra no roster de acessos
+    // com o papel "programa" — é o que dá acesso de leitura às telas
+    // "ao vivo" do evento (ver useEventLiveGuard no front), mesmo
+    // padrão automático já usado por JudgesService pro papel "jurado".
+    // Deliberadamente NÃO é SPECTATOR — espectador genérico não deve
+    // ter acesso a essas telas (ver comentário no enum).
+    await this.eventsService.upsertMemberRole(
+      event.aliasId,
+      EventMemberRole.PROGRAM,
+      { userId, email: dto.email, firstName: dto.name },
+    );
+
     return this.toProgramView(saved);
   }
 
@@ -279,7 +293,38 @@ export class ProgramsService {
       .where('id IN (:...ids)', { ids: unclaimed.map((p) => p.id) })
       .execute();
 
+    // Mesmo raciocínio de JudgesService.linkUnclaimedJudgesByEmail —
+    // garante o papel "programa" no roster de acessos de cada evento
+    // recém-reclamado.
+    const distinctAliasIds = new Set(unclaimed.map((p) => p.aliasId));
+    for (const aliasId of distinctAliasIds) {
+      await this.eventsService.upsertMemberRole(
+        aliasId,
+        EventMemberRole.PROGRAM,
+        {
+          userId,
+          email: user.email,
+          firstName: `${user.firstName} ${user.lastName}`,
+        },
+      );
+    }
+
     return unclaimed.length;
+  }
+
+  // Usado por ScoringService (visão da equipe/programa na tela de
+  // notas) pra resolver "quem sou eu, como programa, neste evento" a
+  // partir do userId do token — espelha
+  // JudgesService.findParticipationByUserId.
+  async findParticipationByUserId(
+    eventId: string,
+    userId: string,
+  ): Promise<ProgramParticipation | null> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    return this.participationsRepo.findOneBy({
+      aliasId: event.aliasId,
+      userId,
+    });
   }
 
   // A partir daqui, endpoints de "programs/me" (ProgramProfileController)

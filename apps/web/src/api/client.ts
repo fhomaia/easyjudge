@@ -111,7 +111,28 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
+
+  // "Entrar como" outro usuário — restrito a uma única conta no
+  // backend (ver AuthService.impersonate); autenticado, por isso usa
+  // authRequest (não request como o resto deste objeto, que é
+  // pré-login).
+  impersonate: (email: string) =>
+    authRequest<ImpersonateResponse>("/auth/impersonate", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
 };
+
+export interface ImpersonateResponse {
+  accessToken: string;
+  impersonating: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: UserRole;
+  };
+}
 
 export interface UserProfile {
   id: string;
@@ -126,7 +147,7 @@ export const usersApi = {
 };
 
 export type EventStatus = "created" | "published" | "started" | "completed";
-export type EventMemberRole = "admin" | "assessor" | "judge" | "spectator";
+export type EventMemberRole = "admin" | "assessor" | "judge" | "spectator" | "program";
 
 export interface Event {
   id: string;
@@ -622,11 +643,25 @@ export interface CriterionAssignmentsState {
   criterionAssignments: Array<{ criterionId: string; resourceId: string; judgeIds: string[] }>;
 }
 
+// Visão do jurado logado sobre a própria escala (ver JudgingService.
+// getMyAssignments no backend) — usada pela tela de Notas pra saber
+// quais apresentações do cronograma são "minhas" (lib/judgeSchedule.ts).
+export interface JudgeAssignmentsSummary {
+  isJudge: boolean;
+  specialRoles: SpecialJudgeRole[];
+  criterionGroups: string[];
+  resourceIds: string[];
+  criterionResourceTemplates: Array<{ resourceId: string; templateId: string }>;
+}
+
 export const judgingApi = {
   getAssignments: (eventId: string, templateId: string) =>
     authRequest<CriterionAssignmentsState>(
       `/events/${eventId}/judging?templateId=${templateId}`,
     ),
+
+  me: (eventId: string) =>
+    authRequest<JudgeAssignmentsSummary>(`/events/${eventId}/judging/me`),
 
   // Por recurso (2026-07-19) — o jurado de uma função especial (Head
   // Judge, Jurado de Legalidade) não pode estar em duas pistas ao
@@ -763,6 +798,8 @@ export interface ScheduleEntry {
   categoryName: string | null;
   linkedEntryId: string | null;
   label: string | null;
+  contestationRequestedAt: string | null;
+  contestationResolvedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -935,4 +972,310 @@ export const scheduleApi = {
     authRequest<ScheduleDay[]>(`/events/${eventId}/schedule/days/${sourceDayId}/replicate`, {
       method: "POST",
     }),
+};
+
+// Tela de lançar notas — ver ScoringService no backend. `ScoreEvent` é
+// append-only (event sourcing, "notas nunca podem ser perdidas" — ver
+// CLAUDE.md); `ScoreEventInput` é o formato gerado NO CLIENTE (id via
+// crypto.randomUUID()) e guardado no IndexedDB (lib/scoreEventsDb.ts)
+// antes de qualquer tentativa de envio.
+export type ScoreEventKind =
+  | "score_set"
+  | "deduction_add"
+  | "deduction_remove"
+  | "comment_set"
+  | "sketch_set"
+  | "sheet_submitted"
+  | "timer_stopped"
+  | "deduction_code_set";
+
+export interface ScoreEventInput {
+  id: string;
+  scheduleEntryId: string;
+  kind: ScoreEventKind;
+  criterionId?: string;
+  value?: number;
+  deductionType?: DeductionType;
+  undoesEventId?: string;
+  presentationElapsedMs?: number;
+  text?: string;
+  clientCreatedAt: string;
+}
+
+export interface ScoreEvent extends ScoreEventInput {
+  judgeParticipationId: string;
+  createdAt: string;
+}
+
+export interface ScoringCriterionView {
+  id: string;
+  name: string;
+  description: string | null;
+  maxScore: number;
+  allowDecimalScoring: boolean;
+  order: number;
+}
+
+export interface ScoringGroupView {
+  id: string;
+  name: string;
+  criteria: ScoringCriterionView[];
+}
+
+export interface ScoringSheet {
+  presentation: {
+    id: string;
+    teamName: string;
+    categoryName: string;
+    resourceId: string;
+    resourceName: string;
+    presentationTimeSeconds: number | null;
+  };
+  groups: ScoringGroupView[];
+  isLegalityJudge: boolean;
+  isHeadJudge: boolean;
+  deductions: DeductionRuleView[];
+  events: ScoreEvent[];
+  contestationRequested: boolean;
+  contestationResolved: boolean;
+}
+
+// Painel Head Judge (Modo Supervisão) — ver ScoringService no backend
+// (getHeadJudgeRoster/getSheetForJudge/submitEventsAsHeadJudge/
+// getChangeLog). Só visível pra quem `ScoringSheet.isHeadJudge` é true.
+export type HeadJudgeRosterEntryStatus = "complete" | "incomplete";
+
+export interface HeadJudgeRosterEntry {
+  judgeParticipationId: string;
+  name: string;
+  groups: string[];
+  specialRoles: SpecialJudgeRole[];
+  status: HeadJudgeRosterEntryStatus;
+}
+
+export interface HeadJudgeRoster {
+  team: { id: string; name: string };
+  judges: HeadJudgeRosterEntry[];
+}
+
+export interface HeadJudgeSheet extends ScoringSheet {
+  judge: { id: string; name: string };
+}
+
+export interface HeadJudgeLogEntry {
+  id: string;
+  kind: ScoreEventKind;
+  judgeParticipationId: string;
+  judgeName: string;
+  actingJudgeParticipationId: string | null;
+  actingJudgeName: string | null;
+  criterionId: string | null;
+  criterionName: string | null;
+  value: number | null;
+  deductionType: DeductionType | null;
+  undoesEventId: string | null;
+  clientCreatedAt: string;
+}
+
+// Visão do admin/assessor (leitura, sem edição) e do Programa (só das
+// próprias equipes, só depois de liberado) na tela de Notas — ver
+// ScoringService.getAdminOverview/buildPresentationDetail no backend.
+// Diferente do Painel Head Judge, aqui todos os grupos + legalidade
+// aparecem JUNTOS, cada critério com o nome do jurado responsável.
+export interface AdminOverviewEntry {
+  scheduleEntryId: string;
+  teamName: string;
+  categoryName: string;
+  resourceName: string;
+  dayDate: string;
+  contestationRequested: boolean;
+}
+
+// Liberação global do evento — "Liberar notas"/"Liberar contestação"/
+// "Liberar resultado", um switch só por evento (não mais por
+// apresentação — ver ScoringService.getReleaseFlags/setReleaseFlags).
+export interface ReleaseFlags {
+  scoresReleased: boolean;
+  contestationReleased: boolean;
+  resultsReleased: boolean;
+}
+
+export interface PresentationDetailCriterion extends ScoringCriterionView {
+  value: number | null;
+  judgeName: string;
+}
+
+export interface PresentationDetailGroup {
+  id: string;
+  name: string;
+  criteria: PresentationDetailCriterion[];
+}
+
+export interface PresentationDetailLegality {
+  judgeName: string;
+  deductions: Array<{
+    type: DeductionType;
+    value: number;
+    presentationElapsedMs: number | null;
+    clientCreatedAt: string;
+  }>;
+}
+
+export interface PresentationDetailNote {
+  judgeName: string;
+  comment: string;
+}
+
+export interface PresentationDetail {
+  presentation: {
+    id: string;
+    teamName: string;
+    categoryName: string;
+    resourceName: string;
+  };
+  groups: PresentationDetailGroup[];
+  legality: PresentationDetailLegality | null;
+  notes: PresentationDetailNote[];
+  scoresReleased: boolean;
+  contestationReleased: boolean;
+  contestationRequested: boolean;
+}
+
+export interface SetReleaseFlagsPayload {
+  scoresReleased?: boolean;
+  contestationReleased?: boolean;
+  resultsReleased?: boolean;
+}
+
+// Página de Resultados (admin/assessor) — ver ScoringService.
+// getEventResults no backend. Não depende de `resultsReleased`
+// (essa flag é pra gatear a visão de equipes/atletas quando essa
+// jornada existir; aqui é a visão de trabalho do próprio produtor).
+export interface ResultsPresentation {
+  scheduleEntryId: string;
+  teamId: string;
+  teamName: string;
+  programId: string;
+  programName: string;
+  categoryId: string;
+  categoryName: string;
+  categoryFormat: CategoryFormat;
+  totalScore: number;
+  deductionsTotal: number;
+  finalResult: number;
+  maxScore: number;
+  percentage: number;
+}
+
+export interface ResultsCategory {
+  categoryId: string;
+  categoryName: string;
+  categoryFormat: CategoryFormat;
+  teamCount: number;
+  presentations: ResultsPresentation[];
+  topByPercentage: ResultsPresentation | null;
+  topByScore: ResultsPresentation | null;
+  averagePercentage: number;
+}
+
+export interface ResultsProgram {
+  programId: string;
+  programName: string;
+  totalPoints: number;
+  presentationCount: number;
+}
+
+export interface EventResults {
+  categories: ResultsCategory[];
+  presentations: ResultsPresentation[];
+  programs: ResultsProgram[];
+  topOverall: ResultsPresentation | null;
+  topTeamCheer: ResultsPresentation | null;
+  topProgram: ResultsProgram | null;
+  updatedAt: string;
+}
+
+export const adminScoringApi = {
+  getOverview: (eventId: string) =>
+    authRequest<AdminOverviewEntry[]>(`/events/${eventId}/scoring/admin/overview`),
+
+  getDetail: (eventId: string, scheduleEntryId: string) =>
+    authRequest<PresentationDetail>(`/events/${eventId}/scoring/admin/${scheduleEntryId}`),
+
+  getRelease: (eventId: string) =>
+    authRequest<ReleaseFlags>(`/events/${eventId}/scoring/admin/release`),
+
+  setRelease: (eventId: string, payload: SetReleaseFlagsPayload) =>
+    authRequest<ReleaseFlags>(`/events/${eventId}/scoring/admin/release`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  getResults: (eventId: string) =>
+    authRequest<EventResults>(`/events/${eventId}/scoring/admin/results`),
+};
+
+export const teamScoringApi = {
+  getOverview: (eventId: string) =>
+    authRequest<AdminOverviewEntry[]>(`/events/${eventId}/scoring/team/overview`),
+
+  getDetail: (eventId: string, scheduleEntryId: string) =>
+    authRequest<PresentationDetail>(`/events/${eventId}/scoring/team/${scheduleEntryId}`),
+
+  contest: (eventId: string, scheduleEntryId: string) =>
+    authRequest<void>(`/events/${eventId}/scoring/team/${scheduleEntryId}/contest`, {
+      method: "POST",
+    }),
+};
+
+export const scoringApi = {
+  getSheet: (eventId: string, scheduleEntryId: string) =>
+    authRequest<ScoringSheet>(`/events/${eventId}/scoring/sheet/${scheduleEntryId}`),
+
+  // Ids das apresentações que o jurado logado já marcou como enviadas
+  // (clicou "Lançar notas") — alimenta a badge "Concluída" da tela de
+  // Notas (ver EventLiveNotesPage/lib/judgeSchedule.ts).
+  getMySubmissions: (eventId: string) =>
+    authRequest<string[]>(`/events/${eventId}/scoring/me/submissions`),
+
+  // Jurado marca a contestação desta apresentação como resolvida — ver
+  // ScoringService.resolveContestation.
+  resolveContestation: (eventId: string, scheduleEntryId: string) =>
+    authRequest<void>(`/events/${eventId}/scoring/sheet/${scheduleEntryId}/resolve-contestation`, {
+      method: "POST",
+    }),
+
+  submitEvents: (eventId: string, events: ScoreEventInput[]) =>
+    authRequest<{ savedIds: string[] }>(`/events/${eventId}/scoring/events`, {
+      method: "POST",
+      body: JSON.stringify({ events }),
+    }),
+
+  headJudge: {
+    getRoster: (eventId: string, scheduleEntryId: string) =>
+      authRequest<HeadJudgeRoster>(
+        `/events/${eventId}/scoring/head-judge/${scheduleEntryId}/roster`,
+      ),
+
+    getSheet: (eventId: string, scheduleEntryId: string, judgeParticipationId: string) =>
+      authRequest<HeadJudgeSheet>(
+        `/events/${eventId}/scoring/head-judge/${scheduleEntryId}/judges/${judgeParticipationId}/sheet`,
+      ),
+
+    submitEvents: (
+      eventId: string,
+      scheduleEntryId: string,
+      judgeParticipationId: string,
+      events: ScoreEventInput[],
+    ) =>
+      authRequest<{ savedIds: string[] }>(
+        `/events/${eventId}/scoring/head-judge/${scheduleEntryId}/judges/${judgeParticipationId}/events`,
+        { method: "POST", body: JSON.stringify({ events }) },
+      ),
+
+    getLog: (eventId: string, scheduleEntryId: string) =>
+      authRequest<HeadJudgeLogEntry[]>(
+        `/events/${eventId}/scoring/head-judge/${scheduleEntryId}/log`,
+      ),
+  },
 };

@@ -15,11 +15,12 @@ import {
   countdownLabel,
   scheduleItemTitleParts,
 } from "@/components/EventLiveShared";
-import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
+import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatMinutes } from "@/lib/scheduleTime";
 import { computeEventLiveSchedule, toIsoDate } from "@/lib/eventLiveSchedule";
+import { resolveCenterTab } from "@/lib/eventNavPriority";
 import { cn } from "@/lib/utils";
 import {
   ApiError,
@@ -39,7 +40,7 @@ export function EventLiveDashboardPage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  useEventSetupGuard(id);
+  useEventLiveGuard(id);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
@@ -71,6 +72,17 @@ export function EventLiveDashboardPage() {
     if (!event) return;
     if (event.status === "created") navigate(`/events/${event.id}/setup`, { replace: true });
     else if (event.status === "completed") navigate("/", { replace: true });
+  }, [event, navigate]);
+
+  // Programa (papel "program", sem admin/assessor/jurado) não usa
+  // este dashboard — vai direto pra visão das próprias equipes na tela
+  // de notas (ver EventLiveTeamNotesPage).
+  useEffect(() => {
+    if (!event) return;
+    const onlyProgram =
+      event.currentUserRoles.includes("program") &&
+      !event.currentUserRoles.some((r) => r === "admin" || r === "assessor" || r === "judge");
+    if (onlyProgram) navigate(`/events/${event.id}/live/team`, { replace: true });
   }, [event, navigate]);
 
   // Sem WebSocket ainda (ver "Próximos passos" do projeto) — o horário
@@ -138,6 +150,9 @@ export function EventLiveDashboardPage() {
     current: "inicio",
     onNavigateHome: () => navigate(`/events/${event.id}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
+    onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
+    onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
+    centerTab: resolveCenterTab(event.currentUserRoles),
   });
 
   const nextDisplay = live.next ? scheduleItemTitleParts(live.next) : null;

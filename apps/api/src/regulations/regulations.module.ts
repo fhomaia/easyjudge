@@ -13,5 +13,6 @@ import { EventsModule } from '../events/events.module';
   ],
   controllers: [RegulationsController],
   providers: [RegulationsService],
+  exports: [RegulationsService],
 })
 export class RegulationsModule {}

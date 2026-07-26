@@ -45,6 +45,26 @@ export class Event {
   @Column({ name: 'started_at', type: 'timestamptz', nullable: true })
   startedAt: Date | null;
 
+  // Liberação de notas/contestação/resultado pra equipe/atletas — ação
+  // global do evento (não mais por apresentação, ver EventsService.
+  // setReleaseFlags), pensada pro produtor liberar tudo de uma vez ao
+  // fim da competição em vez de visitar apresentação por apresentação.
+  // Estado mutável simples (não event-sourced): é "a última vontade do
+  // admin". Ligar `contestationReleasedAt` liga `scoresReleasedAt`
+  // junto (não dá pra contestar sem poder ver a nota); desligar
+  // `scoresReleasedAt` desliga `contestationReleasedAt` junto.
+  // `resultsReleasedAt` (resultado final/ranking) é independente — não
+  // participa dessa cascata, um produtor pode querer revelar o
+  // resultado final sem abrir o detalhamento de notas por critério.
+  @Column({ name: 'scores_released_at', type: 'timestamptz', nullable: true })
+  scoresReleasedAt: Date | null;
+
+  @Column({ name: 'contestation_released_at', type: 'timestamptz', nullable: true })
+  contestationReleasedAt: Date | null;
+
+  @Column({ name: 'results_released_at', type: 'timestamptz', nullable: true })
+  resultsReleasedAt: Date | null;
+
   // Identidade lógica do evento através das versões — o `id` é
   // específico de cada linha/versão, o `aliasId` é o mesmo em todas as
   // versões de um mesmo evento (é através dele que EventMember vincula

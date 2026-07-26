@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -14,12 +16,14 @@ import { ProgramsService } from '../../programs/services/programs.service';
 import { JudgesService } from '../../judges/services/judges.service';
 import { EventsService } from '../../events/services/events.service';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { IMPERSONATOR_EMAIL } from '../../common/constants/impersonation';
 import { MailService } from './mail.service';
 import { EmailVerification } from '../entities/email-verification.entity';
 import { RegisterDto } from '../dto/register.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { SetPasswordDto } from '../dto/set-password.dto';
 import { LoginDto } from '../dto/login.dto';
+import { ImpersonateDto } from '../dto/impersonate.dto';
 
 const CODE_LENGTH = 6;
 const CODE_EXPIRATION_MINUTES = 15;
@@ -206,6 +210,54 @@ export class AuthService {
     }
 
     return this.buildAccessToken(user.id, user.role);
+  }
+
+  // "Entrar como" qualquer usuário, restrito a uma única conta
+  // (IMPERSONATOR_EMAIL) — ver plano/CLAUDE.md pra contexto. A trava é
+  // sempre a identidade REAL por trás do JWT que está chamando (não um
+  // header/flag do cliente), então uma sessão já impersonada não
+  // consegue impersonar de novo (o `sub` do JWT nesse caso é do
+  // usuário-alvo, não do dono).
+  async impersonate(
+    callerUserId: string,
+    dto: ImpersonateDto,
+  ): Promise<{
+    accessToken: string;
+    impersonating: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      role: string;
+    };
+  }> {
+    const caller = await this.usersService.findById(callerUserId);
+    if (!caller || caller.email.toLowerCase() !== IMPERSONATOR_EMAIL) {
+      throw new ForbiddenException('Você não tem permissão para isso.');
+    }
+
+    const target = await this.usersService.findByEmailInsensitive(dto.email);
+    if (!target) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+    if (target.id === caller.id) {
+      throw new BadRequestException('Você já está na sua própria conta.');
+    }
+
+    console.log(
+      `[impersonate] ${caller.email} entrou como ${target.email} (${target.id}) em ${new Date().toISOString()}`,
+    );
+
+    return {
+      ...this.buildAccessToken(target.id, target.role),
+      impersonating: {
+        id: target.id,
+        firstName: target.firstName,
+        lastName: target.lastName,
+        email: target.email,
+        role: target.role,
+      },
+    };
   }
 
   private buildAccessToken(

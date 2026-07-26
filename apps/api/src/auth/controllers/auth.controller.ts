@@ -5,12 +5,17 @@ import {
   HttpStatus,
   Param,
   Post,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
 import { RegisterDto } from '../dto/register.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { SetPasswordDto } from '../dto/set-password.dto';
 import { LoginDto } from '../dto/login.dto';
+import { ImpersonateDto } from '../dto/impersonate.dto';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../types/authenticated-request';
 
 @Controller('auth')
 export class AuthController {
@@ -49,5 +54,18 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  // "Entrar como" outro usuário — restrito a uma única conta, checado
+  // dentro de AuthService.impersonate a partir do JWT de quem chama
+  // (não de nada que o cliente possa forjar).
+  @Post('impersonate')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  impersonate(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ImpersonateDto,
+  ) {
+    return this.authService.impersonate(req.user.userId, dto);
   }
 }

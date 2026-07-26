@@ -4,6 +4,10 @@ import { HomePage } from "@/pages/HomePage";
 import { EventSetupPage } from "@/pages/EventSetupPage";
 import { EventLiveDashboardPage } from "@/pages/EventLiveDashboardPage";
 import { EventLiveSchedulePage } from "@/pages/EventLiveSchedulePage";
+import { EventLiveNotesPage } from "@/pages/EventLiveNotesPage";
+import { EventLiveResultsPage } from "@/pages/EventLiveResultsPage";
+import { EventLiveScoringPage } from "@/pages/EventLiveScoringPage";
+import { EventLiveTeamNotesPage } from "@/pages/EventLiveTeamNotesPage";
 import { EventStaffPage } from "@/pages/EventStaffPage";
 import { RegulationPage } from "@/pages/RegulationPage";
 import { CategoriesPage } from "@/pages/CategoriesPage";
@@ -26,6 +30,10 @@ function App() {
         <Route path="/events/:id/setup" element={<EventSetupPage />} />
         <Route path="/events/:id/live" element={<EventLiveDashboardPage />} />
         <Route path="/events/:id/live/schedule" element={<EventLiveSchedulePage />} />
+        <Route path="/events/:id/live/notes" element={<EventLiveNotesPage />} />
+        <Route path="/events/:id/live/results" element={<EventLiveResultsPage />} />
+        <Route path="/events/:id/live/scoring/:entryId" element={<EventLiveScoringPage />} />
+        <Route path="/events/:id/live/team" element={<EventLiveTeamNotesPage />} />
         <Route path="/events/:id/access" element={<EventStaffPage />} />
         <Route path="/events/:id/regulation" element={<RegulationPage />} />
         <Route path="/events/:id/categories" element={<CategoriesPage />} />

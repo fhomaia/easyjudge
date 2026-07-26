@@ -79,6 +79,25 @@ export class ScheduleEntry {
   @Column({ type: 'varchar', nullable: true })
   label: string | null;
 
+  // Quando a equipe clicou "solicitar contestação" — vira o badge na
+  // visão de admin/assessor/jurados. Nunca é limpo de volta pra null
+  // (ver ScoringService.requestContestation) — é o que garante "cada
+  // apresentação só pode ser contestada uma única vez": uma vez
+  // preenchido, a apresentação fica contestada pra sempre, mesmo
+  // depois de resolvida. Liberação de notas/contestação/resultado NÃO
+  // fica aqui — virou ação global do evento (ver Event.scoresReleasedAt/
+  // contestationReleasedAt/resultsReleasedAt), não por apresentação.
+  @Column({ name: 'contestation_requested_at', type: 'timestamptz', nullable: true })
+  contestationRequestedAt: Date | null;
+
+  // Quando o jurado marcou a contestação como resolvida (ver
+  // ScoringService.resolveContestation) — só faz sentido com
+  // `contestationRequestedAt` preenchido antes. Fica de fora da lista
+  // "apresentações com contestação" da tela de Notas do jurado assim
+  // que preenchido (deixa de precisar de atenção).
+  @Column({ name: 'contestation_resolved_at', type: 'timestamptz', nullable: true })
+  contestationResolvedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

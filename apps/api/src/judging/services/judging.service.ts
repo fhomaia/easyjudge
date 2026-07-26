@@ -6,6 +6,7 @@ import { SpecialRoleAssignment } from '../entities/special-role-assignment.entit
 import { SpecialJudgeRole } from '../enums/special-judge-role.enum';
 import { BulkAssignStrategy } from '../dto/bulk-assign.dto';
 import { Category } from '../../categories/entities/category.entity';
+import { ScoringCriterion } from '../../scoring-templates/entities/scoring-criterion.entity';
 import { ScoringCriterionType } from '../../scoring-templates/enums/scoring-criterion-type.enum';
 import { ScoringCriteriaService } from '../../scoring-templates/services/scoring-criteria.service';
 import { JudgesService } from '../../judges/services/judges.service';
@@ -26,6 +27,21 @@ export interface CriterionAssignmentsState {
     resourceId: string;
     judgeIds: string[];
   }>;
+}
+
+// Visão do jurado logado sobre a própria escala (GET .../judging/me) —
+// complementar a CriterionAssignmentsState (visão do organizador, por
+// template). `resourceIds` (de funções especiais) cobrem QUALQUER
+// apresentação daquele recurso; `criterionResourceTemplates` só cobrem
+// apresentações cuja categoria usa aquele template especificamente — o
+// frontend cruza isso com `Category.scoringTemplateId` pra saber quais
+// entradas do cronograma são "minhas" (ver lib/judgeSchedule.ts).
+export interface JudgeAssignmentsSummary {
+  isJudge: boolean;
+  specialRoles: SpecialJudgeRole[];
+  criterionGroups: string[];
+  resourceIds: string[];
+  criterionResourceTemplates: Array<{ resourceId: string; templateId: string }>;
 }
 
 @Injectable()
@@ -91,6 +107,144 @@ export class JudgingService {
       })),
       criterionAssignments: Array.from(byKey.values()),
     };
+  }
+
+  // "O que EU julgo neste evento" — do ponto de vista do jurado logado,
+  // não do organizador (ver getAssignments acima, que é por template).
+  // Sem JudgeParticipation pra este usuário neste evento (ex: admin
+  // acessando a tela de Notas), retorna isJudge=false com listas vazias
+  // em vez de 404 — não é um erro, só um estado vazio de UI.
+  async getMyAssignments(
+    eventId: string,
+    userId: string,
+  ): Promise<JudgeAssignmentsSummary> {
+    const participation = await this.judgesService.findParticipationByUserId(
+      eventId,
+      userId,
+    );
+    if (!participation) {
+      return {
+        isJudge: false,
+        specialRoles: [],
+        criterionGroups: [],
+        resourceIds: [],
+        criterionResourceTemplates: [],
+      };
+    }
+
+    const specialRoleRows = await this.specialRoleAssignmentsRepo.find({
+      where: { judgeParticipationId: participation.id },
+    });
+    const specialRoles = Array.from(new Set(specialRoleRows.map((r) => r.role)));
+    const resourceIds = Array.from(
+      new Set(specialRoleRows.map((r) => r.resourceId)),
+    );
+
+    const criterionRows = await this.criterionAssignmentsRepo.find({
+      where: { judgeParticipationId: participation.id },
+      relations: ['criterion'],
+    });
+
+    const criterionGroups = new Set<string>();
+    const templateCriteriaCache = new Map<string, ScoringCriterion[]>();
+    const criterionResourceTemplates = new Map<
+      string,
+      { resourceId: string; templateId: string }
+    >();
+
+    for (const row of criterionRows) {
+      const templateId = row.criterion.templateId;
+      criterionResourceTemplates.set(`${row.resourceId}:${templateId}`, {
+        resourceId: row.resourceId,
+        templateId,
+      });
+
+      let criteria = templateCriteriaCache.get(templateId);
+      if (!criteria) {
+        criteria =
+          await this.scoringCriteriaService.findAllForTemplateUnchecked(
+            templateId,
+          );
+        templateCriteriaCache.set(templateId, criteria);
+      }
+      const rootName = this.findRootCriterionName(criteria, row.criterionId);
+      if (rootName) criterionGroups.add(rootName);
+    }
+
+    return {
+      isJudge: true,
+      specialRoles,
+      criterionGroups: Array.from(criterionGroups),
+      resourceIds,
+      criterionResourceTemplates: Array.from(
+        criterionResourceTemplates.values(),
+      ),
+    };
+  }
+
+  // Sobe a árvore de `parentId` a partir de um critério-folha até achar
+  // a raiz (parentId null) e devolve o nome dela — é esse nome que vira
+  // uma entrada de "Minhas funções" na tela de Notas (ex. "Técnico").
+  private findRootCriterionName(
+    criteria: ScoringCriterion[],
+    criterionId: string,
+  ): string | null {
+    const byId = new Map(criteria.map((c) => [c.id, c]));
+    let current = byId.get(criterionId);
+    if (!current) return null;
+    while (current.parentId) {
+      const parent = byId.get(current.parentId);
+      if (!parent) break;
+      current = parent;
+    }
+    return current.name;
+  }
+
+  // Usados por ScoringService (módulo `scoring`, tela de lançar notas)
+  // pra montar a folha de pontuação de UMA apresentação específica —
+  // diferente de getMyAssignments (visão ampla, todo o evento), aqui
+  // já é escopado a um recurso só (o da apresentação em questão).
+
+  // Ids dos critérios-FOLHA que este jurado pode pontuar neste recurso
+  // — a tela de notas só mostra/aceita valor pra esses.
+  async getAssignedLeafCriterionIds(
+    judgeParticipationId: string,
+    resourceId: string,
+  ): Promise<string[]> {
+    const rows = await this.criterionAssignmentsRepo.find({
+      where: { judgeParticipationId, resourceId },
+    });
+    return Array.from(new Set(rows.map((r) => r.criterionId)));
+  }
+
+  // Se este jurado é o Jurado de Legalidade deste recurso — controla
+  // se a tela de notas mostra cronômetro + bloco de deduções (ver
+  // CLAUDE.md/plano: sem essa função, o jurado só pontua os próprios
+  // critérios, sem cronômetro nem deduções).
+  async isLegalityJudgeForResource(
+    judgeParticipationId: string,
+    resourceId: string,
+  ): Promise<boolean> {
+    const row = await this.specialRoleAssignmentsRepo.findOneBy({
+      judgeParticipationId,
+      resourceId,
+      role: SpecialJudgeRole.LEGALITY_JUDGE,
+    });
+    return !!row;
+  }
+
+  // Se este jurado é o Head Judge deste recurso — controla se ele vê o
+  // botão "Painel Head Judge" (Modo Supervisão) na tela de notas.
+  async isHeadJudgeForResource(
+    judgeParticipationId: string,
+    resourceId: string,
+  ): Promise<boolean> {
+    const row = await this.specialRoleAssignmentsRepo.findOneBy({
+      judgeParticipationId,
+      resourceId,
+      role: SpecialJudgeRole.HEAD_JUDGE,
+    });
+    return !!row;
   }
 
   // Dias do evento com apresentação agendada de alguma categoria que
