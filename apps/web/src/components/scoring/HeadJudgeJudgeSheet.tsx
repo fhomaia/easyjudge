@@ -5,6 +5,7 @@ import { LegalityDeductionsPanel } from "@/components/scoring/LegalityDeductions
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
 import { useHeadJudgeSheet } from "@/lib/useHeadJudgeSheet";
 import { sumCriteriaScores, sumDeductions, sumMaxScores } from "@/lib/scoringSummary";
+import { cn } from "@/lib/utils";
 
 // Drill-down "Todas as notas" de um jurado específico, dentro do
 // Painel Head Judge — reusa os mesmos componentes de critérios/
@@ -21,10 +22,17 @@ interface HeadJudgeJudgeSheetProps {
   eventId: string;
   scheduleEntryId: string;
   judgeParticipationId: string;
+  canWrite: boolean;
   onBack: () => void;
 }
 
-export function HeadJudgeJudgeSheet({ eventId, scheduleEntryId, judgeParticipationId, onBack }: HeadJudgeJudgeSheetProps) {
+export function HeadJudgeJudgeSheet({
+  eventId,
+  scheduleEntryId,
+  judgeParticipationId,
+  canWrite,
+  onBack,
+}: HeadJudgeJudgeSheetProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const {
@@ -42,7 +50,7 @@ export function HeadJudgeJudgeSheet({ eventId, scheduleEntryId, judgeParticipati
     editDeductionTime,
     setDeductionCode,
     handleSubmit,
-  } = useHeadJudgeSheet(eventId, scheduleEntryId, judgeParticipationId);
+  } = useHeadJudgeSheet(eventId, scheduleEntryId, judgeParticipationId, canWrite);
 
   function toggleGroup(groupId: string) {
     setCollapsedGroups((prev) => {
@@ -105,6 +113,13 @@ export function HeadJudgeJudgeSheet({ eventId, scheduleEntryId, judgeParticipati
       ) : (
         <>
           <div className="flex-1 overflow-y-auto pb-4">
+            {!canWrite && (
+              <div className="m-4 flex items-center gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="size-4 shrink-0" />
+                O evento ainda não foi iniciado.
+              </div>
+            )}
+            <div className={cn(!canWrite && "pointer-events-none opacity-50")}>
             <ScoringCriteriaGroups
               groups={sheet.groups}
               scores={scores}
@@ -138,6 +153,7 @@ export function HeadJudgeJudgeSheet({ eventId, scheduleEntryId, judgeParticipati
               maxScore={maxScore}
               variant="mobile"
             />
+            </div>
           </div>
 
           <div className="border-t border-border bg-card p-4">
@@ -153,7 +169,7 @@ export function HeadJudgeJudgeSheet({ eventId, scheduleEntryId, judgeParticipati
                 Não foi possível enviar agora. Vamos tentar de novo automaticamente.
               </p>
             )}
-            {submitResult === null && !sheetComplete && (
+            {submitResult === null && !sheetComplete && canWrite && (
               <p className="mb-2 text-center text-xs font-medium text-amber-600">
                 Faltam {missingParts.join(" e ")} pra lançar as notas.
               </p>
@@ -161,8 +177,14 @@ export function HeadJudgeJudgeSheet({ eventId, scheduleEntryId, judgeParticipati
             <button
               type="button"
               onClick={() => void submitAndReturn()}
-              disabled={submitting || !sheetComplete}
-              title={sheetComplete ? undefined : "Preencha todos os critérios antes de lançar as notas."}
+              disabled={submitting || !sheetComplete || !canWrite}
+              title={
+                !canWrite
+                  ? "O evento ainda não foi iniciado."
+                  : sheetComplete
+                    ? undefined
+                    : "Preencha todos os critérios antes de lançar as notas."
+              }
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
             >
               <Send className="size-4" />

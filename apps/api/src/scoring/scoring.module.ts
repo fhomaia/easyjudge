@@ -6,6 +6,7 @@ import { Team } from '../teams/entities/team.entity';
 import { ScoringController } from './controllers/scoring.controller';
 import { AdminScoringController } from './controllers/admin-scoring.controller';
 import { TeamScoringController } from './controllers/team-scoring.controller';
+import { ResultsController } from './controllers/results.controller';
 import { ScoringService } from './services/scoring.service';
 import { EventsModule } from '../events/events.module';
 import { JudgesModule } from '../judges/judges.module';
@@ -26,7 +27,12 @@ import { ProgramsModule } from '../programs/programs.module';
     RegulationsModule,
     ProgramsModule,
   ],
-  controllers: [ScoringController, AdminScoringController, TeamScoringController],
+  controllers: [
+    ScoringController,
+    AdminScoringController,
+    TeamScoringController,
+    ResultsController,
+  ],
   providers: [ScoringService],
 })
 export class ScoringModule {}

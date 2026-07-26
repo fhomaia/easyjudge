@@ -48,6 +48,7 @@ interface EventLiveScoringDesktopViewProps {
   onSketchChange: (dataUrl: string) => void;
   onSubmit: () => void;
   onOpenSupervision: () => void;
+  canWrite: boolean;
 }
 
 export function EventLiveScoringDesktopView({
@@ -83,6 +84,7 @@ export function EventLiveScoringDesktopView({
   onSketchChange,
   onSubmit,
   onOpenSupervision,
+  canWrite,
 }: EventLiveScoringDesktopViewProps) {
   const progress = sheet.presentation.presentationTimeSeconds
     ? Math.min(1, elapsedMs / 1000 / sheet.presentation.presentationTimeSeconds)
@@ -182,7 +184,7 @@ export function EventLiveScoringDesktopView({
           </div>
 
           {sheet.isLegalityJudge && (
-            <div className="flex shrink-0 items-center gap-4">
+            <div className={cn("flex shrink-0 items-center gap-4", !canWrite && "pointer-events-none opacity-50")}>
               <div className="text-right">
                 <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">TEMPO DE APRESENTAÇÃO</p>
                 <span className="text-2xl font-bold tabular-nums text-foreground">{formatTimer(elapsedMs)}</span>
@@ -302,6 +304,14 @@ export function EventLiveScoringDesktopView({
           </div>
         )}
 
+        {!canWrite && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="size-4 shrink-0" />
+            O evento ainda não foi iniciado — aguarde o produtor pra lançar notas.
+          </div>
+        )}
+
+        <div className={cn("flex flex-1 flex-col", !canWrite && "pointer-events-none opacity-50")}>
         {sheet.groups.length === 0 ? (
           // Sem grupo de critério (só legalidade, ou nem isso) — a
           // linha ocupa o resto da página (2026-07-24, a pedido do
@@ -333,6 +343,7 @@ export function EventLiveScoringDesktopView({
             <div className="mt-4">{commentsAndSketch}</div>
           </>
         )}
+        </div>
       </main>
 
       {(sheet.groups.length > 0 || sheet.isLegalityJudge) && (
@@ -360,14 +371,20 @@ export function EventLiveScoringDesktopView({
           Equipe anterior
         </button>
         <div className="flex items-center gap-3">
-          {!sheetComplete && (
+          {!sheetComplete && canWrite && (
             <p className="text-xs font-medium text-amber-600">Faltam {missingParts.join(" e ")} pra lançar as notas.</p>
           )}
           <button
             type="button"
             onClick={onSubmit}
-            disabled={submitting || !sheetComplete}
-            title={sheetComplete ? undefined : "Preencha todos os critérios antes de lançar as notas."}
+            disabled={submitting || !sheetComplete || !canWrite}
+            title={
+              !canWrite
+                ? "O evento ainda não foi iniciado."
+                : sheetComplete
+                  ? undefined
+                  : "Preencha todos os critérios antes de lançar as notas."
+            }
             className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
           >
             <Send className="size-4" />

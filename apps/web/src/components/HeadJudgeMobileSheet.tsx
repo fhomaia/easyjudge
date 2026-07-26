@@ -16,10 +16,11 @@ import { HeadJudgeLogList } from "@/components/scoring/HeadJudgeLogList";
 interface HeadJudgeMobileSheetProps {
   eventId: string;
   scheduleEntryId: string;
+  canWrite: boolean;
   onClose: () => void;
 }
 
-export function HeadJudgeMobileSheet({ eventId, scheduleEntryId, onClose }: HeadJudgeMobileSheetProps) {
+export function HeadJudgeMobileSheet({ eventId, scheduleEntryId, canWrite, onClose }: HeadJudgeMobileSheetProps) {
   const {
     activeTab,
     setActiveTab,
@@ -59,6 +60,7 @@ export function HeadJudgeMobileSheet({ eventId, scheduleEntryId, onClose }: Head
           eventId={eventId}
           scheduleEntryId={scheduleEntryId}
           judgeParticipationId={selectedJudgeId}
+          canWrite={canWrite}
           onBack={closeJudgeSheet}
         />
       ) : (

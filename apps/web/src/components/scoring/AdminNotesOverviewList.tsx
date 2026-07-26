@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { formatPercent, formatPoints } from "@/lib/formatNumber";
 import type { AdminOverviewEntry } from "@/api/client";
 
 // Lista de apresentações 100% pontuadas (as incompletas ficam ocultas
@@ -31,6 +32,10 @@ export function AdminNotesOverviewList({ entries, onSelect }: AdminNotesOverview
             <p className="truncate text-xs text-muted-foreground">
               {entry.categoryName} · {entry.resourceName}
             </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-sm font-bold text-foreground">{formatPoints(entry.finalResult)} pts</p>
+            <p className="text-xs text-muted-foreground">{formatPercent(entry.percentage)}</p>
           </div>
           {entry.contestationRequested && (
             <span className="shrink-0 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">

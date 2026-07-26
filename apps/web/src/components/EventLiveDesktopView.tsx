@@ -57,6 +57,13 @@ interface EventLiveDesktopViewProps {
   canStart: boolean;
   starting: boolean;
   judgeCount: number | null;
+  // "Ir para agora" só aparece pra quem lança nota (ver
+  // EventLiveDashboardPage) — `onGoToNow` nulo significa jurado sem
+  // apresentação pendente (botão fica desabilitado).
+  isJudge: boolean;
+  onGoToNow: (() => void) | null;
+  delayLabel: string;
+  delayProgress: number;
   onOpenJudges: () => void;
   onStart: () => void;
   onRevert: () => Promise<void>;
@@ -75,6 +82,10 @@ export function EventLiveDesktopView({
   canStart,
   starting,
   judgeCount,
+  isJudge,
+  onGoToNow,
+  delayLabel,
+  delayProgress,
   onOpenJudges,
   onStart,
   onRevert,
@@ -142,15 +153,17 @@ export function EventLiveDesktopView({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {/* Sem ação por enquanto — não há uma visão de linha do
-                tempo nesta tela pra "ir até agora" rolar. */}
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
-            >
-              <Play className="size-4" />
-              Ir para agora
-            </button>
+            {isJudge && (
+              <button
+                type="button"
+                onClick={() => onGoToNow?.()}
+                disabled={!onGoToNow}
+                className="flex items-center gap-2 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+              >
+                <Play className="size-4" />
+                Ir para agora
+              </button>
+            )}
             {canRevert ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -484,15 +497,13 @@ export function EventLiveDesktopView({
                   label="Jurados cadastrados"
                   onClick={onOpenJudges}
                 />
-                {/* Mockado — sem tracking de atraso real vs. planejado
-                    no backend ainda (a pedido do usuário). */}
                 <StatTile
                   icon={Clock}
                   iconClassName="bg-amber-500/10 text-amber-600"
                   barClassName="bg-amber-500"
-                  value="+4 min"
+                  value={delayLabel}
                   label="Atraso atual"
-                  progress={0.3}
+                  progress={delayProgress}
                 />
                 <StatTile
                   icon={Trophy}

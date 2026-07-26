@@ -42,13 +42,6 @@ export class AdminScoringController {
     return this.scoringService.setReleaseFlags(eventId, dto);
   }
 
-  // Página de Resultados (rota fixa, mesmo motivo de "release" acima —
-  // precisa vir antes de ":scheduleEntryId").
-  @Get('results')
-  getResults(@Param('eventId') eventId: string) {
-    return this.scoringService.getEventResults(eventId);
-  }
-
   @Get(':scheduleEntryId')
   getDetail(
     @Param('eventId') eventId: string,

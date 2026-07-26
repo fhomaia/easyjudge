@@ -986,6 +986,7 @@ export type ScoreEventKind =
   | "comment_set"
   | "sketch_set"
   | "sheet_submitted"
+  | "timer_started"
   | "timer_stopped"
   | "deduction_code_set";
 
@@ -1089,6 +1090,8 @@ export interface AdminOverviewEntry {
   resourceName: string;
   dayDate: string;
   contestationRequested: boolean;
+  finalResult: number;
+  percentage: number;
 }
 
 // Liberação global do evento — "Liberar notas"/"Liberar contestação"/
@@ -1147,10 +1150,8 @@ export interface SetReleaseFlagsPayload {
   resultsReleased?: boolean;
 }
 
-// Página de Resultados (admin/assessor) — ver ScoringService.
-// getEventResults no backend. Não depende de `resultsReleased`
-// (essa flag é pra gatear a visão de equipes/atletas quando essa
-// jornada existir; aqui é a visão de trabalho do próprio produtor).
+// Página de Resultados — ver ScoringService.getEventResults no
+// backend (admin/assessor/jurado sempre veem a apuração de trabalho).
 export interface ResultsPresentation {
   scheduleEntryId: string;
   teamId: string;
@@ -1195,6 +1196,16 @@ export interface EventResults {
   updatedAt: string;
 }
 
+// Resposta pública da página de Resultados (ver ResultsController) —
+// admin/assessor/jurado sempre vêm `released: true`; programa/
+// espectador só depois que o admin ligar "Liberar resultado" em
+// ReleaseFlagsPanel (Event.resultsReleasedAt). `results` vem `null`
+// enquanto não liberado.
+export interface EventResultsResponse {
+  released: boolean;
+  results: EventResults | null;
+}
+
 export const adminScoringApi = {
   getOverview: (eventId: string) =>
     authRequest<AdminOverviewEntry[]>(`/events/${eventId}/scoring/admin/overview`),
@@ -1210,9 +1221,11 @@ export const adminScoringApi = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+};
 
-  getResults: (eventId: string) =>
-    authRequest<EventResults>(`/events/${eventId}/scoring/admin/results`),
+export const resultsApi = {
+  get: (eventId: string) =>
+    authRequest<EventResultsResponse>(`/events/${eventId}/scoring/results`),
 };
 
 export const teamScoringApi = {
@@ -1244,6 +1257,15 @@ export const scoringApi = {
     authRequest<void>(`/events/${eventId}/scoring/sheet/${scheduleEntryId}/resolve-contestation`, {
       method: "POST",
     }),
+
+  // Horário real de início (primeiro TIMER_STARTED) de cada
+  // apresentação já iniciada — usado pra calcular o atraso do evento
+  // (ver EventLiveDashboardPage, que já tem a hora AGENDADA de cada
+  // apresentação via computeEventLiveSchedule/scheduleTime.ts).
+  getStartedPresentations: (eventId: string) =>
+    authRequest<Array<{ scheduleEntryId: string; startedAt: string }>>(
+      `/events/${eventId}/scoring/started-presentations`,
+    ),
 
   submitEvents: (eventId: string, events: ScoreEventInput[]) =>
     authRequest<{ savedIds: string[] }>(`/events/${eventId}/scoring/events`, {

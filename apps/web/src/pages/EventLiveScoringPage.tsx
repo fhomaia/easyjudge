@@ -170,11 +170,16 @@ export function EventLiveScoringPage() {
   // reabrir a apresentação depois — ver hidratação acima) — "Retomar"
   // (continua contando A PARTIR do tempo marcado) + "Reiniciar" (zera
   // e continua). "Iniciar" e "Reiniciar" são a mesma ação, só o rótulo
-  // muda conforme o estado.
+  // muda conforme o estado. Emite TIMER_STARTED em toda chamada
+  // (inclusive "Reiniciar", uma falsa largada) — o cálculo de atraso do
+  // evento (ver ScoringService.getStartedPresentations) usa sempre o
+  // PRIMEIRO desses eventos por apresentação, então um reinício não
+  // deturpa o horário real de início já registrado.
   function startOrRestartTimer() {
     timerStartRef.current = Date.now();
     setElapsedMs(0);
     setTimerRunning(true);
+    void emitEvent({ kind: "timer_started" });
   }
 
   // Retoma de onde parou — desloca o "início" pro passado na medida do
@@ -200,7 +205,13 @@ export function EventLiveScoringPage() {
   async function emitEvent(
     partial: Omit<ScoreEventInput, "id" | "clientCreatedAt" | "scheduleEntryId"> & { id?: string },
   ) {
-    if (!id || !sheet) return;
+    // Jurado só pode escrever na súmula depois que o produtor iniciar o
+    // evento (ver ScoringService.assertEventStarted no backend, mesma
+    // regra espelhada aqui pra não enfileirar um evento que o servidor
+    // vai rejeitar pra sempre — ficaria preso na fila de retry). A UI
+    // também desabilita os controles nesse estado (ver `canWrite`
+    // abaixo), isto aqui é a rede de segurança.
+    if (!id || !sheet || event?.status !== "started") return;
     const input: ScoreEventInput = {
       id: crypto.randomUUID(),
       scheduleEntryId: sheet.presentation.id,
@@ -389,6 +400,11 @@ export function EventLiveScoringPage() {
     );
   }
 
+  // Jurado só inicia apresentação/lança nota depois que o produtor
+  // iniciar o evento — a tela em si continua aberta pra consulta (ver
+  // decisão do usuário), só os controles de escrita ficam desabilitados.
+  const canWrite = event.status === "started";
+
   const progress = sheet.presentation.presentationTimeSeconds
     ? Math.min(1, elapsedMs / 1000 / sheet.presentation.presentationTimeSeconds)
     : 0;
@@ -469,6 +485,14 @@ export function EventLiveScoringPage() {
           </div>
         )}
 
+        {!canWrite && (
+          <div className="m-4 flex items-center gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="size-4 shrink-0" />
+            O evento ainda não foi iniciado — aguarde o produtor pra lançar notas.
+          </div>
+        )}
+
+        <div className={cn(!canWrite && "pointer-events-none opacity-50")}>
         {sheet.isLegalityJudge && (
           <div className="m-4 rounded-2xl border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
@@ -625,10 +649,11 @@ export function EventLiveScoringPage() {
             )}
           </div>
         </div>
+        </div>
       </main>
 
       <div className="border-t border-border bg-card p-4">
-        {!sheetComplete && (
+        {!sheetComplete && canWrite && (
           <p className="mb-2 text-center text-xs font-medium text-amber-600">
             Faltam {missingParts.join(" e ")} pra lançar as notas.
           </p>
@@ -636,8 +661,14 @@ export function EventLiveScoringPage() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={submitting || !sheetComplete}
-          title={sheetComplete ? undefined : "Preencha todos os critérios antes de lançar as notas."}
+          disabled={submitting || !sheetComplete || !canWrite}
+          title={
+            !canWrite
+              ? "O evento ainda não foi iniciado."
+              : sheetComplete
+                ? undefined
+                : "Preencha todos os critérios antes de lançar as notas."
+          }
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
           <Send className="size-4" />
@@ -652,6 +683,7 @@ export function EventLiveScoringPage() {
           key="head-judge-mobile-sheet"
           eventId={id}
           scheduleEntryId={entryId}
+          canWrite={canWrite}
           onClose={() => setSupervisionOpen(false)}
         />
       )}
@@ -691,6 +723,7 @@ export function EventLiveScoringPage() {
         onSketchChange={handleSketchChange}
         onSubmit={handleSubmit}
         onOpenSupervision={() => setSupervisionOpen(true)}
+        canWrite={canWrite}
       />
       <AnimatePresence>
         {supervisionOpen && id && entryId && (
@@ -698,6 +731,7 @@ export function EventLiveScoringPage() {
             key="head-judge-panel"
             eventId={id}
             scheduleEntryId={entryId}
+            canWrite={canWrite}
             onClose={() => setSupervisionOpen(false)}
           />
         )}

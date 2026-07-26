@@ -12,6 +12,13 @@ export enum ScoreEventKind {
   // extra, só sinaliza "esta apresentação não exige mais ação deste
   // jurado" pra tela de Notas (ScoringService.getMySubmittedEntryIds).
   SHEET_SUBMITTED = 'sheet_submitted',
+  // Jurado de Legalidade clica "Iniciar"/"Reiniciar" — marca o horário
+  // real de início da apresentação (ver ScoringService.
+  // getStartedPresentations/assertEventStarted). Cada clique emite um
+  // evento novo (inclusive "Reiniciar", um falso início) — o cálculo de
+  // atraso usa sempre o PRIMEIRO (mais antigo) `timer_started` de cada
+  // apresentação, nunca o mais recente.
+  TIMER_STARTED = 'timer_started',
   // Jurado de Legalidade clica "Parar" — guarda o tempo TOTAL marcado
   // pelo cronômetro (`presentationElapsedMs`), pra reabrir a
   // apresentação depois mostrar o relógio já parado nesse valor em vez

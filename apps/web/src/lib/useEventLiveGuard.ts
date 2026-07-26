@@ -11,10 +11,19 @@ import { eventsApi } from "@/api/client";
 // ProgramsService.create/linkUnclaimedProgramsByEmail), usado pela
 // visão da equipe na tela de notas (EventLiveTeamNotesPage).
 // "spectator" (espectador genérico, sem vínculo com equipe)
-// deliberadamente NÃO entra aqui — só admin/assessor/jurado/equipe (e,
-// futuramente, atleta) têm acesso a essas telas.
-export function useEventLiveGuard(eventId: string | undefined) {
+// deliberadamente NÃO entra aqui por padrão — só admin/assessor/
+// jurado/equipe (e, futuramente, atleta) têm acesso à maioria dessas
+// telas. Exceção: EventLiveResultsPage passa `allowSpectator: true`,
+// já que resultado é a única tela "ao vivo" que espectador (e, futuramente,
+// atleta) pode acessar — a página em si decide se mostra o conteúdo
+// ou um aviso de "em breve" via `Event.resultsReleasedAt` (ver
+// ScoringService.getPublicEventResults).
+export function useEventLiveGuard(
+  eventId: string | undefined,
+  options?: { allowSpectator?: boolean },
+) {
   const navigate = useNavigate();
+  const allowSpectator = options?.allowSpectator ?? false;
 
   useEffect(() => {
     if (!eventId) return;
@@ -24,7 +33,12 @@ export function useEventLiveGuard(eventId: string | undefined) {
       .then((event) => {
         if (cancelled) return;
         const allowed = event.currentUserRoles.some(
-          (r) => r === "admin" || r === "assessor" || r === "judge" || r === "program",
+          (r) =>
+            r === "admin" ||
+            r === "assessor" ||
+            r === "judge" ||
+            r === "program" ||
+            (allowSpectator && r === "spectator"),
         );
         if (!allowed) navigate("/", { replace: true });
       })
@@ -34,5 +48,5 @@ export function useEventLiveGuard(eventId: string | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [eventId, navigate]);
+  }, [eventId, navigate, allowSpectator]);
 }

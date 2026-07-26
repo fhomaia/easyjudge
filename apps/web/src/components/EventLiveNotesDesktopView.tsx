@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Bell,
+  Building2,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
@@ -74,9 +75,22 @@ export function EventLiveNotesDesktopView({
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-xl font-bold text-foreground">{event.name}</h1>
-                <p className="mt-1 truncate text-sm text-muted-foreground">
-                  {formatEventDateRange(event.startDate, event.competitionDays)} · {event.location}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays className="size-4" />
+                    {formatEventDateRange(event.startDate, event.competitionDays)}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="size-4" />
+                    {event.location}
+                  </span>
+                  {event.venue && (
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="size-4" />
+                      {event.venue}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

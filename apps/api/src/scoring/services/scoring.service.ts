@@ -21,6 +21,8 @@ import type { CriterionAssignmentsState } from '../../judging/services/judging.s
 import { SpecialJudgeRole } from '../../judging/enums/special-judge-role.enum';
 import { ScheduleService } from '../../schedule/services/schedule.service';
 import { EventsService } from '../../events/services/events.service';
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
+import { EventStatus } from '../../events/enums/event-status.enum';
 import { ProgramsService } from '../../programs/services/programs.service';
 import { ScoringCriteriaService } from '../../scoring-templates/services/scoring-criteria.service';
 import { DeductionType } from '../../regulations/enums/deduction-type.enum';
@@ -116,6 +118,11 @@ export interface AdminOverviewEntryView {
   // ação global do evento (ver ReleaseFlagsView/getReleaseFlags), não
   // faz mais sentido repetir o mesmo valor em toda linha da lista.
   contestationRequested: boolean;
+  // Nota final e percentual (ver computePresentationResult) — mostrados
+  // direto na lista de Notas (admin/assessor e Programa) pra não
+  // precisar abrir o detalhe por critério só pra ver o resultado.
+  finalResult: number;
+  percentage: number;
 }
 
 // Liberação global do evento — "Liberar notas"/"Liberar contestação"/
@@ -217,6 +224,17 @@ export interface EventResultsView {
   topTeamCheer: ResultsPresentationView | null;
   topProgram: ResultsProgramView | null;
   updatedAt: string;
+}
+
+// Resposta da página de Resultados pública (ver ResultsController) —
+// admin/assessor/jurado sempre veem (`released: true`); programa/
+// espectador (e, futuramente, atleta) só depois que o admin acionar
+// `Event.resultsReleasedAt` (ver ReleaseFlagsPanel na tela de Notas).
+// Antes disso `results` vem `null` e o front mostra um aviso de "em
+// breve".
+export interface EventResultsResponse {
+  released: boolean;
+  results: EventResultsView | null;
 }
 
 @Injectable()
@@ -513,6 +531,10 @@ export class ScoringService {
   // feita pelo guard do controller, sem checagem extra aqui.
   async getAdminOverview(eventId: string): Promise<AdminOverviewEntryView[]> {
     const days = await this.scheduleService.getDays(eventId);
+    const regulation = await this.regulationsService.getForEvent(eventId);
+    const deductionValueByType = new Map(
+      regulation.deductions.map((r) => [r.type, r.value]),
+    );
     const templateCache = new Map<string, CriterionAssignmentsState>();
     const categoryCache = new Map<string, Category | null>();
     const specialRolesCache = new Map<
@@ -534,8 +556,9 @@ export class ScoringService {
 
           let category = categoryCache.get(entry.categoryId);
           if (category === undefined) {
-            category = await this.categoriesRepo.findOneBy({
-              id: entry.categoryId,
+            category = await this.categoriesRepo.findOne({
+              where: { id: entry.categoryId },
+              relations: ['scoringTemplate'],
             });
             categoryCache.set(entry.categoryId, category);
           }
@@ -567,6 +590,12 @@ export class ScoringService {
           );
           if (!complete) continue;
 
+          const { finalResult, percentage } = await this.computePresentationResult(
+            entry.id,
+            category,
+            deductionValueByType,
+          );
+
           results.push({
             scheduleEntryId: entry.id,
             teamName: entry.teamName ?? 'Equipe',
@@ -574,12 +603,67 @@ export class ScoringService {
             resourceName: resource.name,
             dayDate: day.date,
             contestationRequested: !!entry.contestationRequestedAt,
+            finalResult,
+            percentage,
           });
         }
       }
     }
 
     return results;
+  }
+
+  // Nota final (soma dos critérios + deduções, sempre negativas) e
+  // percentual (sobre a meta de pontos do template) de UMA
+  // apresentação — extraído da Página de Resultados pra ser reusado
+  // também pelos overviews de Notas (admin/assessor e Programa), que
+  // agora mostram esses números direto na lista, sem abrir o detalhe
+  // por critério (ver AdminOverviewEntryView). Assume que a
+  // apresentação já foi checada como 100% pontuada (isPresentationFullyScored)
+  // antes de chamar — não recalcula essa checagem aqui.
+  private async computePresentationResult(
+    scheduleEntryId: string,
+    category: Category,
+    deductionValueByType: Map<DeductionType, number>,
+  ): Promise<{
+    totalScore: number;
+    deductionsTotal: number;
+    finalResult: number;
+    maxScore: number;
+    percentage: number;
+  }> {
+    const scoreEvents = await this.scoreEventsRepo.find({
+      where: { scheduleEntryId },
+      order: { clientCreatedAt: 'ASC' },
+    });
+    const latestScoreByCriterion = new Map<string, number>();
+    const deductionAdds = new Map<string, ScoreEvent>();
+    const undoneDeductionIds = new Set<string>();
+    for (const event of scoreEvents) {
+      if (event.kind === ScoreEventKind.SCORE_SET) {
+        if (event.criterionId && event.value !== null) {
+          latestScoreByCriterion.set(event.criterionId, event.value);
+        }
+      } else if (event.kind === ScoreEventKind.DEDUCTION_ADD) {
+        deductionAdds.set(event.id, event);
+      } else if (event.kind === ScoreEventKind.DEDUCTION_REMOVE) {
+        if (event.undoesEventId) undoneDeductionIds.add(event.undoesEventId);
+      }
+    }
+    const totalScore = Array.from(latestScoreByCriterion.values()).reduce(
+      (sum, value) => sum + value,
+      0,
+    );
+    const deductionsTotal = Array.from(deductionAdds.values())
+      .filter((d) => !undoneDeductionIds.has(d.id))
+      .reduce(
+        (sum, d) => sum + (deductionValueByType.get(d.deductionType!) ?? 0),
+        0,
+      );
+    const finalResult = totalScore + deductionsTotal;
+    const maxScore = category.scoringTemplate?.targetScore ?? 0;
+    const percentage = maxScore > 0 ? (finalResult / maxScore) * 100 : 0;
+    return { totalScore, deductionsTotal, finalResult, maxScore, percentage };
   }
 
   // Página de Resultados (ver EventResultsView) — mesma completude
@@ -667,36 +751,8 @@ export class ScoringService {
           );
           if (!complete) continue;
 
-          const scoreEvents = await this.scoreEventsRepo.find({
-            where: { scheduleEntryId: entry.id },
-          });
-          const latestScoreByCriterion = new Map<string, number>();
-          const deductionAdds = new Map<string, ScoreEvent>();
-          const undoneDeductionIds = new Set<string>();
-          for (const event of scoreEvents) {
-            if (event.kind === ScoreEventKind.SCORE_SET) {
-              if (event.criterionId && event.value !== null) {
-                latestScoreByCriterion.set(event.criterionId, event.value);
-              }
-            } else if (event.kind === ScoreEventKind.DEDUCTION_ADD) {
-              deductionAdds.set(event.id, event);
-            } else if (event.kind === ScoreEventKind.DEDUCTION_REMOVE) {
-              if (event.undoesEventId) undoneDeductionIds.add(event.undoesEventId);
-            }
-          }
-          const totalScore = Array.from(latestScoreByCriterion.values()).reduce(
-            (sum, value) => sum + value,
-            0,
-          );
-          const deductionsTotal = Array.from(deductionAdds.values())
-            .filter((d) => !undoneDeductionIds.has(d.id))
-            .reduce(
-              (sum, d) => sum + (deductionValueByType.get(d.deductionType!) ?? 0),
-              0,
-            );
-          const finalResult = totalScore + deductionsTotal;
-          const maxScore = category.scoringTemplate?.targetScore ?? 0;
-          const percentage = maxScore > 0 ? (finalResult / maxScore) * 100 : 0;
+          const { totalScore, deductionsTotal, finalResult, maxScore, percentage } =
+            await this.computePresentationResult(entry.id, category, deductionValueByType);
 
           presentations.push({
             scheduleEntryId: entry.id,
@@ -778,6 +834,32 @@ export class ScoringService {
     };
   }
 
+  // Página de Resultados pública (ver ResultsController/EventResultsView
+  // resposta) — admin/assessor/jurado sempre veem a apuração de
+  // trabalho (mesma de getEventResults); programa/espectador só depois
+  // que `Event.resultsReleasedAt` for ligado pelo admin (toggle
+  // "Liberar resultado" em ReleaseFlagsPanel).
+  async getPublicEventResults(
+    eventId: string,
+    userId: string,
+  ): Promise<EventResultsResponse> {
+    const { event, member } = await this.eventsService.getMemberForEventId(
+      eventId,
+      userId,
+    );
+    const alwaysReleasedRoles = [
+      EventMemberRole.ADMIN,
+      EventMemberRole.ASSESSOR,
+      EventMemberRole.JUDGE,
+    ];
+    const isAlwaysReleased = !!member?.roles.some((r) =>
+      alwaysReleasedRoles.includes(r),
+    );
+    const released = isAlwaysReleased || !!event.resultsReleasedAt;
+    if (!released) return { released: false, results: null };
+    return { released: true, results: await this.getEventResults(eventId) };
+  }
+
   // Liberação global do evento (ver ReleaseFlagsView) — usado pelo
   // painel do admin/assessor pra saber o estado atual dos 3 switches.
   async getReleaseFlags(eventId: string): Promise<ReleaseFlagsView> {
@@ -830,6 +912,10 @@ export class ScoringService {
     const myTeamIds = new Set(myTeams.map((t) => t.id));
 
     const days = await this.scheduleService.getDays(eventId);
+    const regulation = await this.regulationsService.getForEvent(eventId);
+    const deductionValueByType = new Map(
+      regulation.deductions.map((r) => [r.type, r.value]),
+    );
     const templateCache = new Map<string, CriterionAssignmentsState>();
     const categoryCache = new Map<string, Category | null>();
     const specialRolesCache = new Map<
@@ -852,8 +938,9 @@ export class ScoringService {
 
           let category = categoryCache.get(entry.categoryId);
           if (category === undefined) {
-            category = await this.categoriesRepo.findOneBy({
-              id: entry.categoryId,
+            category = await this.categoriesRepo.findOne({
+              where: { id: entry.categoryId },
+              relations: ['scoringTemplate'],
             });
             categoryCache.set(entry.categoryId, category);
           }
@@ -885,6 +972,12 @@ export class ScoringService {
           );
           if (!complete) continue;
 
+          const { finalResult, percentage } = await this.computePresentationResult(
+            entry.id,
+            category,
+            deductionValueByType,
+          );
+
           results.push({
             scheduleEntryId: entry.id,
             teamName: entry.teamName ?? 'Equipe',
@@ -892,6 +985,8 @@ export class ScoringService {
             resourceName: resource.name,
             dayDate: day.date,
             contestationRequested: !!entry.contestationRequestedAt,
+            finalResult,
+            percentage,
           });
         }
       }
@@ -1017,6 +1112,58 @@ export class ScoringService {
     return Array.from(new Set(rows.map((r) => r.scheduleEntryId)));
   }
 
+  // Horário real de início de cada apresentação já iniciada (primeiro
+  // TIMER_STARTED — ver enum) — alimenta o card "Atraso atual" do
+  // painel Início (comparação feita no frontend, que já tem toda a
+  // lógica de hora agendada × relógio em lib/eventLiveSchedule.ts, sem
+  // duplicar aqui). Uma linha por apresentação, só as que já foram
+  // iniciadas por algum Jurado de Legalidade.
+  async getStartedPresentations(
+    eventId: string,
+  ): Promise<Array<{ scheduleEntryId: string; startedAt: string }>> {
+    const days = await this.scheduleService.getDays(eventId);
+    const entryIds: string[] = [];
+    for (const day of days) {
+      for (const resource of day.resources) {
+        for (const entry of resource.entries) {
+          if (entry.type === ScheduleEntryType.PRESENTATION) {
+            entryIds.push(entry.id);
+          }
+        }
+      }
+    }
+    if (entryIds.length === 0) return [];
+
+    const events = await this.scoreEventsRepo.find({
+      where: { scheduleEntryId: In(entryIds), kind: ScoreEventKind.TIMER_STARTED },
+      order: { clientCreatedAt: 'ASC' },
+    });
+    const firstStartByEntry = new Map<string, Date>();
+    for (const event of events) {
+      if (!firstStartByEntry.has(event.scheduleEntryId)) {
+        firstStartByEntry.set(event.scheduleEntryId, event.clientCreatedAt);
+      }
+    }
+    return Array.from(firstStartByEntry.entries()).map(
+      ([scheduleEntryId, startedAt]) => ({
+        scheduleEntryId,
+        startedAt: startedAt.toISOString(),
+      }),
+    );
+  }
+
+  // Jurado (comum ou Head Judge) só pode escrever na súmula
+  // (nota/dedução/cronômetro/comentário/lançar) depois que o produtor
+  // iniciar o evento de verdade (`Event.startedAt`/status `started`) —
+  // decisão do usuário: antes disso as telas continuam abertas pra
+  // consulta, só a escrita é que fica bloqueada.
+  private async assertEventStarted(eventId: string): Promise<void> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    if (event.status !== EventStatus.STARTED) {
+      throw new ConflictException('O evento ainda não foi iniciado.');
+    }
+  }
+
   // Recebe a fila (offline ou não) do buffer local do navegador —
   // idempotente por design (`id` vem do cliente): reenviar o mesmo
   // evento depois de uma falha de rede não duplica nada.
@@ -1025,6 +1172,7 @@ export class ScoringService {
     userId: string,
     events: ScoreEventInputDto[],
   ): Promise<{ savedIds: string[] }> {
+    await this.assertEventStarted(eventId);
     const participation = await this.assertJudgeParticipation(
       eventId,
       userId,
@@ -1060,6 +1208,7 @@ export class ScoringService {
     events: ScoreEventInputDto[],
   ): Promise<{ savedIds: string[] }> {
     if (events.length === 0) return { savedIds: [] };
+    await this.assertEventStarted(eventId);
 
     const { entry } = await this.loadPresentationContext(
       eventId,
@@ -1150,6 +1299,7 @@ export class ScoringService {
       } else if (
         input.kind === ScoreEventKind.DEDUCTION_ADD ||
         input.kind === ScoreEventKind.DEDUCTION_REMOVE ||
+        input.kind === ScoreEventKind.TIMER_STARTED ||
         input.kind === ScoreEventKind.TIMER_STOPPED ||
         input.kind === ScoreEventKind.DEDUCTION_CODE_SET
       ) {

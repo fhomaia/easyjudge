@@ -18,22 +18,36 @@ import {
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
-import { formatMinutes } from "@/lib/scheduleTime";
+import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
 import { computeEventLiveSchedule, toIsoDate } from "@/lib/eventLiveSchedule";
 import { resolveCenterTab } from "@/lib/eventNavPriority";
+import { buildJudgePresentationList } from "@/lib/judgeSchedule";
 import { cn } from "@/lib/utils";
 import {
   ApiError,
+  categoriesApi,
   eventsApi,
   judgesApi,
+  judgingApi,
   scheduleApi,
+  scoringApi,
   usersApi,
+  type Category,
   type Event,
   type Judge,
+  type JudgeAssignmentsSummary,
   type ScheduleDay,
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+
+const EMPTY_ASSIGNMENT: JudgeAssignmentsSummary = {
+  isJudge: false,
+  specialRoles: [],
+  criterionGroups: [],
+  resourceIds: [],
+  criterionResourceTemplates: [],
+};
 
 export function EventLiveDashboardPage() {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +60,12 @@ export function EventLiveDashboardPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [days, setDays] = useState<ScheduleDay[] | null>(null);
   const [judges, setJudges] = useState<Judge[] | null>(null);
+  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [assignment, setAssignment] = useState<JudgeAssignmentsSummary>(EMPTY_ASSIGNMENT);
+  const [submittedIds, setSubmittedIds] = useState<string[]>([]);
+  const [startedPresentations, setStartedPresentations] = useState<
+    Array<{ scheduleEntryId: string; startedAt: string }>
+  >([]);
   const [judgesDialogOpen, setJudgesDialogOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -59,10 +79,36 @@ export function EventLiveDashboardPage() {
     if (!id) return;
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
     scheduleApi.listDays(id).then(setDays).catch(() => setDays([]));
+    categoriesApi.list(id).then(setCategories).catch(() => setCategories([]));
+    judgingApi.me(id).then(setAssignment).catch(() => setAssignment(EMPTY_ASSIGNMENT));
+    scoringApi.getMySubmissions(id).then(setSubmittedIds).catch(() => setSubmittedIds([]));
     judgesApi
       .list(id)
       .then(setJudges)
       .catch(() => setJudges(null));
+  }, [id]);
+
+  // Card "Atraso atual" — sem WebSocket ainda, então recarrega junto
+  // com o tick de `now` abaixo (30s) pra refletir apresentações
+  // iniciadas por outros jurados nesse meio-tempo.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    function refresh() {
+      if (!id) return;
+      scoringApi
+        .getStartedPresentations(id)
+        .then((rows) => {
+          if (!cancelled) setStartedPresentations(rows);
+        })
+        .catch(() => {});
+    }
+    refresh();
+    const interval = setInterval(refresh, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [id]);
 
   // Essa tela é só pra evento publicado/em andamento — "created" volta
@@ -99,6 +145,66 @@ export function EventLiveDashboardPage() {
   );
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const isoToday = toIsoDate(now);
+
+  // "Ir para agora" só faz sentido pra quem lança nota (jurado de
+  // verdade — `assignment.isJudge`, não só o papel "judge" no evento) —
+  // leva direto pra súmula da apresentação seguinte não enviada (a que
+  // está rolando agora ou a próxima), mesma lista/critério de "próxima
+  // apresentação" já usado em EventLiveNotesPage.
+  const categoriesById = useMemo(() => {
+    const map = new Map<string, Category>();
+    for (const c of categories ?? []) map.set(c.id, c);
+    return map;
+  }, [categories]);
+  const submittedSet = useMemo(() => new Set(submittedIds), [submittedIds]);
+  const nextJudgePresentationId = useMemo(() => {
+    if (!days || !assignment.isJudge) return null;
+    const myPresentations = buildJudgePresentationList(days, categoriesById, assignment, submittedSet);
+    return myPresentations.find((item) => !item.submitted)?.entry.id ?? null;
+  }, [days, categoriesById, assignment, submittedSet]);
+
+  function handleGoToNow() {
+    if (!event || !nextJudgePresentationId) return;
+    navigate(`/events/${event.id}/live/scoring/${nextJudgePresentationId}`);
+  }
+
+  // "Atraso atual" (card RESUMO DO EVENTO) — compara o horário AGENDADO
+  // da apresentação mais recentemente iniciada (ScoreEventKind.
+  // TIMER_STARTED, ver ScoringService.getStartedPresentations) com o
+  // horário REAL em que o Jurado de Legalidade deu play no cronômetro.
+  // Só métrica informativa — não altera a projeção de horário das
+  // próximas apresentações (decisão do usuário).
+  const delayMinutes = useMemo(() => {
+    if (!days || startedPresentations.length === 0) return null;
+    const scheduleByEntry = new Map<string, { dayDate: string; startMinutes: number }>();
+    for (const day of days) {
+      const times = computeResourceTimes(day.resources, day.startMinutes);
+      for (const [entryId, t] of times) {
+        scheduleByEntry.set(entryId, { dayDate: day.date, startMinutes: t.startMinutes });
+      }
+    }
+    let latest: { scheduleEntryId: string; startedAt: Date } | null = null;
+    for (const sp of startedPresentations) {
+      const startedAt = new Date(sp.startedAt);
+      if (!latest || startedAt > latest.startedAt) latest = { scheduleEntryId: sp.scheduleEntryId, startedAt };
+    }
+    if (!latest) return null;
+    const scheduled = scheduleByEntry.get(latest.scheduleEntryId);
+    if (!scheduled) return null;
+    const scheduledDate = new Date(`${scheduled.dayDate}T00:00:00`);
+    scheduledDate.setMinutes(scheduledDate.getMinutes() + scheduled.startMinutes);
+    return Math.round((latest.startedAt.getTime() - scheduledDate.getTime()) / 60_000);
+  }, [days, startedPresentations]);
+
+  const delayLabel =
+    delayMinutes === null
+      ? "—"
+      : delayMinutes > 0
+        ? `+${delayMinutes} min`
+        : delayMinutes < 0
+          ? `${delayMinutes} min`
+          : "No horário";
+  const delayProgress = delayMinutes === null ? 0 : Math.min(1, Math.max(0, delayMinutes / 30));
 
   function handleLogout() {
     logout();
@@ -227,15 +333,17 @@ export function EventLiveDashboardPage() {
               <EventStatusBadge status={event.status} />
             )}
 
-            {/* Sem ação por enquanto — não há uma visão de linha do
-                tempo nesta tela pra "ir até agora" rolar. */}
-            <button
-              type="button"
-              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
-            >
-              <Clock className="size-4" />
-              Ir para agora
-            </button>
+            {assignment.isJudge && (
+              <button
+                type="button"
+                onClick={handleGoToNow}
+                disabled={!nextJudgePresentationId}
+                className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+              >
+                <Clock className="size-4" />
+                Ir para agora
+              </button>
+            )}
           </div>
 
           {live.next ? (
@@ -394,15 +502,13 @@ export function EventLiveDashboardPage() {
               label="Jurados cadastrados"
               onClick={() => setJudgesDialogOpen(true)}
             />
-            {/* Mockado — sem tracking de atraso real vs. planejado no
-                backend ainda (a pedido do usuário). */}
             <StatTile
               icon={Clock}
               iconClassName="bg-amber-500/10 text-amber-600"
               barClassName="bg-amber-500"
-              value="+4 min"
+              value={delayLabel}
               label="Atraso atual"
-              progress={0.3}
+              progress={delayProgress}
             />
             <StatTile
               icon={Trophy}
@@ -428,6 +534,10 @@ export function EventLiveDashboardPage() {
       canStart={canStart}
       starting={starting}
       judgeCount={judges === null ? null : judges.length}
+      isJudge={assignment.isJudge}
+      onGoToNow={nextJudgePresentationId ? handleGoToNow : null}
+      delayLabel={delayLabel}
+      delayProgress={delayProgress}
       onOpenJudges={() => setJudgesDialogOpen(true)}
       onStart={handleStart}
       onRevert={handleRevert}

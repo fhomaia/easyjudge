@@ -16,6 +16,7 @@ export function useHeadJudgeSheet(
   eventId: string | undefined,
   scheduleEntryId: string | undefined,
   judgeParticipationId: string | undefined,
+  canWrite: boolean,
 ) {
   const [sheet, setSheet] = useState<HeadJudgeSheet | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -59,7 +60,11 @@ export function useHeadJudgeSheet(
   async function emitEvent(
     partial: Omit<ScoreEventInput, "id" | "clientCreatedAt" | "scheduleEntryId"> & { id?: string },
   ) {
-    if (!eventId || !scheduleEntryId || !judgeParticipationId) return;
+    // Mesma regra de EventLiveScoringPage.emitEvent — Head Judge também
+    // só escreve depois que o evento for iniciado (ver
+    // ScoringService.assertEventStarted, aplicado a submitEventsAsHeadJudge
+    // também).
+    if (!eventId || !scheduleEntryId || !judgeParticipationId || !canWrite) return;
     const input: ScoreEventInput = {
       id: crypto.randomUUID(),
       scheduleEntryId,

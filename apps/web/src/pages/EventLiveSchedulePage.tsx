@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CalendarDays, Download, FileSpreadsheet, FileText, MapPin, Search, Trophy } from "lucide-react";
+import { Building2, CalendarDays, Download, FileSpreadsheet, FileText, MapPin, Search, Trophy } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ENTRY_VISUALS, EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
 import { Button } from "@/components/ui/button";
@@ -207,12 +207,18 @@ export function EventLiveSchedulePage() {
                   <MapPin className="size-4" />
                   {event.location}
                 </span>
+                {event.venue && (
+                  <span className="flex items-center gap-1.5">
+                    <Building2 className="size-4" />
+                    {event.venue}
+                  </span>
+                )}
               </div>
             </div>
           </div>
         </header>
 
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-4 sm:px-8 sm:py-6">
+        <div className="flex w-full flex-1 flex-col overflow-hidden px-4 py-4 sm:px-8 sm:py-6">
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-lg font-bold text-foreground">Cronograma completo</h2>
 
@@ -238,7 +244,7 @@ export function EventLiveSchedulePage() {
             </DropdownMenu>
           </div>
 
-          <div className="mt-5 flex flex-col gap-3">
+          <div className="mt-5 flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4">
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input

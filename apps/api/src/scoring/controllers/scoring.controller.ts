@@ -33,6 +33,15 @@ export class ScoringController {
     return this.scoringService.getMySubmittedEntryIds(eventId, req.user.userId);
   }
 
+  // Alimenta o card "Atraso atual" do painel Início — admin/assessor
+  // também precisam ler isso (não é uma ação de jurado), então
+  // sobrescreve o @EventRoles(JUDGE) da classe só nesta rota.
+  @Get('started-presentations')
+  @EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR, EventMemberRole.JUDGE)
+  getStartedPresentations(@Param('eventId') eventId: string) {
+    return this.scoringService.getStartedPresentations(eventId);
+  }
+
   @Post('sheet/:scheduleEntryId/resolve-contestation')
   resolveContestation(
     @Param('eventId') eventId: string,
