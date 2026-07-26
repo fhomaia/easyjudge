@@ -37,6 +37,13 @@ export class User {
   @Column({ name: 'team_or_institution_name', nullable: true })
   teamOrInstitutionName?: string;
 
+  // Email do programa informado no cadastro por uma conta ATHLETE — só
+  // usado nesse momento pra criar o primeiro AthleteLink (ver
+  // AuthService.setPassword/AthletesService.createOrRequestLink), não é
+  // atualizado depois disso.
+  @Column({ name: 'program_email', nullable: true })
+  programEmail?: string;
+
   // Nulo até o usuário concluir a etapa "definir senha".
   // Enquanto for nulo, o cadastro é considerado incompleto.
   @Column({

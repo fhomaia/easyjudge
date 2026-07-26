@@ -1,15 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, Bell, CalendarDays, ChevronRight, Clock, MapPin, Menu, Trophy, Users } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  CalendarDays,
+  ChevronRight,
+  Clock,
+  Eye,
+  MapPin,
+  Menu,
+  Trophy,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { BlinkingDot } from "@/components/BlinkingDot";
 import { EventStatusBadge } from "@/components/EventStatusBadge";
 import { MobileNavSheet } from "@/components/MobileNavSheet";
 import { EventLiveDesktopView } from "@/components/EventLiveDesktopView";
 import { JudgesSummaryDialog } from "@/components/JudgesSummaryDialog";
+import { ProgramsSummaryDialog } from "@/components/ProgramsSummaryDialog";
 import {
   ENTRY_VISUALS,
   EventLiveBottomNav,
-  MOCK_ALERTS,
   StatTile,
   buildEventNavTabs,
   countdownLabel,
@@ -22,6 +34,7 @@ import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
 import { computeEventLiveSchedule, toIsoDate } from "@/lib/eventLiveSchedule";
 import { resolveCenterTab } from "@/lib/eventNavPriority";
 import { buildJudgePresentationList } from "@/lib/judgeSchedule";
+import { NOTIFICATION_ICONS, formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
 import { cn } from "@/lib/utils";
 import {
   ApiError,
@@ -29,14 +42,21 @@ import {
   eventsApi,
   judgesApi,
   judgingApi,
+  notificationsApi,
+  programsApi,
   scheduleApi,
   scoringApi,
+  teamsApi,
   usersApi,
   type Category,
   type Event,
+  type EventMemberRole,
   type Judge,
   type JudgeAssignmentsSummary,
+  type NotificationView,
+  type Program,
   type ScheduleDay,
+  type TeamWithProgram,
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
@@ -60,13 +80,20 @@ export function EventLiveDashboardPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [days, setDays] = useState<ScheduleDay[] | null>(null);
   const [judges, setJudges] = useState<Judge[] | null>(null);
+  const [programs, setPrograms] = useState<Program[] | null>(null);
   const [categories, setCategories] = useState<Category[] | null>(null);
+  const [teams, setTeams] = useState<TeamWithProgram[] | null>(null);
   const [assignment, setAssignment] = useState<JudgeAssignmentsSummary>(EMPTY_ASSIGNMENT);
   const [submittedIds, setSubmittedIds] = useState<string[]>([]);
   const [startedPresentations, setStartedPresentations] = useState<
     Array<{ scheduleEntryId: string; startedAt: string }>
   >([]);
+  const [completedEntryIds, setCompletedEntryIds] = useState<string[]>([]);
+  const [notifications, setNotifications] = useState<NotificationView[] | null>(null);
+  const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
+  const [memberCounts, setMemberCounts] = useState<Partial<Record<EventMemberRole, number>>>({});
   const [judgesDialogOpen, setJudgesDialogOpen] = useState(false);
+  const [programsDialogOpen, setProgramsDialogOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [now, setNow] = useState(() => new Date());
@@ -86,6 +113,22 @@ export function EventLiveDashboardPage() {
       .list(id)
       .then(setJudges)
       .catch(() => setJudges(null));
+    // Direto de ProgramParticipation (mesma fonte da tela "Programas e
+    // equipes"), não do roster de acessos (EventMember) — mais
+    // confiável: um programa pode existir sem o papel "program" nunca
+    // ter sido sincronizado pro roster (dado legado, ver
+    // ProgramsService.create/linkUnclaimedProgramsByEmail).
+    programsApi
+      .list(id)
+      .then(setPrograms)
+      .catch(() => setPrograms(null));
+    // Só pra agrupar por programa no popup de "Programas cadastrados"
+    // (ver ProgramsSummaryDialog) — um único GET pra todas as equipes do
+    // evento em vez de N chamadas (uma por programa).
+    teamsApi
+      .listForEvent(id)
+      .then(setTeams)
+      .catch(() => setTeams(null));
   }, [id]);
 
   // Card "Atraso atual" — sem WebSocket ainda, então recarrega junto
@@ -100,6 +143,59 @@ export function EventLiveDashboardPage() {
         .getStartedPresentations(id)
         .then((rows) => {
           if (!cancelled) setStartedPresentations(rows);
+        })
+        .catch(() => {});
+    }
+    refresh();
+    const interval = setInterval(refresh, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [id]);
+
+  // "Próxima apresentação"/"Próximo em cada pista" — mesmo raciocínio
+  // do polling acima: sem isso, uma apresentação julgada mais rápido
+  // que a duração planejada continuava aparecendo como "próxima" até o
+  // relógio alcançar o horário agendado (ver lib/eventLiveSchedule.ts).
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    function refresh() {
+      if (!id) return;
+      scoringApi
+        .getCompletedPresentations(id)
+        .then((ids) => {
+          if (!cancelled) setCompletedEntryIds(ids);
+        })
+        .catch(() => {});
+    }
+    refresh();
+    const interval = setInterval(refresh, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    eventsApi.getMemberCounts(id).then(setMemberCounts).catch(() => {});
+  }, [id]);
+
+  // Card/sino "Notificações" — mesmo padrão de polling de 30s já usado
+  // pra started/completed presentations acima (sem WebSocket ainda).
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    function refresh() {
+      if (!id) return;
+      notificationsApi
+        .list(id)
+        .then((res) => {
+          if (cancelled) return;
+          setNotifications(res.notifications);
+          setNotificationsUnreadCount(res.unreadCount);
         })
         .catch(() => {});
     }
@@ -139,9 +235,10 @@ export function EventLiveDashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const completedEntryIdSet = useMemo(() => new Set(completedEntryIds), [completedEntryIds]);
   const live = useMemo(
-    () => (days && event ? computeEventLiveSchedule(days, event.status === "started", now) : null),
-    [days, event, now],
+    () => (days && event ? computeEventLiveSchedule(days, completedEntryIdSet) : null),
+    [days, event, completedEntryIdSet],
   );
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const isoToday = toIsoDate(now);
@@ -251,6 +348,12 @@ export function EventLiveDashboardPage() {
   // tela de gestão de um evento específico, então o botão fica sempre
   // disponível enquanto ele não tiver sido iniciado.
   const canStart = event.currentUserRoles.includes("admin") && event.status === "published";
+  const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
+  // "Jurados cadastrados" — quem lança nota também pode ver quem mais
+  // tá julgando o evento (ver JudgesController.findAll, ampliado pra
+  // jurado); "Programas cadastrados" continua só admin/assessor (é
+  // gestão do evento, não faz sentido pra jurado).
+  const canViewJudges = isAdminOrAssessor || event.currentUserRoles.includes("judge");
 
   const eventNavTabs = buildEventNavTabs({
     current: "inicio",
@@ -258,6 +361,8 @@ export function EventLiveDashboardPage() {
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
     onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
 
@@ -291,12 +396,13 @@ export function EventLiveDashboardPage() {
         <button
           type="button"
           aria-label="Notificações"
+          onClick={() => navigate(`/events/${event.id}/live/notifications`)}
           className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Bell className="size-5" />
-          {MOCK_ALERTS.length > 0 && (
-            <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
-              {MOCK_ALERTS.length}
+          {!!notificationsUnreadCount && (
+            <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
+              {notificationsUnreadCount}
             </span>
           )}
         </button>
@@ -452,35 +558,50 @@ export function EventLiveDashboardPage() {
 
           <div className="mx-4 mt-4 rounded-2xl border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
-              <span className="flex items-center gap-2 text-sm font-semibold text-amber-600">
-                <AlertTriangle className="size-4" />
-                ALERTAS
+              <span className="flex items-center gap-2 text-sm font-semibold text-blue-600">
+                <Bell className="size-4" />
+                NOTIFICAÇÕES
               </span>
-              {/* Mockado — ver comentário no topo do arquivo. Sem ação
-                  por enquanto. */}
               <button
                 type="button"
+                onClick={() => navigate(`/events/${event.id}/live/notifications`)}
                 className="rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground/70 transition-colors hover:bg-muted"
               >
-                Ver todos ({MOCK_ALERTS.length})
+                Ver todas
               </button>
             </div>
-            <div className="mt-1 divide-y divide-border">
-              {MOCK_ALERTS.map((alert) => (
-                <button
-                  key={alert.id}
-                  type="button"
-                  className="flex w-full items-center gap-3 py-3 text-left first:pt-0 last:pb-0"
-                >
-                  <span className="size-1.5 shrink-0 rounded-full bg-amber-500" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">{alert.subtitle}</p>
-                  </div>
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-            </div>
+            {notifications === null || notifications.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                {notifications === null ? "Carregando..." : "Nenhuma notificação ainda."}
+              </p>
+            ) : (
+              <div className="mt-1 divide-y divide-border">
+                {notifications.slice(0, 4).map((notification) => {
+                  const Icon = NOTIFICATION_ICONS[notification.type];
+                  const href = notificationHref(event.id, notification);
+                  return (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      disabled={!href}
+                      onClick={() => href && navigate(href)}
+                      className="flex w-full items-center gap-3 py-3 text-left first:pt-0 last:pb-0 disabled:cursor-default"
+                    >
+                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+                        <Icon className="size-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">{notification.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {formatNotificationRelativeTime(notification.createdAt)}
+                        </p>
+                      </div>
+                      {href && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <p className="mx-4 mt-4 text-xs font-semibold tracking-wide text-muted-foreground">
@@ -500,7 +621,7 @@ export function EventLiveDashboardPage() {
               iconClassName="bg-emerald-500/10 text-emerald-600"
               value={judges === null ? "—" : String(judges.length)}
               label="Jurados cadastrados"
-              onClick={() => setJudgesDialogOpen(true)}
+              onClick={canViewJudges ? () => setJudgesDialogOpen(true) : undefined}
             />
             <StatTile
               icon={Clock}
@@ -511,12 +632,23 @@ export function EventLiveDashboardPage() {
               progress={delayProgress}
             />
             <StatTile
-              icon={Trophy}
+              icon={Building2}
               iconClassName="bg-blue-500/10 text-blue-600"
-              barClassName="bg-blue-500"
-              value="0"
-              label="Resultados publicados"
-              progress={0}
+              value={programs === null ? "—" : String(programs.length)}
+              label="Programas cadastrados"
+              onClick={isAdminOrAssessor ? () => setProgramsDialogOpen(true) : undefined}
+            />
+            <StatTile
+              icon={Eye}
+              iconClassName="bg-slate-500/10 text-slate-600"
+              value={String(memberCounts.spectator ?? 0)}
+              label="Espectadores"
+            />
+            <StatTile
+              icon={UserRound}
+              iconClassName="bg-pink-500/10 text-pink-600"
+              value={String(memberCounts.athlete ?? 0)}
+              label="Atletas"
             />
           </div>
         </div>
@@ -533,12 +665,20 @@ export function EventLiveDashboardPage() {
       nowMinutes={nowMinutes}
       canStart={canStart}
       starting={starting}
-      judgeCount={judges === null ? null : judges.length}
+      judges={judges}
+      programs={programs}
+      memberCounts={memberCounts}
+      isAdminOrAssessor={isAdminOrAssessor}
+      canViewJudges={canViewJudges}
+      completedEntryIds={completedEntryIdSet}
+      notifications={notifications}
       isJudge={assignment.isJudge}
       onGoToNow={nextJudgePresentationId ? handleGoToNow : null}
       delayLabel={delayLabel}
       delayProgress={delayProgress}
       onOpenJudges={() => setJudgesDialogOpen(true)}
+      onOpenPrograms={() => setProgramsDialogOpen(true)}
+      onOpenNotifications={(href) => navigate(href ?? `/events/${event.id}/live/notifications`)}
       onStart={handleStart}
       onRevert={handleRevert}
       onOpenFullSchedule={() => navigate(`/events/${event.id}/live/schedule`)}
@@ -548,6 +688,12 @@ export function EventLiveDashboardPage() {
     />
 
     <JudgesSummaryDialog open={judgesDialogOpen} onOpenChange={setJudgesDialogOpen} judges={judges} />
+    <ProgramsSummaryDialog
+      open={programsDialogOpen}
+      onOpenChange={setProgramsDialogOpen}
+      programs={programs}
+      teams={teams}
+    />
     </>
   );
 }

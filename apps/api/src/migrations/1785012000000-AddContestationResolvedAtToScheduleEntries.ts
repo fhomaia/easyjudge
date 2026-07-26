@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddContestationResolvedAtToScheduleEntries1785012000000
-  implements MigrationInterface
-{
+export class AddContestationResolvedAtToScheduleEntries1785012000000 implements MigrationInterface {
   name = 'AddContestationResolvedAtToScheduleEntries1785012000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

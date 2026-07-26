@@ -1,4 +1,4 @@
-import type { ScheduleDay, ScheduleEntry, ScheduleEntryType } from "@/api/client";
+import type { ScheduleDay, ScheduleEntry, ScheduleEntryType, ScheduleResource } from "@/api/client";
 import { computeResourceTimes } from "@/lib/scheduleTime";
 import { isAutoWaitBreak } from "@/lib/scheduleEntryKind";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
@@ -39,7 +39,7 @@ export interface NextWarmup {
   end: number;
 }
 
-export interface NextCategoryChange {
+export interface CurrentCategoryInfo {
   categoryName: string;
   dayDate: string;
   start: number;
@@ -55,9 +55,13 @@ export interface EventLiveSchedule {
   // apresentações). Não é necessariamente "em andamento agora" — ver
   // comentário em `computeEventLiveSchedule`.
   nextWarmup: NextWarmup | null;
-  // Quando a categoria muda no meio da fila de apresentações pendentes
-  // — ex. "Senior Coed Elite" acaba e "Senior Coed Premier" começa.
-  nextCategoryChange: NextCategoryChange | null;
+  // Categoria da primeira apresentação ainda pendente — não é "a
+  // próxima troca de categoria" (2026-07-26, a pedido do usuário: com
+  // poucas apresentações pendentes, muitas vezes não HÁ uma próxima
+  // troca dentro da fila, e o card sumia mesmo havendo uma categoria
+  // rodando/na fila). Atualiza sozinha pra categoria seguinte assim
+  // que todas as apresentações da categoria atual forem concluídas.
+  currentCategory: CurrentCategoryInfo | null;
 }
 
 export interface ResourceNextStatus {
@@ -88,24 +92,15 @@ export interface ResourceNextStatus {
 // vivo do desktop. Só olha pistas de verdade (`supportsPresentations`);
 // pistas de aquecimento têm seu próprio card ("próximo aquecimento").
 //
-// Deliberadamente NÃO tenta dizer "isso está em andamento agora" — sem
-// um status real por apresentação (não iniciada/em andamento/
-// concluída, ainda não existe), comparar contra o relógio pra afirmar
-// "em andamento" é enganoso (o evento pode estar atrasado/adiantado em
-// relação ao plano). Por isso mostra só a próxima coisa pendente na
-// ORDEM do cronograma, igual ao card "Próxima apresentação" já faz.
-//
 // Pistas são recriadas por dia (cada `ScheduleDay` tem seu próprio
 // `ScheduleResource[]`), então não dá pra "somar" uma pista através de
 // vários dias — a função sempre mostra as pistas do dia ATIVO do
 // cronograma (o dia de `live.next`, ou o primeiro dia se não houver
-// mais nada pendente), não do calendário real (`new Date()`).
+// mais nada pendente).
 export function computeResourceNextStatus(
   days: ScheduleDay[],
   live: EventLiveSchedule,
-  isLive: boolean,
-  isoToday: string,
-  nowMinutes: number,
+  completedEntryIds: Set<string> = new Set(),
 ): ResourceNextStatus[] {
   const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
   const activeDayDate = live.next?.dayDate ?? sortedDays[0]?.date;
@@ -113,6 +108,7 @@ export function computeResourceNextStatus(
   if (!activeDay) return [];
 
   const times = computeResourceTimes(activeDay.resources, activeDay.startMinutes);
+  const doneEntryIds = computeDoneEntryIds(activeDay.resources, completedEntryIds);
   return activeDay.resources
     .filter((r) => r.supportsPresentations)
     .map((resource) => {
@@ -122,7 +118,7 @@ export function computeResourceNextStatus(
         if (entry.type === "warmup") continue;
         const t = times.get(entry.id);
         if (!t) continue;
-        if (isItemDone({ dayDate: activeDay.date, end: t.endMinutes }, isLive, isoToday, nowMinutes)) continue;
+        if (doneEntryIds.has(entry.id)) continue;
         if (next && t.startMinutes >= next.start) continue;
         const display = getScheduleEntryDisplay(entry, t.startMinutes, t.endMinutes, []);
         next = {
@@ -144,22 +140,48 @@ export function toIsoDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-// Um item só pode estar "concluído" se o evento já estiver em andamento
-// — antes disso (`isLive` falso) nada aconteceu de verdade ainda, mesmo
-// que a data do dia já tenha passado no calendário (cronograma pode ter
-// sido montado com datas antigas/de teste). Com o evento ao vivo,
-// compara contra "agora": dia anterior a hoje = feito, dia de hoje =
-// compara o horário, dia futuro = ainda não chegou.
-function isItemDone(
-  item: { dayDate: string; end: number },
-  isLive: boolean,
-  isoToday: string,
-  nowMinutes: number,
-): boolean {
-  if (!isLive) return false;
-  if (item.dayDate < isoToday) return true;
-  if (item.dayDate === isoToday) return item.end <= nowMinutes;
-  return false;
+// Quais entries de UMA pista já "passaram" — nunca compara contra o
+// relógio (2026-07-26, a pedido do usuário: comparar contra a hora
+// AGENDADA era enganoso quando os jurados terminam mais rápido ou mais
+// devagar que a duração planejada), só a ORDEM do cronograma + o que
+// já foi realmente pontuado.
+//
+// Apresentação: "feita" = está em `completedEntryIds` (sinal real —
+// ver ScoringService.getCompletedPresentationIds). Qualquer outro tipo
+// (intervalo/cerimônia/premiação — sem sinal próprio de conclusão) usa
+// a posição na ordem: já passou se vem ANTES da primeira apresentação
+// ainda pendente NESTA MESMA pista. Se todas as apresentações da pista
+// já foram feitas, a pista inteira conta como feita (inclusive o que
+// vier depois da última). Limitação conhecida: uma pista sem NENHUMA
+// apresentação (só intervalo/cerimônia) nunca tem nada marcado como
+// feito por esta regra — não existe hoje um sinal real pra esse caso
+// sem recorrer ao relógio, e o pedido foi explicitamente não usar o
+// relógio.
+function computeDoneEntryIds(
+  resources: ScheduleResource[],
+  completedEntryIds: Set<string>,
+): Set<string> {
+  const done = new Set<string>();
+  for (const resource of resources) {
+    const sorted = [...resource.entries].sort((a, b) => a.order - b.order);
+    let hasPresentations = false;
+    let pointerOrder: number | null = null;
+    for (const entry of sorted) {
+      if (entry.type !== "presentation") continue;
+      hasPresentations = true;
+      if (!completedEntryIds.has(entry.id)) {
+        pointerOrder = entry.order;
+        break;
+      }
+    }
+    const resourceFullyDone = hasPresentations && pointerOrder === null;
+    for (const entry of sorted) {
+      if (resourceFullyDone || (pointerOrder !== null && entry.order < pointerOrder)) {
+        done.add(entry.id);
+      }
+    }
+  }
+  return done;
 }
 
 function findWarmupFor(
@@ -179,27 +201,26 @@ function findWarmupFor(
   return null;
 }
 
-// Horário nunca é persistido (ver scheduleTime.ts) — "agora" só pode ser
-// comparado contra o horário CALCULADO a partir do plano, e só faz
-// sentido comparar depois que o evento realmente começou (`isLive`).
-// Antes disso, "próxima apresentação" é simplesmente o primeiro item do
-// cronograma inteiro, na ordem do plano (dia, depois horário do dia) —
-// sem tracking de atraso real no backend, isso assume que o evento
-// anda no horário planejado uma vez iniciado.
+// Horário nunca é persistido (ver scheduleTime.ts), e "próxima
+// apresentação" nunca compara contra o relógio (ver
+// computeDoneEntryIds) — só a ORDEM do plano (dia, depois horário do
+// dia) + o que já foi realmente pontuado. Antes do evento começar (ou
+// pra qualquer pista que ainda não teve nenhuma apresentação
+// concluída), isso já cai naturalmente no primeiro item do cronograma
+// na ordem do plano, sem precisar de um caso especial.
 export function computeEventLiveSchedule(
   days: ScheduleDay[],
-  isLive: boolean,
-  now: Date = new Date(),
+  completedEntryIds: Set<string> = new Set(),
 ): EventLiveSchedule {
-  const isoToday = toIsoDate(now);
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
 
   const allItems: LiveScheduleItem[] = [];
-  const allWarmups: (NextWarmup & { dayDate: string })[] = [];
+  const allWarmups: (NextWarmup & { dayDate: string; linkedEntryId: string | null })[] = [];
+  const allDoneEntryIds = new Set<string>();
 
   for (const day of sortedDays) {
     const times = computeResourceTimes(day.resources, day.startMinutes);
+    for (const id of computeDoneEntryIds(day.resources, completedEntryIds)) allDoneEntryIds.add(id);
 
     for (const resource of day.resources) {
       for (const entry of resource.entries) {
@@ -245,17 +266,20 @@ export function computeEventLiveSchedule(
           presentationResourceName,
           start: t.startMinutes,
           end: t.endMinutes,
+          linkedEntryId: entry.linkedEntryId ?? null,
         });
       }
     }
   }
 
   allWarmups.sort((a, b) => (a.dayDate === b.dayDate ? a.start - b.start : a.dayDate < b.dayDate ? -1 : 1));
-  // Próximo aquecimento ainda não concluído, na ordem do cronograma —
-  // mesmo raciocínio de "pending" usado pra `next`/`upcoming` abaixo,
-  // não uma checagem de "contém o horário atual".
+  // Próximo aquecimento ainda não concluído — "concluído" aqui é o
+  // sinal real da APRESENTAÇÃO que ele aquece (ver
+  // ScoringService.getCompletedPresentationIds), não a ordem/relógio:
+  // um aquecimento não tem conclusão própria, só faz sentido dizer que
+  // passou quando a apresentação ligada a ele já foi pontuada.
   const nextWarmup =
-    allWarmups.find((w) => !isItemDone({ dayDate: w.dayDate, end: w.end }, isLive, isoToday, nowMinutes)) ?? null;
+    allWarmups.find((w) => !(w.linkedEntryId && completedEntryIds.has(w.linkedEntryId))) ?? null;
 
   allItems.sort((a, b) => (a.dayDate === b.dayDate ? a.start - b.start : a.dayDate < b.dayDate ? -1 : 1));
 
@@ -264,24 +288,20 @@ export function computeEventLiveSchedule(
   // "depois disso", mas não nessa estatística.
   const presentations = allItems.filter((item) => item.entry.type === "presentation");
   const total = presentations.length;
-  const completed = presentations.filter((item) => isItemDone(item, isLive, isoToday, nowMinutes)).length;
+  const completed = presentations.filter((item) => allDoneEntryIds.has(item.entry.id)).length;
 
-  const pending = allItems.filter((item) => !isItemDone(item, isLive, isoToday, nowMinutes));
+  const pending = allItems.filter((item) => !allDoneEntryIds.has(item.entry.id));
   const [next, ...rest] = pending;
 
   const pendingPresentations = pending.filter((item) => item.entry.type === "presentation");
-  let nextCategoryChange: NextCategoryChange | null = null;
-  if (pendingPresentations.length > 0) {
-    const currentCategory = pendingPresentations[0].entry.categoryName;
-    const changed = pendingPresentations.find((item) => item.entry.categoryName !== currentCategory);
-    if (changed) {
-      nextCategoryChange = {
-        categoryName: changed.entry.categoryName ?? "—",
-        dayDate: changed.dayDate,
-        start: changed.start,
-      };
-    }
-  }
+  const currentCategory: CurrentCategoryInfo | null =
+    pendingPresentations.length > 0
+      ? {
+          categoryName: pendingPresentations[0].entry.categoryName ?? "—",
+          dayDate: pendingPresentations[0].dayDate,
+          start: pendingPresentations[0].start,
+        }
+      : null;
 
   return {
     next: next ?? null,
@@ -289,6 +309,6 @@ export function computeEventLiveSchedule(
     completed,
     total,
     nextWarmup,
-    nextCategoryChange,
+    currentCategory,
   };
 }

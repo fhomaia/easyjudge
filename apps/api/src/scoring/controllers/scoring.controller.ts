@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ScoringService } from '../services/scoring.service';
 import { SubmitScoreEventsDto } from '../dto/submit-score-events.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -25,21 +33,50 @@ export class ScoringController {
     @Param('scheduleEntryId') scheduleEntryId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.scoringService.getSheet(eventId, req.user.userId, scheduleEntryId);
+    return this.scoringService.getSheet(
+      eventId,
+      req.user.userId,
+      scheduleEntryId,
+    );
   }
 
   @Get('me/submissions')
-  getMySubmittedEntryIds(@Param('eventId') eventId: string, @Req() req: AuthenticatedRequest) {
+  getMySubmittedEntryIds(
+    @Param('eventId') eventId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.scoringService.getMySubmittedEntryIds(eventId, req.user.userId);
   }
 
-  // Alimenta o card "Atraso atual" do painel Início — admin/assessor
-  // também precisam ler isso (não é uma ação de jurado), então
-  // sobrescreve o @EventRoles(JUDGE) da classe só nesta rota.
+  // Alimenta o card "Atraso atual" do painel Início — todo mundo que
+  // enxerga essa tela precisa ler isso (não é uma ação de jurado), não
+  // só admin/assessor/jurado — programa e atleta também veem Início
+  // (ver useEventLiveGuard no front). Sobrescreve o @EventRoles(JUDGE)
+  // da classe só nesta rota.
   @Get('started-presentations')
-  @EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR, EventMemberRole.JUDGE)
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+    EventMemberRole.PROGRAM,
+    EventMemberRole.ATHLETE,
+  )
   getStartedPresentations(@Param('eventId') eventId: string) {
     return this.scoringService.getStartedPresentations(eventId);
+  }
+
+  // Mesmo raciocínio de started-presentations — alimenta o cronograma
+  // ao vivo (ver ScoringService.getCompletedPresentationIds).
+  @Get('completed-presentations')
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+    EventMemberRole.PROGRAM,
+    EventMemberRole.ATHLETE,
+  )
+  getCompletedPresentationIds(@Param('eventId') eventId: string) {
+    return this.scoringService.getCompletedPresentationIds(eventId);
   }
 
   @Post('sheet/:scheduleEntryId/resolve-contestation')
@@ -48,7 +85,11 @@ export class ScoringController {
     @Param('scheduleEntryId') scheduleEntryId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.scoringService.resolveContestation(eventId, req.user.userId, scheduleEntryId);
+    return this.scoringService.resolveContestation(
+      eventId,
+      req.user.userId,
+      scheduleEntryId,
+    );
   }
 
   @Post('events')
@@ -57,7 +98,11 @@ export class ScoringController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: SubmitScoreEventsDto,
   ) {
-    return this.scoringService.submitEvents(eventId, req.user.userId, dto.events);
+    return this.scoringService.submitEvents(
+      eventId,
+      req.user.userId,
+      dto.events,
+    );
   }
 
   // Painel Head Judge (Modo Supervisão) — a checagem fina de "é Head
@@ -71,7 +116,11 @@ export class ScoringController {
     @Param('scheduleEntryId') scheduleEntryId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.scoringService.getHeadJudgeRoster(eventId, req.user.userId, scheduleEntryId);
+    return this.scoringService.getHeadJudgeRoster(
+      eventId,
+      req.user.userId,
+      scheduleEntryId,
+    );
   }
 
   @Get('head-judge/:scheduleEntryId/judges/:judgeParticipationId/sheet')
@@ -112,6 +161,10 @@ export class ScoringController {
     @Param('scheduleEntryId') scheduleEntryId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.scoringService.getChangeLog(eventId, req.user.userId, scheduleEntryId);
+    return this.scoringService.getChangeLog(
+      eventId,
+      req.user.userId,
+      scheduleEntryId,
+    );
   }
 }

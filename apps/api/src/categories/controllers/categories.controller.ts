@@ -66,7 +66,11 @@ export class CategoriesController {
   @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
   @EventRoles(...WRITE_ROLES)
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('eventId') eventId: string, @Param('id') id: string) {
-    return this.categoriesService.remove(eventId, id);
+  remove(
+    @Param('eventId') eventId: string,
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.categoriesService.remove(eventId, id, req.user.userId);
   }
 }

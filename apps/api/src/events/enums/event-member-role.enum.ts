@@ -15,11 +15,21 @@
 // Deliberadamente SEPARADO de SPECTATOR: espectador genérico (público
 // que só assiste, sem vínculo com nenhuma equipe) não deve ter acesso
 // às telas "ao vivo" do evento (ver useEventLiveGuard) — só
-// admin/assessor/jurado/equipe (e, futuramente, atleta).
+// admin/assessor/jurado/equipe/atleta.
+//
+// ATHLETE (2026-07-26): concedido a todo AthleteLink com os dois lados
+// resolvidos (conta do atleta + conta do programa), em TODO evento onde
+// aquele programa tem papel PROGRAM — independente do vínculo estar
+// confirmado ou não (ver AthletesService.syncEventAccessForLink). Isso já
+// libera Início/Cronograma/Resultados; a confirmação do programa só
+// gateia o conteúdo da tela de Notas (checado no backend na hora de
+// montar a resposta, não aqui no papel) — ver
+// ScoringService.getAthleteOverview.
 export enum EventMemberRole {
   ADMIN = 'admin',
   JUDGE = 'judge',
   ASSESSOR = 'assessor',
   SPECTATOR = 'spectator',
   PROGRAM = 'program',
+  ATHLETE = 'athlete',
 }

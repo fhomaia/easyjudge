@@ -56,6 +56,18 @@ export class EventMember {
   @Column({ type: 'enum', enum: EventMemberRole, array: true })
   roles: EventMemberRole[];
 
+  // Quando a pessoa abriu a lista de notificações do evento pela
+  // última vez (ver NotificationsService) — não lido nenhuma vez ainda
+  // = null (tudo conta como não lido). Timestamp único em vez de uma
+  // tabela de leitura por notificação: basta pra calcular "quantas são
+  // novas desde a última vez".
+  @Column({
+    name: 'notifications_seen_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  notificationsSeenAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

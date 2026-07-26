@@ -1,15 +1,28 @@
-import { Calculator, CalendarDays, LogOut, X } from "lucide-react";
+import { Building2, Calculator, CalendarDays, LogOut, Users, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/roleLabels";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import type { UserProfile } from "@/api/client";
+import type { UserProfile, UserRole } from "@/api/client";
 
 // `mobile: false` tira o item do menu hambúrguer sem afetar a sidebar de
 // desktop — hoje só "Sistemas de pontuação", a pedido do usuário.
-export const NAV_ITEMS: { href: string; label: string; icon: typeof CalendarDays; mobile?: boolean }[] = [
+// `roles` restringe o item a quem tem esse UserRole — primeira
+// navegação condicional por papel do projeto (2026-07-26): "Gerenciar
+// atletas" é só do Programa (elenco global, fora de evento — ver
+// AthletesManagementPage), "Meus programas" só do Atleta (adicionar
+// vínculo a mais programas depois do cadastro).
+export const NAV_ITEMS: {
+  href: string;
+  label: string;
+  icon: typeof CalendarDays;
+  mobile?: boolean;
+  roles?: UserRole[];
+}[] = [
   { href: "/", label: "Eventos", icon: CalendarDays },
   { href: "/scoring-templates", label: "Sistemas de pontuação", icon: Calculator, mobile: false },
+  { href: "/athletes", label: "Gerenciar atletas", icon: Users, roles: ["program"] },
+  { href: "/athletes/programs", label: "Meus programas", icon: Building2, roles: ["athlete"] },
 ];
 
 function getUserInitials(profile: UserProfile): string {
@@ -127,7 +140,7 @@ export function MobileNavSheet({
                   <span className="relative flex">
                     <Icon className="size-4" />
                     {badge ? (
-                      <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-semibold text-white">
+                      <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
                         {badge}
                       </span>
                     ) : null}
@@ -139,7 +152,11 @@ export function MobileNavSheet({
             </>
           )}
 
-          {NAV_ITEMS.filter((item) => item.mobile !== false).map(({ href, label, icon: Icon }) => (
+          {NAV_ITEMS.filter(
+            (item) =>
+              item.mobile !== false &&
+              (!item.roles || (profile && item.roles.includes(profile.role))),
+          ).map(({ href, label, icon: Icon }) => (
             <button
               key={href}
               type="button"

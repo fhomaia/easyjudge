@@ -80,6 +80,9 @@ export interface RegisterPayload {
   documentNumber: string;
   email: string;
   teamOrInstitutionName?: string;
+  // Só relevante pra role="athlete" — email do programa a que o atleta
+  // quer se vincular (fica pendente de confirmação do programa).
+  programEmail?: string;
 }
 
 export const authApi = {
@@ -147,7 +150,13 @@ export const usersApi = {
 };
 
 export type EventStatus = "created" | "published" | "started" | "completed";
-export type EventMemberRole = "admin" | "assessor" | "judge" | "spectator" | "program";
+export type EventMemberRole =
+  | "admin"
+  | "assessor"
+  | "judge"
+  | "spectator"
+  | "program"
+  | "athlete";
 
 export interface Event {
   id: string;
@@ -187,6 +196,37 @@ export interface CreateEventPayload {
 
 export type UpdateEventPayload = Partial<CreateEventPayload>;
 
+export type EventActivityAction =
+  | "created"
+  | "updated"
+  | "published"
+  | "unpublished"
+  | "started"
+  | "deleted"
+  | "category_created"
+  | "category_updated"
+  | "category_deleted"
+  | "program_created"
+  | "program_updated"
+  | "program_deleted"
+  | "team_created"
+  | "team_updated"
+  | "team_deleted"
+  | "regulation_document_uploaded"
+  | "regulation_document_removed"
+  | "regulation_deductions_updated"
+  | "staff_member_added"
+  | "staff_member_updated"
+  | "staff_member_removed";
+
+export interface EventActivityLogEntry {
+  id: string;
+  action: EventActivityAction;
+  detail: string | null;
+  actorName: string;
+  createdAt: string;
+}
+
 export const eventsApi = {
   list: () => authRequest<Event[]>("/events"),
 
@@ -213,6 +253,9 @@ export const eventsApi = {
   unpublish: (id: string) =>
     authRequest<Event>(`/events/${id}/unpublish`, { method: "POST" }),
 
+  getActivityLog: (id: string) =>
+    authRequest<EventActivityLogEntry[]>(`/events/${id}/activity`),
+
   remove: (id: string) =>
     authRequest<void>(`/events/${id}`, { method: "DELETE" }),
 
@@ -221,6 +264,12 @@ export const eventsApi = {
     formData.append("file", file);
     return authUpload<Event>(`/events/${id}/logo`, formData);
   },
+
+  // Contagem de pessoas por papel no roster — alimenta os cards
+  // "Jurados cadastrados"/"Programas cadastrados"/"Espectadores"/
+  // "Atletas" do painel Início.
+  getMemberCounts: (id: string) =>
+    authRequest<Partial<Record<EventMemberRole, number>>>(`/events/${id}/member-counts`),
 };
 
 // Roster de acessos do evento ("Gerenciar acessos") — quem faz parte
@@ -402,6 +451,51 @@ export const programsApi = {
     formData.append("file", file);
     return authUpload<Program>(`/events/${eventId}/programs/${id}/logo`, formData);
   },
+};
+
+// Vínculo atleta<->programa, global (fora de qualquer evento) — ver
+// AthleteLink no backend. `hasAccount`/`programResolved` indicam se o
+// outro lado já tem conta na plataforma (convite/pedido ainda não
+// reclamado); `confirmed` é o que efetivamente libera Notas.
+export interface AthleteLinkView {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  programEmail: string;
+  hasAccount: boolean;
+  programResolved: boolean;
+  confirmed: boolean;
+  createdAt: string;
+}
+
+// Elenco de atletas do PRÓPRIO programa logado — global, não por
+// evento (guard @Roles(PROGRAM) no backend).
+export const athletesApi = {
+  list: () => authRequest<AthleteLinkView[]>("/athletes"),
+
+  create: (payload: { firstName: string; lastName: string; email: string }) =>
+    authRequest<AthleteLinkView>("/athletes", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  remove: (id: string) => authRequest<void>(`/athletes/${id}`, { method: "DELETE" }),
+
+  confirm: (id: string) =>
+    authRequest<AthleteLinkView>(`/athletes/${id}/confirm`, { method: "POST" }),
+};
+
+// "Meus programas" do PRÓPRIO atleta logado — global (guard
+// @Roles(ATHLETE) no backend).
+export const athleteProgramsApi = {
+  list: () => authRequest<AthleteLinkView[]>("/athletes/me/programs"),
+
+  request: (programEmail: string) =>
+    authRequest<AthleteLinkView>("/athletes/me/programs", {
+      method: "POST",
+      body: JSON.stringify({ programEmail }),
+    }),
 };
 
 export interface Team {
@@ -825,6 +919,7 @@ export interface ScheduleDay {
   startMinutes: number;
   endMinutes: number;
   defaultWarmupMinutes: number;
+  defaultGapMinutes: number;
   ignoreUnscheduledPresentations: boolean;
   resources: ScheduleResource[];
   createdAt: string;
@@ -835,6 +930,7 @@ export interface UpdateScheduleDayPayload {
   startMinutes?: number;
   endMinutes?: number;
   defaultWarmupMinutes?: number;
+  defaultGapMinutes?: number;
   ignoreUnscheduledPresentations?: boolean;
 }
 
@@ -1241,6 +1337,21 @@ export const teamScoringApi = {
     }),
 };
 
+// Visão do Atleta na tela de Notas — igual à do Programa, mas
+// filtrada pelos times de todo programa com vínculo CONFIRMADO (ver
+// ScoringService.getAthleteOverview). `locked: true` = ainda sem
+// nenhum vínculo confirmado que participe deste evento (ou notas
+// ainda não liberadas) — a tela mostra um aviso em vez da lista.
+export const athleteScoringApi = {
+  getOverview: (eventId: string) =>
+    authRequest<{ locked: boolean; entries: AdminOverviewEntry[] }>(
+      `/events/${eventId}/scoring/athlete/overview`,
+    ),
+
+  getDetail: (eventId: string, scheduleEntryId: string) =>
+    authRequest<PresentationDetail>(`/events/${eventId}/scoring/athlete/${scheduleEntryId}`),
+};
+
 export const scoringApi = {
   getSheet: (eventId: string, scheduleEntryId: string) =>
     authRequest<ScoringSheet>(`/events/${eventId}/scoring/sheet/${scheduleEntryId}`),
@@ -1266,6 +1377,14 @@ export const scoringApi = {
     authRequest<Array<{ scheduleEntryId: string; startedAt: string }>>(
       `/events/${eventId}/scoring/started-presentations`,
     ),
+
+  // Ids das apresentações já 100% pontuadas — usado pelo cronograma ao
+  // vivo (computeEventLiveSchedule) pra não continuar mostrando uma
+  // apresentação já concluída como "próxima" só porque o horário
+  // AGENDADO ainda não passou (jurados podem terminar mais rápido que
+  // a duração planejada).
+  getCompletedPresentations: (eventId: string) =>
+    authRequest<string[]>(`/events/${eventId}/scoring/completed-presentations`),
 
   submitEvents: (eventId: string, events: ScoreEventInput[]) =>
     authRequest<{ savedIds: string[] }>(`/events/${eventId}/scoring/events`, {
@@ -1300,4 +1419,31 @@ export const scoringApi = {
         `/events/${eventId}/scoring/head-judge/${scheduleEntryId}/log`,
       ),
   },
+};
+
+export type NotificationType =
+  | "presentation_started"
+  | "presentation_completed"
+  | "scores_released"
+  | "results_released"
+  | "contestation_released"
+  | "evaluation_pending"
+  | "contestation_requested";
+
+export interface NotificationView {
+  id: string;
+  type: NotificationType;
+  title: string;
+  scheduleEntryId: string | null;
+  createdAt: string;
+}
+
+export const notificationsApi = {
+  list: (eventId: string) =>
+    authRequest<{ notifications: NotificationView[]; unreadCount: number }>(
+      `/events/${eventId}/notifications`,
+    ),
+
+  markSeen: (eventId: string) =>
+    authRequest<void>(`/events/${eventId}/notifications/seen`, { method: "POST" }),
 };

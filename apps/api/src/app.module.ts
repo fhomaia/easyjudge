@@ -15,6 +15,8 @@ import { RegulationsModule } from './regulations/regulations.module';
 import { JudgingModule } from './judging/judging.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { ScoringModule } from './scoring/scoring.module';
+import { AthletesModule } from './athletes/athletes.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { ScoringModule } from './scoring/scoring.module';
     JudgingModule,
     ScheduleModule,
     ScoringModule,
+    AthletesModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

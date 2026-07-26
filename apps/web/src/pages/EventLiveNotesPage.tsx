@@ -16,6 +16,7 @@ import {
 import { MobileNavSheet } from "@/components/MobileNavSheet";
 import { EventLiveNotesDesktopView } from "@/components/EventLiveNotesDesktopView";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
+import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
 import { EventLiveBottomNav, MetricTile, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { formatDate } from "@/lib/formatDate";
@@ -29,6 +30,7 @@ import {
   categoriesApi,
   eventsApi,
   judgingApi,
+  notificationsApi,
   scheduleApi,
   scoringApi,
   usersApi,
@@ -61,6 +63,7 @@ export function EventLiveNotesPage() {
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [assignment, setAssignment] = useState<JudgeAssignmentsSummary | null>(null);
   const [submittedIds, setSubmittedIds] = useState<string[] | null>(null);
+  const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
@@ -75,6 +78,10 @@ export function EventLiveNotesPage() {
     categoriesApi.list(id).then(setCategories).catch(() => setCategories([]));
     judgingApi.me(id).then(setAssignment).catch(() => setAssignment(EMPTY_ASSIGNMENT));
     scoringApi.getMySubmissions(id).then(setSubmittedIds).catch(() => setSubmittedIds([]));
+    notificationsApi
+      .list(id)
+      .then((res) => setNotificationsUnreadCount(res.unreadCount))
+      .catch(() => setNotificationsUnreadCount(null));
   }, [id]);
 
   useEffect(() => {
@@ -138,6 +145,8 @@ export function EventLiveNotesPage() {
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
     onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
 
@@ -147,6 +156,7 @@ export function EventLiveNotesPage() {
   const nextDisplay = nextItem ? getScheduleEntryDisplay(nextItem.entry, nextItem.start, nextItem.end, []) : null;
 
   const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
+  const isAthlete = event.currentUserRoles.includes("athlete");
   const functionLines = functionLabelsFor(assignment);
   const nowLabel = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
@@ -174,9 +184,15 @@ export function EventLiveNotesPage() {
         <button
           type="button"
           aria-label="Notificações"
+          onClick={() => navigate(`/events/${event.id}/live/notifications`)}
           className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Bell className="size-5" />
+          {!!notificationsUnreadCount && (
+            <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
+              {notificationsUnreadCount}
+            </span>
+          )}
         </button>
       </header>
 
@@ -194,6 +210,10 @@ export function EventLiveNotesPage() {
             isAdminOrAssessor ? (
               <div className="p-4">
                 <AdminNotesOverview eventId={event.id} />
+              </div>
+            ) : isAthlete ? (
+              <div className="p-4">
+                <AthleteNotesOverview eventId={event.id} />
               </div>
             ) : (
               <div className="m-4 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -379,6 +399,7 @@ export function EventLiveNotesPage() {
       eventNavItems={eventNavTabs}
       assignment={assignment}
       isAdminOrAssessor={isAdminOrAssessor}
+      isAthlete={isAthlete}
       functionLines={functionLines}
       myPresentations={myPresentations}
       contestedItems={contestedItems}

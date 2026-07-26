@@ -45,7 +45,11 @@ export class ScoreEvent {
   // a folha de outro jurado (ver ScoringService.submitEventsAsHeadJudge).
   // `null` = o próprio dono lançou, é o caso normal. Sem FK, mesmo
   // raciocínio de judgeParticipationId acima.
-  @Column({ name: 'entered_by_judge_participation_id', type: 'uuid', nullable: true })
+  @Column({
+    name: 'entered_by_judge_participation_id',
+    type: 'uuid',
+    nullable: true,
+  })
   enteredByJudgeParticipationId: string | null;
 
   @Column({ type: 'enum', enum: ScoreEventKind })

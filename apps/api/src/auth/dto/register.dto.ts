@@ -39,4 +39,11 @@ export class RegisterDto {
   @IsString()
   @MaxLength(150)
   teamOrInstitutionName?: string;
+
+  // Só relevante pra role=athlete — email do programa a que o atleta
+  // quer se vincular (pedido fica pendente de confirmação, ver
+  // AuthService.setPassword/AthletesService.createOrRequestLink).
+  @IsOptional()
+  @IsEmail()
+  programEmail?: string;
 }

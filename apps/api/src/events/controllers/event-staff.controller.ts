@@ -46,8 +46,9 @@ export class EventStaffController {
   create(
     @Param('eventId') eventId: string,
     @Body() dto: CreateEventStaffMemberDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.eventStaffService.create(eventId, dto);
+    return this.eventStaffService.create(eventId, dto, req.user.userId);
   }
 
   @Patch(':memberId')

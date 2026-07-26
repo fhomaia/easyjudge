@@ -8,6 +8,8 @@ import { Repository } from 'typeorm';
 import { EventMember } from '../entities/event-member.entity';
 import { EventMemberRole } from '../enums/event-member-role.enum';
 import { EventsService } from './events.service';
+import { EventActivityLogService } from './event-activity-log.service';
+import { EventActivityAction } from '../enums/event-activity-action.enum';
 import { UsersService } from '../../users/services/users.service';
 import { CreateEventStaffMemberDto } from '../dto/create-event-staff-member.dto';
 import { UpdateEventStaffMemberDto } from '../dto/update-event-staff-member.dto';
@@ -33,6 +35,7 @@ export class EventStaffService {
     private readonly membersRepo: Repository<EventMember>,
     private readonly eventsService: EventsService,
     private readonly usersService: UsersService,
+    private readonly activityLogService: EventActivityLogService,
   ) {}
 
   async list(eventId: string): Promise<EventStaffMemberView[]> {
@@ -55,6 +58,7 @@ export class EventStaffService {
   async create(
     eventId: string,
     dto: CreateEventStaffMemberDto,
+    requesterId: string,
   ): Promise<EventStaffMemberView> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const existingUser = await this.usersService.findByEmailInsensitive(
@@ -68,6 +72,12 @@ export class EventStaffService {
     if (existing) {
       existing.roles = Array.from(new Set([...existing.roles, ...dto.roles]));
       const saved = await this.membersRepo.save(existing);
+      await this.activityLogService.record(
+        event.aliasId,
+        requesterId,
+        EventActivityAction.STAFF_MEMBER_ADDED,
+        `${saved.firstName ?? ''} ${saved.lastName ?? ''}`.trim(),
+      );
       return this.toStaffView(saved, event.createdById);
     }
 
@@ -80,6 +90,12 @@ export class EventStaffService {
       email: dto.email,
     });
     const saved = await this.membersRepo.save(member);
+    await this.activityLogService.record(
+      event.aliasId,
+      requesterId,
+      EventActivityAction.STAFF_MEMBER_ADDED,
+      `${dto.firstName} ${dto.lastName}`.trim(),
+    );
     return this.toStaffView(saved, event.createdById);
   }
 
@@ -99,6 +115,12 @@ export class EventStaffService {
     );
     member.roles = dto.roles;
     const saved = await this.membersRepo.save(member);
+    await this.activityLogService.record(
+      event.aliasId,
+      requesterId,
+      EventActivityAction.STAFF_MEMBER_UPDATED,
+      `${saved.firstName ?? ''} ${saved.lastName ?? ''}`.trim(),
+    );
     return this.toStaffView(saved, event.createdById);
   }
 
@@ -115,7 +137,14 @@ export class EventStaffService {
       requesterId,
       'remover',
     );
+    const name = `${member.firstName ?? ''} ${member.lastName ?? ''}`.trim();
     await this.membersRepo.remove(member);
+    await this.activityLogService.record(
+      event.aliasId,
+      requesterId,
+      EventActivityAction.STAFF_MEMBER_REMOVED,
+      name,
+    );
   }
 
   private async findMemberOrThrow(

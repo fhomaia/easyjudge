@@ -5,6 +5,8 @@ import { Category } from '../entities/category.entity';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
 import { EventsService } from '../../events/services/events.service';
+import { EventActivityLogService } from '../../events/services/event-activity-log.service';
+import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
 import { ScoringTemplatesService } from '../../scoring-templates/services/scoring-templates.service';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 
@@ -15,6 +17,7 @@ export class CategoriesService {
     private readonly categoriesRepo: Repository<Category>,
     private readonly eventsService: EventsService,
     private readonly scoringTemplatesService: ScoringTemplatesService,
+    private readonly activityLogService: EventActivityLogService,
   ) {}
 
   async create(
@@ -32,6 +35,12 @@ export class CategoriesService {
       aliasId: event.aliasId,
     });
     const saved = await this.categoriesRepo.save(category);
+    await this.activityLogService.record(
+      event.aliasId,
+      userId,
+      EventActivityAction.CATEGORY_CREATED,
+      saved.name,
+    );
     return this.findCategoryWithTemplate(saved.id);
   }
 
@@ -59,12 +68,24 @@ export class CategoriesService {
     }
     Object.assign(category, stripUndefined(dto));
     const saved = await this.categoriesRepo.save(category);
+    await this.activityLogService.record(
+      saved.aliasId,
+      userId,
+      EventActivityAction.CATEGORY_UPDATED,
+      saved.name,
+    );
     return this.findCategoryWithTemplate(saved.id);
   }
 
-  async remove(eventId: string, id: string): Promise<void> {
+  async remove(eventId: string, id: string, userId: string): Promise<void> {
     const category = await this.findCategoryOrThrow(eventId, id);
     await this.categoriesRepo.remove(category);
+    await this.activityLogService.record(
+      category.aliasId,
+      userId,
+      EventActivityAction.CATEGORY_DELETED,
+      category.name,
+    );
   }
 
   private async findCategoryOrThrow(

@@ -80,6 +80,11 @@ export class EventsController {
     return this.eventsService.unpublishEvent(id, req.user.userId);
   }
 
+  @Get(':id/activity')
+  getActivityLog(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.eventsService.getActivityLog(id, req.user.userId);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {

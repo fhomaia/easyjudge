@@ -24,6 +24,9 @@ import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 import { addDaysToDateString } from '../../common/utils/add-days-to-date-string';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { NotificationType } from '../../notifications/enums/notification-type.enum';
+import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 
 // Não são colunas — o front precisa exibir o nome da equipe/categoria
 // no card sem fazer uma chamada extra pra listar programas/times
@@ -51,6 +54,15 @@ export interface UnscheduledPairView {
 
 const DEFAULT_COMPONENT_DURATION_MINUTES = 15;
 
+// Rótulo fixo do break "intervalo entre apresentações" (ver
+// createPresentationWithWarmup/autoGenerate) — é o que diferencia esse
+// break, no `removeEntry`, dos breaks "Aguardando..." (que também têm
+// `linkedEntryId` mas não podem ser removidos direto, só via a
+// apresentação). Ao contrário deles, este É removível direto pelo
+// usuário (a apresentação não some junto) — só o inverso (excluir a
+// apresentação também exclui o intervalo) é automático.
+const INTERVAL_BREAK_LABEL = 'Intervalo entre apresentações';
+
 @Injectable()
 export class ScheduleService {
   constructor(
@@ -65,6 +77,7 @@ export class ScheduleService {
     @InjectRepository(Category)
     private readonly categoriesRepo: Repository<Category>,
     private readonly eventsService: EventsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getDays(eventId: string): Promise<ScheduleDayView[]> {
@@ -183,6 +196,12 @@ export class ScheduleService {
     const warmupMinutesChanged =
       dto.defaultWarmupMinutes !== undefined &&
       dto.defaultWarmupMinutes !== day.defaultWarmupMinutes;
+    // Mesmo raciocínio do warmup logo acima: o número no cabeçalho
+    // também deve redimensionar (ou remover) os intervalos já
+    // agendados, não só valer pra apresentações futuras.
+    const gapMinutesChanged =
+      dto.defaultGapMinutes !== undefined &&
+      dto.defaultGapMinutes !== day.defaultGapMinutes;
     Object.assign(day, stripUndefined(dto));
     const saved = await this.daysRepo.save(day);
 
@@ -190,6 +209,12 @@ export class ScheduleService {
       await this.applyWarmupDurationToScheduledEntries(
         dayId,
         saved.defaultWarmupMinutes,
+      );
+    }
+    if (gapMinutesChanged) {
+      await this.applyGapDurationToScheduledEntries(
+        dayId,
+        saved.defaultGapMinutes,
       );
     }
 
@@ -226,6 +251,55 @@ export class ScheduleService {
       warmup.durationMinutes = warmupMinutes;
     }
     await this.entriesRepo.save(warmups);
+
+    for (let pass = 0; pass < 3; pass++) {
+      await this.reconcileWarmupDelays(dayId);
+      await this.reconcileMatGaps(dayId);
+    }
+  }
+
+  // Redimensiona (ou remove, se o novo valor for 0) os intervalos
+  // "Intervalo entre apresentações" já agendados neste dia. Diferente
+  // do warmup (que SEMPRE existe pra toda apresentação), o intervalo é
+  // condicional (só existe antes de apresentações que não são a
+  // primeira da pista) — por isso este método só ajusta os que já
+  // existem, não cria intervalo novo pra apresentações que foram
+  // criadas quando o padrão ainda era 0. Depois de mudar a duração,
+  // reconcilia aquecimento/espera dos dois lados (mesmo raciocínio de
+  // applyWarmupDurationToScheduledEntries): empurrar uma apresentação
+  // mais cedo/tarde pode tornar uma espera desnecessária ou criar a
+  // necessidade de uma nova.
+  private async applyGapDurationToScheduledEntries(
+    dayId: string,
+    gapMinutes: number,
+  ): Promise<void> {
+    const resources = await this.resourcesRepo.find({
+      where: { scheduleDayId: dayId },
+    });
+    const resourceIds = resources.map((r) => r.id);
+    if (resourceIds.length === 0) return;
+
+    const gapBreaks = await this.entriesRepo.find({
+      where: {
+        resourceId: In(resourceIds),
+        type: ScheduleEntryType.BREAK,
+        label: INTERVAL_BREAK_LABEL,
+      },
+    });
+    if (gapBreaks.length === 0) return;
+
+    if (gapMinutes <= 0) {
+      const affectedResourceIds = new Set(gapBreaks.map((e) => e.resourceId));
+      await this.entriesRepo.remove(gapBreaks);
+      for (const resourceId of affectedResourceIds) {
+        await this.renumberResource(resourceId);
+      }
+    } else {
+      for (const gap of gapBreaks) {
+        gap.durationMinutes = gapMinutes;
+      }
+      await this.entriesRepo.save(gapBreaks);
+    }
 
     for (let pass = 0; pass < 3; pass++) {
       await this.reconcileWarmupDelays(dayId);
@@ -549,15 +623,26 @@ export class ScheduleService {
     // Intervalos "Aguardando aquecimento"/"Aguardando disponibilidade
     // da equipe" são gerados automaticamente pra evitar um conflito de
     // agenda real (a equipe se apresentando e se aquecendo ao mesmo
-    // tempo) — só eles têm linkedEntryId apontando pra uma presentation
-    // sem eles mesmos serem presentation/warmup. Removê-los sozinhos
-    // (sem remover a apresentação/aquecimento que os originou) reabre
-    // o conflito que existiam pra evitar, e diferente de removeEntry
+    // tempo) — só eles (e o "Intervalo entre apresentações", excluído
+    // abaixo) têm linkedEntryId apontando pra uma presentation sem
+    // eles mesmos serem presentation/warmup. Removê-los sozinhos (sem
+    // remover a apresentação/aquecimento que os originou) reabre o
+    // conflito que existiam pra evitar, e diferente de removeEntry
     // "normal", não tem como a reconciliação recriar um intervalo que
     // falta (só ajusta/remove os que já existem) — ficaria sem jeito
     // de consertar pela UI. Só sai removendo a apresentação
     // correspondente (que aí sim limpa o grupo inteiro).
-    if (entry.type === ScheduleEntryType.BREAK && entry.linkedEntryId) {
+    //
+    // "Intervalo entre apresentações" é diferente: não existe pra
+    // evitar um conflito de agenda, é só um espaçamento fixo que o
+    // organizador pediu — pode ser removido direto (a apresentação
+    // continua existindo), só o inverso (excluir a apresentação também
+    // exclui o intervalo, ver bloco abaixo) é automático.
+    if (
+      entry.type === ScheduleEntryType.BREAK &&
+      entry.linkedEntryId &&
+      entry.label !== INTERVAL_BREAK_LABEL
+    ) {
       throw new BadRequestException(
         'Este intervalo é gerado automaticamente para evitar conflito de agenda da equipe — remova a apresentação correspondente para removê-lo.',
       );
@@ -669,6 +754,10 @@ export class ScheduleService {
       let matOrder = 0;
       let matElapsed = 0;
       let lunchInserted = false;
+      // Mesma regra de createPresentationWithWarmup: só a primeira
+      // apresentação desta pista fica sem o intervalo — resetado a
+      // cada pista (`m`), já que cada uma tem sua própria fila.
+      let matHasPresentation = false;
 
       for (const pair of buckets[m]) {
         if (
@@ -731,6 +820,14 @@ export class ScheduleService {
           warmupElapsedByResource.set(chosenWarmupId, chosenElapsed);
         }
 
+        // Mesmo raciocínio de createPresentationWithWarmup: o intervalo
+        // conta como tempo já decorrido nesta pista ANTES de avaliar se
+        // ainda falta esperar o aquecimento terminar — senão o
+        // "Aguardando aquecimento" calculado abaixo ignoraria o
+        // intervalo que vai entrar na frente dele.
+        const gapMinutes = matHasPresentation ? day.defaultGapMinutes : 0;
+        if (gapMinutes > 0) matElapsed += gapMinutes;
+
         const warmupEndAfterThisPair = chosenElapsed + dto.warmupMinutes;
         const needsMatGap = warmupEndAfterThisPair > matElapsed;
         const matGapMinutes = needsMatGap
@@ -739,18 +836,27 @@ export class ScheduleService {
         if (needsMatGap) matElapsed += matGapMinutes;
 
         // Cria a apresentação primeiro (posição provisória — os
-        // intervalos de espera abaixo entram na mesma posição logo em
-        // seguida, empurrando-a um lugar adiante) pra poder vincular os
-        // intervalos a ela via linkedEntryId, mesma técnica de
-        // createPresentationWithWarmup — sem isso, removeEntry não
-        // consegue limpar os intervalos junto quando a apresentação é
-        // removida (ver gotcha de dessincronia de horário).
-        const presentation = await this.insertIntoResource(mat.id, matOrder, {
-          type: ScheduleEntryType.PRESENTATION,
-          durationMinutes: pair.durationMinutes,
-          teamId: pair.teamId,
-          categoryId: pair.categoryId,
-        });
+        // intervalos abaixo entram na mesma posição (`presentationSlot`)
+        // logo em seguida, sempre empurrando-a um lugar mais adiante)
+        // pra poder vincular os intervalos a ela via linkedEntryId,
+        // mesma técnica de createPresentationWithWarmup — sem isso,
+        // removeEntry não consegue limpar os intervalos junto quando a
+        // apresentação é removida (ver gotcha de dessincronia de
+        // horário). Reinserir sempre no mesmo `presentationSlot` (em
+        // vez de usar `matOrder` incrementando a cada passo) garante a
+        // ordem final [intervalo] [Aguardando aquecimento, se houver]
+        // [apresentação] — o último a entrar fica mais perto do início.
+        const presentationSlot = matOrder;
+        const presentation = await this.insertIntoResource(
+          mat.id,
+          presentationSlot,
+          {
+            type: ScheduleEntryType.PRESENTATION,
+            durationMinutes: pair.durationMinutes,
+            teamId: pair.teamId,
+            categoryId: pair.categoryId,
+          },
+        );
 
         if (warmupDelayMinutes > 0) {
           await this.insertIntoResource(
@@ -766,15 +872,29 @@ export class ScheduleService {
         }
 
         if (needsMatGap) {
-          await this.insertIntoResource(mat.id, matOrder, {
+          await this.insertIntoResource(mat.id, presentationSlot, {
             type: ScheduleEntryType.BREAK,
             durationMinutes: matGapMinutes,
             label: 'Aguardando aquecimento',
             linkedEntryId: presentation.id,
           });
-          matOrder++;
         }
-        matOrder++; // consumido pela apresentação em si
+
+        if (gapMinutes > 0) {
+          await this.insertIntoResource(mat.id, presentationSlot, {
+            type: ScheduleEntryType.BREAK,
+            durationMinutes: gapMinutes,
+            label: INTERVAL_BREAK_LABEL,
+            linkedEntryId: presentation.id,
+          });
+        }
+
+        matOrder =
+          presentationSlot +
+          1 +
+          (needsMatGap ? 1 : 0) +
+          (gapMinutes > 0 ? 1 : 0);
+        matHasPresentation = true;
 
         await this.insertIntoResource(chosenWarmupId, Number.MAX_SAFE_INTEGER, {
           type: ScheduleEntryType.WARMUP,
@@ -854,6 +974,7 @@ export class ScheduleService {
       targetDay.startMinutes = sourceDay.startMinutes;
       targetDay.endMinutes = sourceDay.endMinutes;
       targetDay.defaultWarmupMinutes = sourceDay.defaultWarmupMinutes;
+      targetDay.defaultGapMinutes = sourceDay.defaultGapMinutes;
       await this.daysRepo.save(targetDay);
 
       const targetResources = await this.resourcesRepo.find({
@@ -990,11 +1111,21 @@ export class ScheduleService {
       order: { order: 'ASC' },
     });
     const insertAt = Math.max(0, Math.min(dto.order, matSiblings.length));
+    // "Primeira apresentação da pista" = nenhuma apresentação entre os
+    // irmãos que ficam ANTES do ponto de inserção — não é simplesmente
+    // "a pista está vazia", porque o usuário pode inserir uma
+    // apresentação na frente de outras já agendadas (ela vira a
+    // primeira mesmo com apresentações depois dela).
+    const hasPrecedingPresentation = matSiblings
+      .slice(0, insertAt)
+      .some((e) => e.type === ScheduleEntryType.PRESENTATION);
+    const gapMinutes = hasPrecedingPresentation ? day.defaultGapMinutes : 0;
     const presentationStartMinutes =
       day.startMinutes +
       matSiblings
         .slice(0, insertAt)
-        .reduce((sum, e) => sum + e.durationMinutes, 0);
+        .reduce((sum, e) => sum + e.durationMinutes, 0) +
+      gapMinutes;
 
     // Se o aquecimento (que vai terminar em warmupEndMinutes) ainda
     // estaria em andamento quando a apresentação começaria, um
@@ -1034,6 +1165,20 @@ export class ScheduleService {
         type: ScheduleEntryType.BREAK,
         durationMinutes: matGapMinutes,
         label: 'Aguardando aquecimento',
+        linkedEntryId: presentation.id,
+      });
+    }
+
+    // Reusa o mesmo `insertAt` de propósito — inserir de novo na mesma
+    // posição empurra o que já foi inserido ali (a apresentação, e o
+    // "Aguardando aquecimento" se houver) um lugar adiante, deixando o
+    // intervalo sempre como o primeiro dos dois: [intervalo] [Aguardando
+    // aquecimento, se houver] [apresentação].
+    if (gapMinutes > 0) {
+      await this.insertIntoResource(resource.id, insertAt, {
+        type: ScheduleEntryType.BREAK,
+        durationMinutes: gapMinutes,
+        label: INTERVAL_BREAK_LABEL,
         linkedEntryId: presentation.id,
       });
     }
@@ -1497,6 +1642,7 @@ export class ScheduleService {
       startMinutes: 480,
       endMinutes: 1200,
       defaultWarmupMinutes: 10,
+      defaultGapMinutes: 0,
     });
     const saved = await this.daysRepo.save(day);
     await this.seedDefaultResources(saved);
@@ -1654,6 +1800,18 @@ export class ScheduleService {
     if (entry.contestationRequestedAt) return;
     entry.contestationRequestedAt = new Date();
     await this.entriesRepo.save(entry);
+
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const team = entry.teamId
+      ? await this.teamsRepo.findOneBy({ id: entry.teamId })
+      : null;
+    await this.notificationsService.create(
+      event.aliasId,
+      NotificationType.CONTESTATION_REQUESTED,
+      NotificationAudience.STAFF,
+      `Contestação solicitada para ${team?.name ?? 'Equipe'}`,
+      entry.id,
+    );
   }
 
   // Jurado marca a contestação como resolvida (ver

@@ -39,7 +39,11 @@ export class ScheduleController {
   // editar nada aqui (as outras rotas deste controller continuam
   // admin/assessor only).
   @Get('days')
-  @EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR, EventMemberRole.JUDGE)
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+  )
   getDays(@Param('eventId') eventId: string) {
     return this.scheduleService.getDays(eventId);
   }

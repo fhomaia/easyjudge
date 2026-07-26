@@ -7,11 +7,13 @@ import { Category } from '../categories/entities/category.entity';
 import { ProgramParticipation } from '../programs/entities/program-participation.entity';
 import { EventsController } from './controllers/events.controller';
 import { EventStaffController } from './controllers/event-staff.controller';
+import { EventMemberCountsController } from './controllers/event-member-counts.controller';
 import { EventsService } from './services/events.service';
 import { EventStaffService } from './services/event-staff.service';
 import { EventActivityLogService } from './services/event-activity-log.service';
 import { EventMemberGuard } from './guards/event-member.guard';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -29,14 +31,19 @@ import { UsersModule } from '../users/users.module';
       ProgramParticipation,
     ]),
     UsersModule,
+    NotificationsModule,
   ],
-  controllers: [EventsController, EventStaffController],
+  controllers: [
+    EventsController,
+    EventStaffController,
+    EventMemberCountsController,
+  ],
   providers: [
     EventsService,
     EventStaffService,
     EventActivityLogService,
     EventMemberGuard,
   ],
-  exports: [EventsService, EventMemberGuard],
+  exports: [EventsService, EventMemberGuard, EventActivityLogService],
 })
 export class EventsModule {}

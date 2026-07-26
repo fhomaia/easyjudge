@@ -7,6 +7,7 @@ import { ScoringController } from './controllers/scoring.controller';
 import { AdminScoringController } from './controllers/admin-scoring.controller';
 import { TeamScoringController } from './controllers/team-scoring.controller';
 import { ResultsController } from './controllers/results.controller';
+import { AthleteScoringController } from './controllers/athlete-scoring.controller';
 import { ScoringService } from './services/scoring.service';
 import { EventsModule } from '../events/events.module';
 import { JudgesModule } from '../judges/judges.module';
@@ -15,6 +16,8 @@ import { ScheduleModule } from '../schedule/schedule.module';
 import { ScoringTemplatesModule } from '../scoring-templates/scoring-templates.module';
 import { RegulationsModule } from '../regulations/regulations.module';
 import { ProgramsModule } from '../programs/programs.module';
+import { AthletesModule } from '../athletes/athletes.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -26,12 +29,15 @@ import { ProgramsModule } from '../programs/programs.module';
     ScoringTemplatesModule,
     RegulationsModule,
     ProgramsModule,
+    AthletesModule,
+    NotificationsModule,
   ],
   controllers: [
     ScoringController,
     AdminScoringController,
     TeamScoringController,
     ResultsController,
+    AthleteScoringController,
   ],
   providers: [ScoringService],
 })

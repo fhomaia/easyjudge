@@ -60,14 +60,19 @@ export class ProgramsController {
     @Param('eventId') eventId: string,
     @Param('id') id: string,
     @Body() dto: UpdateProgramParticipationDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.programsService.update(eventId, id, dto);
+    return this.programsService.update(eventId, id, dto, req.user.userId);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('eventId') eventId: string, @Param('id') id: string) {
-    return this.programsService.remove(eventId, id);
+  remove(
+    @Param('eventId') eventId: string,
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.programsService.remove(eventId, id, req.user.userId);
   }
 
   @Post(':id/logo')

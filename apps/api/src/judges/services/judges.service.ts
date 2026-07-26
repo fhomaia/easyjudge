@@ -194,7 +194,10 @@ export class JudgesService {
     userId: string,
   ): Promise<JudgeParticipation | null> {
     const event = await this.eventsService.findEventOrThrow(eventId);
-    return this.participationsRepo.findOneBy({ aliasId: event.aliasId, userId });
+    return this.participationsRepo.findOneBy({
+      aliasId: event.aliasId,
+      userId,
+    });
   }
 
   // Qualquer usuário pode assumir o papel de jurado num evento, exceto

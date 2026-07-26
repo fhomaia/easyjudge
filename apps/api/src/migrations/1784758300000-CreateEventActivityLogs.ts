@@ -7,9 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // "corrigir" um monte de coisa não relacionada a este PR (renomear
 // enum de roles, recriar índices/FKs existentes). Esta migration só
 // cria a tabela nova, sem mexer em mais nada.
-export class CreateEventActivityLogs1784758300000
-  implements MigrationInterface
-{
+export class CreateEventActivityLogs1784758300000 implements MigrationInterface {
   name = 'CreateEventActivityLogs1784758300000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -23,7 +23,10 @@ export class TeamScoringController {
   constructor(private readonly scoringService: ScoringService) {}
 
   @Get('overview')
-  getOverview(@Param('eventId') eventId: string, @Req() req: AuthenticatedRequest) {
+  getOverview(
+    @Param('eventId') eventId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.scoringService.getTeamOverview(eventId, req.user.userId);
   }
 

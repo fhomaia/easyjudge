@@ -34,11 +34,19 @@ const STEPS = [
   "document",
   "email",
   "team",
+  "programEmail",
   "summary",
   "verify",
   "password",
 ] as const;
 type StepKey = (typeof STEPS)[number];
+
+// "programEmail" só faz sentido pra role=athlete — pulado nos dois
+// sentidos (goNext/goBack) pra quem não é atleta.
+function isStepApplicable(key: StepKey, role: UserRole): boolean {
+  if (key === "programEmail") return role === "athlete";
+  return true;
+}
 
 const LOCKED_STEPS: StepKey[] = ["verify", "password"];
 
@@ -106,6 +114,7 @@ const INITIAL_STATE = {
   documentNumber: "",
   email: "",
   teamOrInstitutionName: "",
+  programEmail: "",
   code: "",
   password: "",
   confirmPassword: "",
@@ -162,13 +171,21 @@ export function RegisterDialog({
   function goNext() {
     setError(null);
     setDirection(1);
-    setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
+    setStepIndex((i) => {
+      let next = Math.min(i + 1, STEPS.length - 1);
+      while (next < STEPS.length - 1 && !isStepApplicable(STEPS[next], form.role)) next++;
+      return next;
+    });
   }
 
   function goBack() {
     setError(null);
     setDirection(-1);
-    setStepIndex((i) => Math.max(i - 1, 0));
+    setStepIndex((i) => {
+      let prev = Math.max(i - 1, 0);
+      while (prev > 0 && !isStepApplicable(STEPS[prev], form.role)) prev--;
+      return prev;
+    });
   }
 
   function submitSimpleStep(e: FormEvent) {
@@ -200,6 +217,7 @@ export function RegisterDialog({
         documentNumber: form.documentNumber.replace(/\D/g, ""),
         email: form.email,
         teamOrInstitutionName: form.teamOrInstitutionName || undefined,
+        programEmail: form.role === "athlete" ? form.programEmail || undefined : undefined,
       });
       setUserId(userId);
       goNext();
@@ -461,6 +479,31 @@ export function RegisterDialog({
                 </form>
               )}
 
+              {step === "programEmail" && (
+                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">
+                    Qual o email do seu programa?{" "}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      (opcional)
+                    </span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Pedimos o vínculo com ele — precisa ser confirmado depois. Dá pra pular e
+                    vincular mais tarde, em &quot;Meus programas&quot;.
+                  </p>
+                  <Input
+                    autoFocus
+                    type="email"
+                    aria-label="Email do programa"
+                    value={form.programEmail}
+                    onChange={(e) => update("programEmail", e.target.value.trim())}
+                  />
+                  <Button type="submit" className="w-full">
+                    {form.programEmail ? "Continuar" : "Pular"}
+                  </Button>
+                </form>
+              )}
+
               {step === "summary" && (
                 <div className="grid gap-5 short:gap-3">
                   <h3 className="text-xl font-medium short:text-lg">Confere se está tudo certo:</h3>
@@ -479,6 +522,12 @@ export function RegisterDialog({
                       label="Equipe/instituição"
                       value={form.teamOrInstitutionName || "Não informado"}
                     />
+                    {form.role === "athlete" && (
+                      <SummaryRow
+                        label="Email do programa"
+                        value={form.programEmail || "Não informado"}
+                      />
+                    )}
                   </dl>
                   <Button
                     type="button"

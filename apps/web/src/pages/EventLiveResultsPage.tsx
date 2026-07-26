@@ -11,6 +11,7 @@ import { FORMAT_LABELS } from "@/lib/categoryLabels";
 import { cn } from "@/lib/utils";
 import {
   eventsApi,
+  notificationsApi,
   resultsApi,
   usersApi,
   type Event,
@@ -132,6 +133,7 @@ export function EventLiveResultsPage() {
   // primeira aba em qualquer tamanho de tela.
   const [activeTab, setActiveTab] = useState<ResultsTab>("ranking");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
 
   function toggleCategory(categoryId: string) {
     setExpandedCategories((prev) => {
@@ -149,6 +151,10 @@ export function EventLiveResultsPage() {
   useEffect(() => {
     if (!id) return;
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
+    notificationsApi
+      .list(id)
+      .then((res) => setNotificationsUnreadCount(res.unreadCount))
+      .catch(() => setNotificationsUnreadCount(null));
   }, [id]);
 
   useEffect(() => {
@@ -177,6 +183,8 @@ export function EventLiveResultsPage() {
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
     onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
 

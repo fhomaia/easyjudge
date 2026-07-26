@@ -10,13 +10,18 @@ import { eventsApi } from "@/api/client";
 // Programa vinculado ganha automaticamente (ver
 // ProgramsService.create/linkUnclaimedProgramsByEmail), usado pela
 // visão da equipe na tela de notas (EventLiveTeamNotesPage).
-// "spectator" (espectador genérico, sem vínculo com equipe)
-// deliberadamente NÃO entra aqui por padrão — só admin/assessor/
-// jurado/equipe (e, futuramente, atleta) têm acesso à maioria dessas
-// telas. Exceção: EventLiveResultsPage passa `allowSpectator: true`,
-// já que resultado é a única tela "ao vivo" que espectador (e, futuramente,
-// atleta) pode acessar — a página em si decide se mostra o conteúdo
-// ou um aviso de "em breve" via `Event.resultsReleasedAt` (ver
+// "athlete" entrou em 2026-07-26: concedido a todo AthleteLink com os
+// dois lados resolvidos, independente de confirmado pelo programa (ver
+// EventMemberRole.ATHLETE) — já libera Início/Cronograma/Resultados;
+// a confirmação só gateia o CONTEÚDO de Notas (checado dentro da
+// própria página, não aqui no guard — a rota fica acessível, só o
+// conteúdo é que aparece bloqueado). "spectator" (espectador genérico,
+// sem vínculo com equipe) deliberadamente NÃO entra aqui por padrão —
+// só admin/assessor/jurado/equipe/atleta têm acesso à maioria dessas
+// telas. Exceção: EventLiveResultsPage passa `allowSpectator: true`, já
+// que resultado é a única tela "ao vivo" que espectador genérico pode
+// acessar — a página em si decide se mostra o conteúdo ou um aviso de
+// "em breve" via `Event.resultsReleasedAt` (ver
 // ScoringService.getPublicEventResults).
 export function useEventLiveGuard(
   eventId: string | undefined,
@@ -38,6 +43,7 @@ export function useEventLiveGuard(
             r === "assessor" ||
             r === "judge" ||
             r === "program" ||
+            r === "athlete" ||
             (allowSpectator && r === "spectator"),
         );
         if (!allowed) navigate("/", { replace: true });

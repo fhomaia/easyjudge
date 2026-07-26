@@ -43,7 +43,15 @@ export class JudgesController {
     return this.judgesService.create(eventId, dto, req.user.userId);
   }
 
+  // Lista ampliada pra também incluir jurados (não só admin/assessor)
+  // — "quem mais tá julgando este evento" é informação razoável pra um
+  // jurado ver sobre os colegas (ver EventLiveDashboardPage).
   @Get()
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+  )
   findAll(@Param('eventId') eventId: string) {
     return this.judgesService.findAllForEvent(eventId);
   }

@@ -20,6 +20,8 @@ import { ScheduleDay } from './src/schedule/entities/schedule-day.entity';
 import { ScheduleResource } from './src/schedule/entities/schedule-resource.entity';
 import { ScheduleEntry } from './src/schedule/entities/schedule-entry.entity';
 import { ScoreEvent } from './src/scoring/entities/score-event.entity';
+import { AthleteLink } from './src/athletes/entities/athlete-link.entity';
+import { Notification } from './src/notifications/entities/notification.entity';
 
 config(); // carrega o .env
 
@@ -47,6 +49,8 @@ export default new DataSource({
     ScheduleResource,
     ScheduleEntry,
     ScoreEvent,
+    AthleteLink,
+    Notification,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

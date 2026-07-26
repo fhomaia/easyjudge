@@ -17,6 +17,11 @@ export class UpdateScheduleDayDto {
   defaultWarmupMinutes?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  defaultGapMinutes?: number;
+
+  @IsOptional()
   @IsBoolean()
   ignoreUnscheduledPresentations?: boolean;
 }

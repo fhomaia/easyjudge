@@ -23,6 +23,9 @@ import { ScheduleDay } from '../../schedule/entities/schedule-day.entity';
 import { Regulation } from '../../regulations/entities/regulation.entity';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
 import { SpecialRoleAssignment } from '../../judging/entities/special-role-assignment.entity';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { NotificationType } from '../../notifications/enums/notification-type.enum';
+import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 
 // Entidades filhas endereçadas pelo `aliasId` do evento (estável entre
 // versões, não pelo `id` de uma versão específica — ver
@@ -106,6 +109,7 @@ export class EventsService {
     private readonly dataSource: DataSource,
     private readonly usersService: UsersService,
     private readonly activityLogService: EventActivityLogService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // Cria a v1 do evento (aliasId = id, já que é a primeira versão) e o
@@ -429,6 +433,37 @@ export class EventsService {
     return this.eventsRepo.save(event);
   }
 
+  // Tela "Histórico" (acessível a partir do menu "⋯" da lista de
+  // eventos da Home) — admin e assessor, mesmo par de papéis que já
+  // pode editar as configurações do evento (ver updateEvent). Cobre
+  // TODAS as versões do aliasId, não só a ativa (o log sobrevive a
+  // republicações/exclusão, ver EventActivityLog).
+  async getActivityLog(
+    id: string,
+    userId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      action: EventActivityAction;
+      detail: string | null;
+      actorName: string;
+      createdAt: Date;
+    }>
+  > {
+    const event = await this.getOwnEventOrThrow(id, userId, [
+      EventMemberRole.ADMIN,
+      EventMemberRole.ASSESSOR,
+    ]);
+    const logs = await this.activityLogService.findForEvent(event.aliasId);
+    return logs.map((log) => ({
+      id: log.id,
+      action: log.action,
+      detail: log.detail,
+      actorName: `${log.actor.firstName} ${log.actor.lastName}`.trim(),
+      createdAt: log.createdAt,
+    }));
+  }
+
   // Liberação de notas/contestação/resultado pra equipe/atletas — ação
   // global do evento (ver ScoringService, que é quem chama isto a
   // partir de AdminScoringController). Cascata: ligar contestação liga
@@ -445,6 +480,13 @@ export class EventsService {
     },
   ): Promise<Event> {
     const event = await this.findEventOrThrow(id);
+    // Guardado ANTES de mutar — só dispara notificação na transição
+    // false -> true (liberar de verdade), nunca ao desligar nem ao
+    // "reforçar" um valor que já estava ligado.
+    const wasScoresReleased = !!event.scoresReleasedAt;
+    const wasContestationReleased = !!event.contestationReleasedAt;
+    const wasResultsReleased = !!event.resultsReleasedAt;
+
     if (changes.scoresReleased !== undefined) {
       event.scoresReleasedAt = changes.scoresReleased ? new Date() : null;
       if (!changes.scoresReleased) event.contestationReleasedAt = null;
@@ -460,7 +502,34 @@ export class EventsService {
     if (changes.resultsReleased !== undefined) {
       event.resultsReleasedAt = changes.resultsReleased ? new Date() : null;
     }
-    return this.eventsRepo.save(event);
+    const saved = await this.eventsRepo.save(event);
+
+    if (!wasScoresReleased && saved.scoresReleasedAt) {
+      await this.notificationsService.create(
+        saved.aliasId,
+        NotificationType.SCORES_RELEASED,
+        NotificationAudience.ALL,
+        'Súmulas disponíveis',
+      );
+    }
+    if (!wasContestationReleased && saved.contestationReleasedAt) {
+      await this.notificationsService.create(
+        saved.aliasId,
+        NotificationType.CONTESTATION_RELEASED,
+        NotificationAudience.ALL,
+        'Período de contestação iniciado',
+      );
+    }
+    if (!wasResultsReleased && saved.resultsReleasedAt) {
+      await this.notificationsService.create(
+        saved.aliasId,
+        NotificationType.RESULTS_RELEASED,
+        NotificationAudience.ALL,
+        'Resultado disponível',
+      );
+    }
+
+    return saved;
   }
 
   // Usado por CategoriesService e TeamsService para validar que o evento
@@ -553,6 +622,46 @@ export class EventsService {
     } else {
       await this.membersRepo.save(existing);
     }
+  }
+
+  // Todo aliasId onde `userId` tem `role` no roster — usado por
+  // AthletesService.syncEventAccessForLink pra descobrir em quais
+  // eventos um programa já participa (role=program) e replicar o
+  // acesso ATHLETE pra um atleta recém-vinculado a ele, sem precisar de
+  // dependência cruzada com ProgramsService (EventMember já é a fonte
+  // de verdade de "esse programa está neste evento").
+  async findAliasIdsForMemberRole(
+    userId: string,
+    role: EventMemberRole,
+  ): Promise<string[]> {
+    const rows = await this.membersRepo
+      .createQueryBuilder('m')
+      .select('DISTINCT m.aliasId', 'aliasId')
+      .where('m.userId = :userId', { userId })
+      .andWhere(':role = ANY(m.roles)', { role })
+      .getRawMany<{ aliasId: string }>();
+    return rows.map((r) => r.aliasId);
+  }
+
+  // Quantas pessoas o evento tem em cada papel do roster — alimenta os
+  // cards "Jurados cadastrados"/"Programas cadastrados"/"Espectadores"/
+  // "Atletas" do painel Início. Acesso amplo de propósito (não é uma
+  // ação de gestão, só uma contagem) — quem chama decide o guard.
+  async getMemberRoleCounts(
+    eventId: string,
+  ): Promise<Partial<Record<EventMemberRole, number>>> {
+    const event = await this.findEventOrThrow(eventId);
+    const rows = await this.membersRepo.query<
+      Array<{ role: EventMemberRole; count: number }>
+    >(
+      `SELECT role, COUNT(*)::int AS count FROM event_members, unnest(roles) AS role WHERE alias_id = $1 GROUP BY role`,
+      [event.aliasId],
+    );
+    const counts: Partial<Record<EventMemberRole, number>> = {};
+    for (const row of rows) {
+      counts[row.role] = row.count;
+    }
+    return counts;
   }
 
   // Chamado (incondicionalmente) por AuthService.setPassword: reclama

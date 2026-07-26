@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -25,6 +26,7 @@ import { documentUploadOptions } from '../../common/config/document-upload.confi
 import { EventMemberGuard } from '../../events/guards/event-member.guard';
 import { EventRoles } from '../../events/decorators/event-roles.decorator';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
+import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
 @Controller('events/:eventId/regulation')
 @UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
@@ -39,8 +41,16 @@ export class RegulationsController {
   }
 
   @Patch()
-  update(@Param('eventId') eventId: string, @Body() dto: UpdateRegulationDto) {
-    return this.regulationsService.updateDeductions(eventId, dto);
+  update(
+    @Param('eventId') eventId: string,
+    @Body() dto: UpdateRegulationDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.regulationsService.updateDeductions(
+      eventId,
+      dto,
+      req.user.userId,
+    );
   }
 
   @Post('documents')
@@ -49,6 +59,7 @@ export class RegulationsController {
     @Param('eventId') eventId: string,
     @Body('kind') kind: string,
     @Body('name') name: string | undefined,
+    @Req() req: AuthenticatedRequest,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Arquivo obrigatório');
@@ -63,6 +74,7 @@ export class RegulationsController {
       eventId,
       kind as RegulationDocumentKind,
       file,
+      req.user.userId,
       name,
     );
   }
@@ -72,7 +84,12 @@ export class RegulationsController {
   deleteDocument(
     @Param('eventId') eventId: string,
     @Param('documentId') documentId: string,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.regulationsService.deleteDocument(eventId, documentId);
+    return this.regulationsService.deleteDocument(
+      eventId,
+      documentId,
+      req.user.userId,
+    );
   }
 }

@@ -1,0 +1,25 @@
+import type { EventActivityAction } from "@/api/client";
+
+export const EVENT_ACTIVITY_ACTION_LABELS: Record<EventActivityAction, string> = {
+  created: "Evento criado",
+  updated: "Configurações editadas",
+  published: "Evento publicado",
+  unpublished: "Publicação revertida",
+  started: "Evento iniciado",
+  deleted: "Evento excluído",
+  category_created: "Categoria criada",
+  category_updated: "Categoria editada",
+  category_deleted: "Categoria excluída",
+  program_created: "Programa cadastrado",
+  program_updated: "Programa editado",
+  program_deleted: "Programa excluído",
+  team_created: "Equipe cadastrada",
+  team_updated: "Equipe editada",
+  team_deleted: "Equipe excluída",
+  regulation_document_uploaded: "Documento do regulamento enviado",
+  regulation_document_removed: "Documento do regulamento removido",
+  regulation_deductions_updated: "Deduções do regulamento atualizadas",
+  staff_member_added: "Pessoa adicionada aos acessos",
+  staff_member_updated: "Papéis de acesso alterados",
+  staff_member_removed: "Pessoa removida dos acessos",
+};

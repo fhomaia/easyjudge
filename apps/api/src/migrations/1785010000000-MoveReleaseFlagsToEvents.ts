@@ -8,9 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // nova é por evento (aliasId), não por versão/linha. `contestation_requested_at`
 // continua em `schedule_entries` (é por apresentação de verdade — uma
 // equipe contesta a própria rotina, não o evento inteiro).
-export class MoveReleaseFlagsToEvents1785010000000
-  implements MigrationInterface
-{
+export class MoveReleaseFlagsToEvents1785010000000 implements MigrationInterface {
   name = 'MoveReleaseFlagsToEvents1785010000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

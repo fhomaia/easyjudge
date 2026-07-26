@@ -7,4 +7,23 @@ export enum EventActivityAction {
   UNPUBLISHED = 'unpublished',
   STARTED = 'started',
   DELETED = 'deleted',
+  // Telas de cadastro do evento (2026-07-26, a pedido do usuário) —
+  // escala de arbitragem (judging) e cronograma foram deliberadamente
+  // deixados de fora (volume alto de eventos pequenos, pouco valor de
+  // auditoria por entrada).
+  CATEGORY_CREATED = 'category_created',
+  CATEGORY_UPDATED = 'category_updated',
+  CATEGORY_DELETED = 'category_deleted',
+  PROGRAM_CREATED = 'program_created',
+  PROGRAM_UPDATED = 'program_updated',
+  PROGRAM_DELETED = 'program_deleted',
+  TEAM_CREATED = 'team_created',
+  TEAM_UPDATED = 'team_updated',
+  TEAM_DELETED = 'team_deleted',
+  REGULATION_DOCUMENT_UPLOADED = 'regulation_document_uploaded',
+  REGULATION_DOCUMENT_REMOVED = 'regulation_document_removed',
+  REGULATION_DEDUCTIONS_UPDATED = 'regulation_deductions_updated',
+  STAFF_MEMBER_ADDED = 'staff_member_added',
+  STAFF_MEMBER_UPDATED = 'staff_member_updated',
+  STAFF_MEMBER_REMOVED = 'staff_member_removed',
 }

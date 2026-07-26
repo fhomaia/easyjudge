@@ -98,6 +98,7 @@ export class UsersService {
       documentNumber: dto.documentNumber,
       email: dto.email,
       teamOrInstitutionName: dto.teamOrInstitutionName,
+      programEmail: dto.programEmail,
       passwordHash: null,
       emailVerifiedAt: null,
     });

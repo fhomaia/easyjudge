@@ -13,6 +13,7 @@ import { UsersModule } from '../users/users.module';
 import { ProgramsModule } from '../programs/programs.module';
 import { JudgesModule } from '../judges/judges.module';
 import { EventsModule } from '../events/events.module';
+import { AthletesModule } from '../athletes/athletes.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { EventsModule } from '../events/events.module';
     ProgramsModule,
     JudgesModule,
     EventsModule,
+    AthletesModule,
     TypeOrmModule.forFeature([EmailVerification]),
     PassportModule,
     JwtModule.registerAsync({

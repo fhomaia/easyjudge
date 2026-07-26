@@ -24,12 +24,16 @@ import { EventsService } from '../../events/services/events.service';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { EventStatus } from '../../events/enums/event-status.enum';
 import { ProgramsService } from '../../programs/services/programs.service';
+import { AthletesService } from '../../athletes/services/athletes.service';
 import { ScoringCriteriaService } from '../../scoring-templates/services/scoring-criteria.service';
 import { DeductionType } from '../../regulations/enums/deduction-type.enum';
 import {
   RegulationsService,
   type DeductionRuleView,
 } from '../../regulations/services/regulations.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { NotificationType } from '../../notifications/enums/notification-type.enum';
+import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 
 export interface ScoringCriterionView {
   id: string;
@@ -253,6 +257,8 @@ export class ScoringService {
     private readonly scoringCriteriaService: ScoringCriteriaService,
     private readonly regulationsService: RegulationsService,
     private readonly programsService: ProgramsService,
+    private readonly athletesService: AthletesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // Monta a folha de pontuação de UMA apresentação pro jurado logado —
@@ -264,10 +270,7 @@ export class ScoringService {
     userId: string,
     scheduleEntryId: string,
   ): Promise<ScoringSheetView> {
-    const participation = await this.assertJudgeParticipation(
-      eventId,
-      userId,
-    );
+    const participation = await this.assertJudgeParticipation(eventId, userId);
     const { entry, category, team, resource, allCriteria } =
       await this.loadPresentationContext(eventId, scheduleEntryId);
 
@@ -382,7 +385,9 @@ export class ScoringService {
     ]);
 
     const judges = Array.from(judgeIds).map((judgeParticipationId) => {
-      const leafIds = Array.from(leafIdsByJudge.get(judgeParticipationId) ?? []);
+      const leafIds = Array.from(
+        leafIdsByJudge.get(judgeParticipationId) ?? [],
+      );
       const groups = this.buildGroups(allCriteria, leafIds).map((g) => g.name);
       const status: HeadJudgeRosterEntryStatus = submittedJudgeIds.has(
         judgeParticipationId,
@@ -590,11 +595,12 @@ export class ScoringService {
           );
           if (!complete) continue;
 
-          const { finalResult, percentage } = await this.computePresentationResult(
-            entry.id,
-            category,
-            deductionValueByType,
-          );
+          const { finalResult, percentage } =
+            await this.computePresentationResult(
+              entry.id,
+              category,
+              deductionValueByType,
+            );
 
           results.push({
             scheduleEntryId: entry.id,
@@ -751,8 +757,17 @@ export class ScoringService {
           );
           if (!complete) continue;
 
-          const { totalScore, deductionsTotal, finalResult, maxScore, percentage } =
-            await this.computePresentationResult(entry.id, category, deductionValueByType);
+          const {
+            totalScore,
+            deductionsTotal,
+            finalResult,
+            maxScore,
+            percentage,
+          } = await this.computePresentationResult(
+            entry.id,
+            category,
+            deductionValueByType,
+          );
 
           presentations.push({
             scheduleEntryId: entry.id,
@@ -773,7 +788,10 @@ export class ScoringService {
       }
     }
 
-    const presentationsByCategory = new Map<string, ResultsPresentationView[]>();
+    const presentationsByCategory = new Map<
+      string,
+      ResultsPresentationView[]
+    >();
     for (const p of presentations) {
       const list = presentationsByCategory.get(p.categoryId) ?? [];
       list.push(p);
@@ -784,7 +802,9 @@ export class ScoringService {
       .filter((c) => presentationsByCategory.has(c.id))
       .map((c) => {
         const list = presentationsByCategory.get(c.id)!;
-        const byPercentage = [...list].sort((a, b) => b.percentage - a.percentage);
+        const byPercentage = [...list].sort(
+          (a, b) => b.percentage - a.percentage,
+        );
         const byScore = [...list].sort((a, b) => b.finalResult - a.finalResult);
         const averagePercentage =
           list.reduce((sum, p) => sum + p.percentage, 0) / list.length;
@@ -909,8 +929,61 @@ export class ScoringService {
     const myTeams = await this.teamsRepo.find({
       where: { programId: participation.id },
     });
-    const myTeamIds = new Set(myTeams.map((t) => t.id));
+    return this.buildTeamScopedOverview(
+      eventId,
+      new Set(myTeams.map((t) => t.id)),
+    );
+  }
 
+  // Visão do Atleta na tela de Notas — igual à do Programa
+  // (getTeamOverview), só que filtrada pela UNIÃO dos times de TODOS os
+  // programas com vínculo CONFIRMADO (ver AthletesService.
+  // getConfirmedProgramUserIds — um atleta pode estar ligado a mais de
+  // um programa). `locked: true` quando não há nenhum programa
+  // confirmado com participação NESTE evento, ou quando as notas ainda
+  // não foram liberadas globalmente — a tela mostra um aviso de "aguardando
+  // confirmação" nesse caso, mesmo padrão de `EventResultsResponse.released`.
+  async getAthleteOverview(
+    eventId: string,
+    userId: string,
+  ): Promise<{ locked: boolean; entries: AdminOverviewEntryView[] }> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const programUserIds =
+      await this.athletesService.getConfirmedProgramUserIds(userId);
+    if (programUserIds.length === 0 || !event.scoresReleasedAt) {
+      return { locked: true, entries: [] };
+    }
+
+    const participations = (
+      await Promise.all(
+        programUserIds.map((programUserId) =>
+          this.programsService.findParticipationByUserId(
+            eventId,
+            programUserId,
+          ),
+        ),
+      )
+    ).filter((p): p is NonNullable<typeof p> => p !== null);
+    if (participations.length === 0) return { locked: true, entries: [] };
+
+    const myTeams = await this.teamsRepo.find({
+      where: { programId: In(participations.map((p) => p.id)) },
+    });
+    const entries = await this.buildTeamScopedOverview(
+      eventId,
+      new Set(myTeams.map((t) => t.id)),
+    );
+    return { locked: false, entries };
+  }
+
+  // Loop compartilhado por getTeamOverview/getAthleteOverview — mesma
+  // completude (isPresentationFullyScored) e cálculo de nota
+  // (computePresentationResult) do overview do admin, só que restrito a
+  // um conjunto de times.
+  private async buildTeamScopedOverview(
+    eventId: string,
+    teamIds: Set<string>,
+  ): Promise<AdminOverviewEntryView[]> {
     const days = await this.scheduleService.getDays(eventId);
     const regulation = await this.regulationsService.getForEvent(eventId);
     const deductionValueByType = new Map(
@@ -930,7 +1003,7 @@ export class ScoringService {
           if (
             entry.type !== ScheduleEntryType.PRESENTATION ||
             !entry.teamId ||
-            !myTeamIds.has(entry.teamId) ||
+            !teamIds.has(entry.teamId) ||
             !entry.categoryId
           ) {
             continue;
@@ -972,11 +1045,12 @@ export class ScoringService {
           );
           if (!complete) continue;
 
-          const { finalResult, percentage } = await this.computePresentationResult(
-            entry.id,
-            category,
-            deductionValueByType,
-          );
+          const { finalResult, percentage } =
+            await this.computePresentationResult(
+              entry.id,
+              category,
+              deductionValueByType,
+            );
 
           results.push({
             scheduleEntryId: entry.id,
@@ -1022,6 +1096,54 @@ export class ScoringService {
     if (!event.scoresReleasedAt) {
       throw new ForbiddenException(
         'As notas deste evento ainda não foram liberadas.',
+      );
+    }
+    return this.buildPresentationDetail(eventId, scheduleEntryId);
+  }
+
+  // Mesmo detalhe, mas pro Atleta — a apresentação precisa ser de uma
+  // equipe de ALGUM dos programas com vínculo CONFIRMADO dele (ver
+  // getAthleteOverview).
+  async getAthletePresentationDetail(
+    eventId: string,
+    scheduleEntryId: string,
+    userId: string,
+  ): Promise<PresentationDetailView> {
+    const entry = await this.scheduleService.findEntryInEventOrThrow(
+      eventId,
+      scheduleEntryId,
+    );
+    if (!entry.teamId) {
+      throw new BadRequestException('Apresentação sem equipe definida.');
+    }
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    if (!event.scoresReleasedAt) {
+      throw new ForbiddenException(
+        'As notas deste evento ainda não foram liberadas.',
+      );
+    }
+    const programUserIds =
+      await this.athletesService.getConfirmedProgramUserIds(userId);
+    const participations = (
+      await Promise.all(
+        programUserIds.map((programUserId) =>
+          this.programsService.findParticipationByUserId(
+            eventId,
+            programUserId,
+          ),
+        ),
+      )
+    ).filter((p): p is NonNullable<typeof p> => p !== null);
+    const team =
+      participations.length > 0
+        ? await this.teamsRepo.findOneBy({
+            id: entry.teamId,
+            programId: In(participations.map((p) => p.id)),
+          })
+        : null;
+    if (!team) {
+      throw new ForbiddenException(
+        'Esta apresentação não pertence a um dos seus programas.',
       );
     }
     return this.buildPresentationDetail(eventId, scheduleEntryId);
@@ -1099,10 +1221,7 @@ export class ScoringService {
     eventId: string,
     userId: string,
   ): Promise<string[]> {
-    const participation = await this.assertJudgeParticipation(
-      eventId,
-      userId,
-    );
+    const participation = await this.assertJudgeParticipation(eventId, userId);
     const rows = await this.scoreEventsRepo.find({
       where: {
         judgeParticipationId: participation.id,
@@ -1110,6 +1229,19 @@ export class ScoringService {
       },
     });
     return Array.from(new Set(rows.map((r) => r.scheduleEntryId)));
+  }
+
+  // Ids das apresentações já 100% pontuadas — alimenta o cronograma ao
+  // vivo (painel Início: "Próxima apresentação"/"Próximo em cada
+  // pista"), que antes só comparava o horário AGENDADO contra o
+  // relógio (ver lib/eventLiveSchedule.ts) e podia mostrar uma
+  // apresentação já concluída como "próxima" quando os jurados
+  // terminam mais rápido que a duração planejada. Reaproveita
+  // getAdminOverview (que já filtra só as completas) em vez de
+  // duplicar o loop de completude.
+  async getCompletedPresentationIds(eventId: string): Promise<string[]> {
+    const overview = await this.getAdminOverview(eventId);
+    return overview.map((e) => e.scheduleEntryId);
   }
 
   // Horário real de início de cada apresentação já iniciada (primeiro
@@ -1135,7 +1267,10 @@ export class ScoringService {
     if (entryIds.length === 0) return [];
 
     const events = await this.scoreEventsRepo.find({
-      where: { scheduleEntryId: In(entryIds), kind: ScoreEventKind.TIMER_STARTED },
+      where: {
+        scheduleEntryId: In(entryIds),
+        kind: ScoreEventKind.TIMER_STARTED,
+      },
       order: { clientCreatedAt: 'ASC' },
     });
     const firstStartByEntry = new Map<string, Date>();
@@ -1173,15 +1308,15 @@ export class ScoringService {
     events: ScoreEventInputDto[],
   ): Promise<{ savedIds: string[] }> {
     await this.assertEventStarted(eventId);
-    const participation = await this.assertJudgeParticipation(
-      eventId,
-      userId,
-    );
+    const participation = await this.assertJudgeParticipation(eventId, userId);
     const rows = await this.buildScoreEventRows(
       eventId,
       participation.id,
       events,
     );
+
+    const preExistingTimerStarts =
+      await this.getEntryIdsWithExistingTimerStart(rows);
 
     if (rows.length > 0) {
       await this.scoreEventsRepo
@@ -1192,6 +1327,12 @@ export class ScoringService {
         .orIgnore() // ON CONFLICT (id) DO NOTHING — reenvio idempotente
         .execute();
     }
+
+    await this.notifyAfterScoreEventsInserted(
+      eventId,
+      rows,
+      preExistingTimerStarts,
+    );
 
     return { savedIds: rows.map((r) => r.id) };
   }
@@ -1231,6 +1372,9 @@ export class ScoringService {
       caller.id,
     );
 
+    const preExistingTimerStarts =
+      await this.getEntryIdsWithExistingTimerStart(rows);
+
     if (rows.length > 0) {
       await this.scoreEventsRepo
         .createQueryBuilder()
@@ -1240,6 +1384,12 @@ export class ScoringService {
         .orIgnore()
         .execute();
     }
+
+    await this.notifyAfterScoreEventsInserted(
+      eventId,
+      rows,
+      preExistingTimerStarts,
+    );
 
     return { savedIds: rows.map((r) => r.id) };
   }
@@ -1316,12 +1466,18 @@ export class ScoringService {
             'Só o Jurado de Legalidade pode registrar deduções/cronômetro.',
           );
         }
-        if (input.kind === ScoreEventKind.DEDUCTION_ADD && !input.deductionType) {
+        if (
+          input.kind === ScoreEventKind.DEDUCTION_ADD &&
+          !input.deductionType
+        ) {
           throw new BadRequestException(
             'Evento de dedução precisa de deductionType.',
           );
         }
-        if (input.kind === ScoreEventKind.DEDUCTION_REMOVE && !input.undoesEventId) {
+        if (
+          input.kind === ScoreEventKind.DEDUCTION_REMOVE &&
+          !input.undoesEventId
+        ) {
           throw new BadRequestException(
             'Evento de desfazer dedução precisa de undoesEventId.',
           );
@@ -1350,7 +1506,8 @@ export class ScoringService {
           scheduleEntryId: input.scheduleEntryId,
           judgeParticipationId: ownerParticipationId,
           enteredByJudgeParticipationId:
-            actingParticipationId && actingParticipationId !== ownerParticipationId
+            actingParticipationId &&
+            actingParticipationId !== ownerParticipationId
               ? actingParticipationId
               : null,
           kind: input.kind,
@@ -1404,6 +1561,182 @@ export class ScoringService {
     return true;
   }
 
+  // Mesma checagem de `isPresentationFullyScored`, mas resolvendo o
+  // contexto (categoria/atribuições/funções especiais) de UMA
+  // apresentação só, em vez de iterar o dia inteiro (getAdminOverview) —
+  // usado pelos gatilhos de notificação, que precisam checar uma
+  // apresentação específica logo depois de um envio de súmula.
+  private async isPresentationComplete(
+    eventId: string,
+    scheduleEntryId: string,
+  ): Promise<boolean> {
+    const { entry, category } = await this.loadPresentationContext(
+      eventId,
+      scheduleEntryId,
+    );
+    const [assignmentsState, specialRoles] = await Promise.all([
+      this.judgingService.getAssignments(eventId, category.scoringTemplateId!),
+      this.judgingService.getSpecialRoles(eventId, entry.resourceId),
+    ]);
+    return this.isPresentationFullyScored(
+      entry.id,
+      entry.resourceId,
+      assignmentsState,
+      specialRoles,
+    );
+  }
+
+  // Dos `scheduleEntryId` com `TIMER_STARTED` no lote sendo gravado,
+  // quais JÁ tinham algum `TIMER_STARTED` antes deste envio — usado por
+  // `notifyAfterScoreEventsInserted` pra distinguir o primeiro início de
+  // verdade (dispara "avaliação pendente" pras outras apresentações
+  // ainda abertas) de um "Reiniciar" do cronômetro (não conta como novo
+  // início, mesma regra que `getStartedPresentations` já usa pro
+  // cálculo de atraso). Precisa ser consultado ANTES do insert do lote.
+  private async getEntryIdsWithExistingTimerStart(
+    rows: ScoreEvent[],
+  ): Promise<Set<string>> {
+    const entryIds = [
+      ...new Set(
+        rows
+          .filter((r) => r.kind === ScoreEventKind.TIMER_STARTED)
+          .map((r) => r.scheduleEntryId),
+      ),
+    ];
+    if (entryIds.length === 0) return new Set();
+    const existing = await this.scoreEventsRepo.find({
+      where: {
+        scheduleEntryId: In(entryIds),
+        kind: ScoreEventKind.TIMER_STARTED,
+      },
+    });
+    return new Set(existing.map((e) => e.scheduleEntryId));
+  }
+
+  // Dois gatilhos de notificação, checados depois de gravar um lote de
+  // ScoreEvent (`submitEvents`/`submitEventsAsHeadJudge`, jurado normal
+  // ou Head Judge editando folha de outro jurado — os dois passam por
+  // aqui igual):
+  // - "Apresentação concluída": pra cada SHEET_SUBMITTED do lote, se a
+  //   apresentação acabou de ficar 100% pontuada (todos os jurados
+  //   escalados já enviaram), notifica ALL. Dedup por scheduleEntryId —
+  //   não duplica se o gatilho rodar de novo.
+  // - "Avaliação pendente": pra cada TIMER_STARTED do lote que for o
+  //   PRIMEIRO de verdade daquele scheduleEntryId (não um "Reiniciar"),
+  //   busca outras apresentações do evento já iniciadas mas ainda não
+  //   completas e notifica STAFF sobre CADA UMA delas (não sobre a que
+  //   acabou de começar — é o lembrete "essa outra ainda está aberta").
+  private async notifyAfterScoreEventsInserted(
+    eventId: string,
+    rows: ScoreEvent[],
+    preExistingTimerStarts: Set<string>,
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const event = await this.eventsService.findEventOrThrow(eventId);
+
+    const submittedEntryIds = new Set(
+      rows
+        .filter((r) => r.kind === ScoreEventKind.SHEET_SUBMITTED)
+        .map((r) => r.scheduleEntryId),
+    );
+    for (const scheduleEntryId of submittedEntryIds) {
+      const alreadyNotified = await this.notificationsService.existsForEntry(
+        event.aliasId,
+        NotificationType.PRESENTATION_COMPLETED,
+        scheduleEntryId,
+      );
+      if (alreadyNotified) continue;
+      const complete = await this.isPresentationComplete(
+        eventId,
+        scheduleEntryId,
+      ).catch(() => false);
+      if (!complete) continue;
+      const entry = await this.scheduleService.findEntryInEventOrThrow(
+        eventId,
+        scheduleEntryId,
+      );
+      const team = entry.teamId
+        ? await this.teamsRepo.findOneBy({ id: entry.teamId })
+        : null;
+      await this.notificationsService.create(
+        event.aliasId,
+        NotificationType.PRESENTATION_COMPLETED,
+        NotificationAudience.ALL,
+        `Apresentação ${team?.name ?? 'Equipe'} concluída`,
+        scheduleEntryId,
+      );
+    }
+
+    const newlyStartedEntryIds = new Set(
+      rows
+        .filter(
+          (r) =>
+            r.kind === ScoreEventKind.TIMER_STARTED &&
+            !preExistingTimerStarts.has(r.scheduleEntryId),
+        )
+        .map((r) => r.scheduleEntryId),
+    );
+    // "Apresentação iniciada" — dispara uma única vez, no PRIMEIRO
+    // TIMER_STARTED de verdade de cada apresentação (mesmo critério de
+    // "newlyStarted" acima — reiniciar o cronômetro não conta como novo
+    // início). Diferente de "avaliação pendente" (só STAFF), esta é
+    // visível pra todo mundo do evento.
+    for (const scheduleEntryId of newlyStartedEntryIds) {
+      const alreadyNotified = await this.notificationsService.existsForEntry(
+        event.aliasId,
+        NotificationType.PRESENTATION_STARTED,
+        scheduleEntryId,
+      );
+      if (alreadyNotified) continue;
+      const entry = await this.scheduleService.findEntryInEventOrThrow(
+        eventId,
+        scheduleEntryId,
+      );
+      const team = entry.teamId
+        ? await this.teamsRepo.findOneBy({ id: entry.teamId })
+        : null;
+      await this.notificationsService.create(
+        event.aliasId,
+        NotificationType.PRESENTATION_STARTED,
+        NotificationAudience.ALL,
+        `Apresentação ${team?.name ?? 'Equipe'} iniciada`,
+        scheduleEntryId,
+      );
+    }
+
+    if (newlyStartedEntryIds.size === 0) return;
+
+    const started = await this.getStartedPresentations(eventId);
+    for (const other of started) {
+      if (newlyStartedEntryIds.has(other.scheduleEntryId)) continue;
+      const alreadyNotified = await this.notificationsService.existsForEntry(
+        event.aliasId,
+        NotificationType.EVALUATION_PENDING,
+        other.scheduleEntryId,
+      );
+      if (alreadyNotified) continue;
+      const complete = await this.isPresentationComplete(
+        eventId,
+        other.scheduleEntryId,
+      ).catch(() => false);
+      if (complete) continue;
+      const entry = await this.scheduleService.findEntryInEventOrThrow(
+        eventId,
+        other.scheduleEntryId,
+      );
+      const team = entry.teamId
+        ? await this.teamsRepo.findOneBy({ id: entry.teamId })
+        : null;
+      await this.notificationsService.create(
+        event.aliasId,
+        NotificationType.EVALUATION_PENDING,
+        NotificationAudience.STAFF,
+        `Avaliação de ${team?.name ?? 'Equipe'} pendente`,
+        other.scheduleEntryId,
+      );
+    }
+  }
+
   // Monta a visão combinada de UMA apresentação — todos os grupos do
   // sistema de pontuação + legalidade JUNTOS, cada critério marcado
   // com o nome do jurado responsável, mais o comentário/esboço de
@@ -1420,21 +1753,24 @@ export class ScoringService {
     const { entry, category, team, resource, allCriteria } =
       await this.loadPresentationContext(eventId, scheduleEntryId);
 
-    const [event, assignmentsState, specialRoles, allJudges, events, regulation] =
-      await Promise.all([
-        this.eventsService.findEventOrThrow(eventId),
-        this.judgingService.getAssignments(
-          eventId,
-          category.scoringTemplateId!,
-        ),
-        this.judgingService.getSpecialRoles(eventId, entry.resourceId),
-        this.judgesService.findAllForEvent(eventId),
-        this.scoreEventsRepo.find({
-          where: { scheduleEntryId: entry.id },
-          order: { clientCreatedAt: 'ASC' },
-        }),
-        this.regulationsService.getForEvent(eventId),
-      ]);
+    const [
+      event,
+      assignmentsState,
+      specialRoles,
+      allJudges,
+      events,
+      regulation,
+    ] = await Promise.all([
+      this.eventsService.findEventOrThrow(eventId),
+      this.judgingService.getAssignments(eventId, category.scoringTemplateId!),
+      this.judgingService.getSpecialRoles(eventId, entry.resourceId),
+      this.judgesService.findAllForEvent(eventId),
+      this.scoreEventsRepo.find({
+        where: { scheduleEntryId: entry.id },
+        order: { clientCreatedAt: 'ASC' },
+      }),
+      this.regulationsService.getForEvent(eventId),
+    ]);
 
     const judgeNameById = new Map(allJudges.map((j) => [j.id, j.name]));
 
@@ -1608,10 +1944,7 @@ export class ScoringService {
     userId: string,
     resourceId: string,
   ) {
-    const participation = await this.assertJudgeParticipation(
-      eventId,
-      userId,
-    );
+    const participation = await this.assertJudgeParticipation(eventId, userId);
     const isHeadJudge = await this.judgingService.isHeadJudgeForResource(
       participation.id,
       resourceId,
@@ -1665,9 +1998,10 @@ export class ScoringService {
       );
     }
 
-    const allCriteria = await this.scoringCriteriaService.findAllForTemplateUnchecked(
-      category.scoringTemplateId,
-    );
+    const allCriteria =
+      await this.scoringCriteriaService.findAllForTemplateUnchecked(
+        category.scoringTemplateId,
+      );
 
     return { entry, category, team, resource, allCriteria };
   }

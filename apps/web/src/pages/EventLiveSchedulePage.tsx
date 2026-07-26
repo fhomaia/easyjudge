@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Building2, CalendarDays, Download, FileSpreadsheet, FileText, MapPin, Search, Trophy } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  MapPin,
+  Search,
+  Trophy,
+} from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
-import { ENTRY_VISUALS, EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
+import {
+  ENTRY_VISUALS,
+  EventLiveBottomNav,
+  buildEventNavTabs,
+  scheduleItemTitleParts,
+} from "@/components/EventLiveShared";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,11 +43,14 @@ import {
   filterFullSchedule,
   type FullScheduleItem,
 } from "@/lib/eventFullSchedule";
+import { computeEventLiveSchedule } from "@/lib/eventLiveSchedule";
 import { exportScheduleToExcel, exportScheduleToPdf } from "@/lib/scheduleExport";
 import { cn } from "@/lib/utils";
 import {
   eventsApi,
+  notificationsApi,
   scheduleApi,
+  scoringApi,
   teamsApi,
   usersApi,
   type Event,
@@ -65,6 +82,8 @@ export function EventLiveSchedulePage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [days, setDays] = useState<ScheduleDay[] | null>(null);
   const [teams, setTeams] = useState<TeamWithProgram[] | null>(null);
+  const [completedEntryIds, setCompletedEntryIds] = useState<string[]>([]);
+  const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
 
   const [search, setSearch] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<ScheduleEntryType>>(new Set(TYPE_ORDER));
@@ -80,6 +99,38 @@ export function EventLiveSchedulePage() {
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
     scheduleApi.listDays(id).then(setDays).catch(() => setDays([]));
     teamsApi.listForEvent(id).then(setTeams).catch(() => setTeams([]));
+    // Só pro badge da aba "Notificações" (ver EventLiveShared) — busca
+    // avulsa, não precisa de polling nesta tela (o polling de verdade
+    // fica na própria tela de notificações/Início).
+    notificationsApi
+      .list(id)
+      .then((res) => setNotificationsUnreadCount(res.unreadCount))
+      .catch(() => setNotificationsUnreadCount(null));
+  }, [id]);
+
+  // "Acontecendo agora" — mesmo sinal real (ScoringService.
+  // getCompletedPresentationIds) e mesma regra de ordem usada na tela de
+  // Início (ver lib/eventLiveSchedule.ts), pra ficar alinhado: aqui só
+  // reaproveita pra destacar a linha/gerar o card, não recalcula nada
+  // diferente. Poll de 30s, mesmo padrão da Início.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    function refresh() {
+      if (!id) return;
+      scoringApi
+        .getCompletedPresentations(id)
+        .then((ids) => {
+          if (!cancelled) setCompletedEntryIds(ids);
+        })
+        .catch(() => {});
+    }
+    refresh();
+    const interval = setInterval(refresh, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [id]);
 
   // Mesmo redirect da EventLiveDashboardPage — esta tela só faz sentido
@@ -99,6 +150,15 @@ export function EventLiveSchedulePage() {
   }, [programId, teamId, teams]);
 
   const fullSchedule = useMemo(() => computeFullSchedule(days ?? []), [days]);
+
+  const completedEntryIdSet = useMemo(() => new Set(completedEntryIds), [completedEntryIds]);
+  const live = useMemo(
+    () => computeEventLiveSchedule(days ?? [], completedEntryIdSet),
+    [days, completedEntryIdSet],
+  );
+  const currentItem = live.next;
+  const currentEntryId = currentItem?.entry.id ?? null;
+  const currentDisplay = currentItem ? scheduleItemTitleParts(currentItem) : null;
 
   const teamProgramMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -183,6 +243,8 @@ export function EventLiveSchedulePage() {
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
     onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
 
@@ -322,6 +384,37 @@ export function EventLiveSchedulePage() {
             </div>
           </div>
 
+          {currentItem && currentDisplay && (
+            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600">
+                {(() => {
+                  const Icon = ENTRY_VISUALS[currentItem.entry.type].icon;
+                  return <Icon className="size-5" />;
+                })()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-violet-600">
+                  <span className="relative flex size-1.5">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-violet-500 opacity-75" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-violet-500" />
+                  </span>
+                  ACONTECENDO AGORA
+                </p>
+                <p className="truncate text-base font-semibold text-foreground">{currentDisplay.title}</p>
+                {currentDisplay.subtitle && (
+                  <p className="truncate text-sm text-muted-foreground">{currentDisplay.subtitle}</p>
+                )}
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-medium text-foreground">{formatMinutes(currentItem.start)}</p>
+                <p className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                  <MapPin className="size-3" />
+                  {currentItem.resourceName}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="mt-6 min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             {groupedByDay.length === 0 ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
@@ -342,10 +435,14 @@ export function EventLiveSchedulePage() {
                           const visual = ENTRY_VISUALS[item.entry.type];
                           const Icon = visual.icon;
                           const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
+                          const isCurrent = item.entry.id === currentEntryId;
                           return (
                             <div
                               key={item.entry.id}
-                              className="flex items-center gap-3 px-2 py-2.5 first:pt-1 last:pb-1"
+                              className={cn(
+                                "flex items-center gap-3 rounded-lg px-2 py-2.5 first:pt-1 last:pb-1",
+                                isCurrent && "bg-violet-500/5 ring-1 ring-violet-500/30",
+                              )}
                             >
                               <div className="w-14 shrink-0">
                                 <p className="text-sm font-medium text-foreground">
@@ -361,8 +458,13 @@ export function EventLiveSchedulePage() {
                                 <Icon className="size-3.5" />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium text-foreground">
+                                <p className="flex items-center gap-1.5 truncate text-sm font-medium text-foreground">
                                   {display.title}
+                                  {isCurrent && (
+                                    <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
+                                      AGORA
+                                    </span>
+                                  )}
                                 </p>
                                 {display.subtitle && (
                                   <p className="truncate text-xs text-muted-foreground">

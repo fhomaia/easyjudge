@@ -1,10 +1,9 @@
 import {
-  AlertTriangle,
+  Bell,
   CalendarDays,
   ClipboardList,
   Clock,
   Flame,
-  History,
   Home,
   MoreHorizontal,
   PartyPopper,
@@ -38,28 +37,13 @@ export function scheduleItemTitleParts(item: LiveScheduleItem): { title: string;
   return { title: display.title, subtitle: display.subtitle };
 }
 
-// Alertas ainda não têm módulo próprio no backend (sem check-in nem
-// tracking de "nota não lançada") — mockado a pedido do usuário até essa
-// parte existir.
-export const MOCK_ALERTS = [
-  {
-    id: "1",
-    title: "Maria Silva ainda não lançou as notas",
-    subtitle: "Building • Pyramid • Tumbling",
-  },
-  {
-    id: "2",
-    title: "Check-in pendente: 1 equipe",
-    subtitle: "Black Panthers (Senior Coed Elite)",
-  },
-];
-
 // Abas "NESTE EVENTO" — reaproveitadas pelo menu lateral de desktop
 // (AppSidebar), pelo drawer mobile (MobileNavSheet) e pelo menu inferior
-// mobile de EventLiveDashboardPage. "Início"/"Cronograma"/"Notas"/
-// "Resultados" têm tela de verdade — Alertas/Histórico continuam
-// placeholder (sem onClick, ficam desabilitadas) até ganharem sua
-// própria página.
+// mobile de EventLiveDashboardPage. Todas têm tela de verdade.
+// "Histórico" saiu daqui (2026-07-26, a pedido do usuário) — o acesso
+// ao histórico do evento agora é só pelo menu "⋯" de cada evento na
+// lista da Home (ver EventActionsMenu/EventHistoryDialog), não faz mais
+// parte da navegação do evento ao vivo.
 // "Notas" (EventLiveNotesPage) é o hub do jurado com as apresentações
 // que ele julga — o formulário de lançar nota em si ainda não existe
 // (botão "Lançar notas" fica desabilitado dentro dela).
@@ -72,19 +56,18 @@ export interface EventNavTab {
   onClick?: () => void;
 }
 
-// Chaves condensadas no botão "Mais" do menu inferior mobile (ver
-// `EventLiveBottomNav`) — Alertas e Histórico ainda são só placeholder,
-// não justificam um ícone próprio na barra principal do menu; no
-// menu lateral/drawer (que têm espaço de sobra) continuam abas
-// separadas, isso só reduz a barra inferior.
-const BOTTOM_NAV_OVERFLOW_KEYS = ["alertas", "historico"];
-
 export function buildEventNavTabs(opts: {
-  current: "inicio" | "cronograma" | "resultados" | "notas" | "alertas" | "historico";
+  current: "inicio" | "cronograma" | "resultados" | "notas" | "notificacoes";
   onNavigateHome: () => void;
   onNavigateSchedule: () => void;
   onNavigateNotes: () => void;
   onNavigateResults: () => void;
+  onNavigateNotifications: () => void;
+  // Quantas notificações não lidas — vira o badge da aba (ver
+  // NotificationsService.listForUser). Default 0 pra quem ainda não
+  // buscou (a maioria das telas faz uma busca avulsa só pro badge, ver
+  // EventLiveNotesPage/EventLiveResultsPage/EventLiveSchedulePage).
+  notificationsUnreadCount?: number;
   // Qual aba (Resultados ou Notas) cai na posição central dos 5 slots
   // do menu inferior — ver lib/eventNavPriority.ts. Default "resultados"
   // (comportamento de sempre) pra quem já chama sem passar isso.
@@ -122,13 +105,13 @@ export function buildEventNavTabs(opts: {
     middleLeft,
     middleRight,
     {
-      key: "alertas",
-      label: "Alertas",
-      icon: AlertTriangle,
-      current: opts.current === "alertas",
-      badge: MOCK_ALERTS.length,
+      key: "notificacoes",
+      label: "Notificações",
+      icon: Bell,
+      current: opts.current === "notificacoes",
+      onClick: opts.onNavigateNotifications,
+      badge: opts.notificationsUnreadCount ?? 0,
     },
-    { key: "historico", label: "Histórico", icon: History, current: opts.current === "historico" },
   ];
 }
 
@@ -137,12 +120,14 @@ export function buildEventNavTabs(opts: {
 // vivo que precise dele em mobile (hoje: EventLiveDashboardPage e
 // EventLiveSchedulePage), não só um JSX solto dentro da Dashboard.
 // Abas cuja `key` está em `overflowKeys` não viram botão próprio —
-// entram num único botão "Mais" (⋯) com um menu suspenso, pra barra
-// não crescer sem limite conforme mais seções (hoje só placeholder)
-// forem entrando.
+// entram num único botão "Mais" (⋯) com um menu suspenso. Sem uso hoje
+// (as 5 abas atuais cabem direto na barra, ver buildEventNavTabs — era
+// só "Notificações" e "Histórico" antes de Histórico sair do menu do
+// evento, 2026-07-26); o mecanismo fica pronto pra quando a barra
+// crescer de novo.
 export function EventLiveBottomNav({
   tabs,
-  overflowKeys = BOTTOM_NAV_OVERFLOW_KEYS,
+  overflowKeys = [],
   className,
 }: {
   tabs: EventNavTab[];
@@ -176,7 +161,7 @@ export function EventLiveBottomNav({
           <span className="relative">
             <Icon className="size-5" />
             {badge ? (
-              <span className="absolute -top-1 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-semibold text-white">
+              <span className="absolute -top-1 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
                 {badge}
               </span>
             ) : null}
@@ -201,7 +186,7 @@ export function EventLiveBottomNav({
             <span className="relative">
               <MoreHorizontal className="size-5" />
               {overflowBadge ? (
-                <span className="absolute -top-1 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-semibold text-white">
+                <span className="absolute -top-1 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
                   {overflowBadge}
                 </span>
               ) : null}
@@ -214,7 +199,7 @@ export function EventLiveBottomNav({
                 <Icon data-icon="inline-start" />
                 {label}
                 {badge ? (
-                  <span className="ml-auto flex size-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
+                  <span className="ml-auto flex size-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
                     {badge}
                   </span>
                 ) : null}

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { CalendarDays, MapPin, Pencil, Trash2, Users } from "lucide-react";
+import { CalendarDays, MapPin, Users } from "lucide-react";
+import { EventActionsMenu } from "@/components/EventActionsMenu";
 import { EventLifecycleAction } from "@/components/EventLifecycleAction";
 import { EventStatusIndicator } from "@/components/EventStatusArea";
 import { EventThumbnail } from "@/components/EventThumbnail";
@@ -17,6 +18,8 @@ interface EventGridItemProps {
   onPublish: (event: Event) => void;
   onEdit: (event: Event) => void;
   onDelete: (event: Event) => void;
+  onViewHistory: (event: Event) => void;
+  onTogglePublish: (event: Event) => void;
 }
 
 export function EventGridItem({
@@ -27,8 +30,11 @@ export function EventGridItem({
   onPublish,
   onEdit,
   onDelete,
+  onViewHistory,
+  onTogglePublish,
 }: EventGridItemProps) {
   const isAdmin = event.currentUserRole === "admin";
+  const isAssessor = event.currentUserRole === "assessor";
   const navigate = useNavigate();
   const isConfigurable = event.status === "created";
   const isLive = event.status === "published" || event.status === "started";
@@ -52,24 +58,17 @@ export function EventGridItem({
     >
       <div className="flex items-start justify-between gap-2">
         <EventThumbnail name={event.name} logoUrl={event.logoUrl} className="size-14 text-base" />
-        {isAdmin && (
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => onEdit(event)}
-              aria-label="Editar evento"
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Pencil className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(event)}
-              aria-label="Excluir evento"
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="size-4" />
-            </button>
+        {(isAdmin || isAssessor) && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <EventActionsMenu
+              event={event}
+              isAdmin={isAdmin}
+              isAssessor={isAssessor}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onViewHistory={onViewHistory}
+              onTogglePublish={onTogglePublish}
+            />
           </div>
         )}
       </div>

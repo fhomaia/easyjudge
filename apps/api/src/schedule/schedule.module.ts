@@ -8,6 +8,7 @@ import { Category } from '../categories/entities/category.entity';
 import { ScheduleController } from './controllers/schedule.controller';
 import { ScheduleService } from './services/schedule.service';
 import { EventsModule } from '../events/events.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { EventsModule } from '../events/events.module';
       Category,
     ]),
     EventsModule,
+    NotificationsModule,
   ],
   controllers: [ScheduleController],
   providers: [ScheduleService],

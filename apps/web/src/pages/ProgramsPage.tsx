@@ -86,6 +86,20 @@ export function ProgramsPage() {
       .catch(() => setSelectedProgram(null));
   }, [id, selectedProgramId]);
 
+  // Seleciona automaticamente o primeiro programa da lista — evita a
+  // tela "Selecione um programa pra ver os detalhes" logo ao abrir a
+  // página quando já existe pelo menos um cadastrado. Só entra em ação
+  // sem seleção nenhuma (não força troca enquanto o usuário navega
+  // entre programas), o que também cobre de graça o caso de excluir o
+  // programa selecionado (volta a `null`, ver handleDeleteProgram) —
+  // reaproveita a mesma seleção automática pra cair no próximo da lista
+  // em vez de ficar preso na tela vazia.
+  useEffect(() => {
+    if (selectedProgramId === null && programs && programs.length > 0) {
+      setSelectedProgramId(programs[0].id);
+    }
+  }, [programs, selectedProgramId]);
+
   function handleLogout() {
     logout();
     navigate("/login");

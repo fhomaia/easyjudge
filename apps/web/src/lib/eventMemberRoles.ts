@@ -8,6 +8,7 @@ export const EVENT_MEMBER_ROLE_LABELS: Record<EventMemberRole, string> = {
   judge: "Jurado",
   spectator: "Espectador",
   program: "Programa",
+  athlete: "Atleta",
 };
 
 export const EVENT_MEMBER_ROLE_DESCRIPTIONS: Record<EventMemberRole, string> = {
@@ -20,11 +21,13 @@ export const EVENT_MEMBER_ROLE_DESCRIPTIONS: Record<EventMemberRole, string> = {
   spectator: "Só enxerga o evento depois de publicado. Não edita nada.",
   program:
     "Concedido automaticamente a programas vinculados ao evento — vê só as notas das próprias equipes, quando liberadas.",
+  athlete:
+    "Concedido automaticamente a atletas vinculados a um programa do evento — vê só as notas das próprias equipes, quando o vínculo é confirmado.",
 };
 
-// "program" fica de fora — é concedido automaticamente (ver
-// ProgramsService), não é um papel que o admin atribui manualmente
-// pelo roster de acessos (EventStaffPage).
+// "program"/"athlete" ficam de fora — são concedidos automaticamente
+// (ver ProgramsService/AthletesService), não são papéis que o admin
+// atribui manualmente pelo roster de acessos (EventStaffPage).
 export const EVENT_MEMBER_ROLES_ORDER: EventMemberRole[] = [
   "admin",
   "assessor",

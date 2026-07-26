@@ -15,6 +15,7 @@ import { UsersService } from '../../users/services/users.service';
 import { ProgramsService } from '../../programs/services/programs.service';
 import { JudgesService } from '../../judges/services/judges.service';
 import { EventsService } from '../../events/services/events.service';
+import { AthletesService } from '../../athletes/services/athletes.service';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { IMPERSONATOR_EMAIL } from '../../common/constants/impersonation';
 import { MailService } from './mail.service';
@@ -38,6 +39,7 @@ export class AuthService {
     private readonly programsService: ProgramsService,
     private readonly judgesService: JudgesService,
     private readonly eventsService: EventsService,
+    private readonly athletesService: AthletesService,
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
   ) {}
@@ -177,12 +179,36 @@ export class AuthService {
         lastName: user.lastName,
         teamOrInstitutionName: user.teamOrInstitutionName,
       });
+      // Reclama pedidos de vínculo que ATLETAS já tinham feito (por
+      // email) antes deste programa ter conta — ver
+      // AthletesService.claimPendingLinksForProgram.
+      await this.athletesService.claimPendingLinksForProgram(
+        user.id,
+        user.email,
+      );
     } else {
       await this.judgesService.linkUnclaimedJudgesByEmail(user.id, {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
       });
+      if (user.role === UserRole.ATHLETE) {
+        // Reclama convites que um PROGRAMA já tinha criado (por email)
+        // pra este atleta antes dele ter conta.
+        await this.athletesService.linkUnclaimedAthleteInvitesByEmail(
+          user.id,
+          user.email,
+        );
+        // Vínculo inicial informado no cadastro (ver RegisterDto.
+        // programEmail) — opcional, fica pendente de confirmação do
+        // programa (ver AthletesService.createOrRequestLink).
+        if (user.programEmail) {
+          await this.athletesService.createOrRequestLink(
+            user.id,
+            user.programEmail,
+          );
+        }
+      }
     }
 
     return this.buildAccessToken(user.id, user.role);

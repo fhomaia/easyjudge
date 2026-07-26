@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddSheetSubmittedToScoreEvents1784998881579
-  implements MigrationInterface
-{
+export class AddSheetSubmittedToScoreEvents1784998881579 implements MigrationInterface {
   name = 'AddSheetSubmittedToScoreEvents1784998881579';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddTimerStartedScoreEventKind1785013000000
-  implements MigrationInterface
-{
+export class AddTimerStartedScoreEventKind1785013000000 implements MigrationInterface {
   name = 'AddTimerStartedScoreEventKind1785013000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

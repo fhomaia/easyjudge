@@ -7,6 +7,8 @@ import { CreateTeamDto } from '../dto/create-team.dto';
 import { UpdateTeamDto } from '../dto/update-team.dto';
 import { ProgramsService } from '../../programs/services/programs.service';
 import { EventsService } from '../../events/services/events.service';
+import { EventActivityLogService } from '../../events/services/event-activity-log.service';
+import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 
 @Injectable()
@@ -18,16 +20,28 @@ export class TeamsService {
     private readonly categoriesRepo: Repository<Category>,
     private readonly programsService: ProgramsService,
     private readonly eventsService: EventsService,
+    private readonly activityLogService: EventActivityLogService,
   ) {}
 
   async create(
     eventId: string,
     programId: string,
     dto: CreateTeamDto,
+    userId: string,
   ): Promise<Team> {
-    await this.programsService.findProgramOrThrow(eventId, programId);
+    const program = await this.programsService.findProgramOrThrow(
+      eventId,
+      programId,
+    );
     const team = this.teamsRepo.create({ programId, name: dto.name });
-    return this.teamsRepo.save(team);
+    const saved = await this.teamsRepo.save(team);
+    await this.activityLogService.record(
+      program.aliasId,
+      userId,
+      EventActivityAction.TEAM_CREATED,
+      saved.name,
+    );
+    return saved;
   }
 
   async findAllForProgram(eventId: string, programId: string): Promise<Team[]> {
@@ -62,19 +76,36 @@ export class TeamsService {
     programId: string,
     teamId: string,
     dto: UpdateTeamDto,
+    userId: string,
   ): Promise<Team> {
     const team = await this.findTeamOrThrow(eventId, programId, teamId);
     Object.assign(team, stripUndefined(dto));
-    return this.teamsRepo.save(team);
+    const saved = await this.teamsRepo.save(team);
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    await this.activityLogService.record(
+      event.aliasId,
+      userId,
+      EventActivityAction.TEAM_UPDATED,
+      saved.name,
+    );
+    return saved;
   }
 
   async remove(
     eventId: string,
     programId: string,
     teamId: string,
+    userId: string,
   ): Promise<void> {
     const team = await this.findTeamOrThrow(eventId, programId, teamId);
     await this.teamsRepo.remove(team);
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    await this.activityLogService.record(
+      event.aliasId,
+      userId,
+      EventActivityAction.TEAM_DELETED,
+      team.name,
+    );
   }
 
   async addCategory(

@@ -59,7 +59,11 @@ export class Event {
   @Column({ name: 'scores_released_at', type: 'timestamptz', nullable: true })
   scoresReleasedAt: Date | null;
 
-  @Column({ name: 'contestation_released_at', type: 'timestamptz', nullable: true })
+  @Column({
+    name: 'contestation_released_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
   contestationReleasedAt: Date | null;
 
   @Column({ name: 'results_released_at', type: 'timestamptz', nullable: true })

@@ -82,6 +82,20 @@ export function EventSetupPage() {
     scheduleApi.listDays(id).then(setScheduleDays).catch(() => setScheduleDays([]));
   }, [id]);
 
+  // Setup só faz sentido pra evento ainda não publicado (2026-07-26, a
+  // pedido do usuário) — depois de publicado/iniciado/concluído, quem
+  // quiser mexer nas configurações reverte a publicação primeiro (ver
+  // EventActionsMenu na Home), não edita direto por aqui. Mesmo padrão
+  // de redirect já usado em EventLiveDashboardPage, no sentido inverso
+  // (lá "created" volta pra cá; aqui qualquer status diferente de
+  // "created" manda pra lá).
+  useEffect(() => {
+    if (!event) return;
+    if (event.status !== "created") {
+      navigate(`/events/${event.id}/live`, { replace: true });
+    }
+  }, [event, navigate]);
+
   // Jurado de Legalidade agora é por RECURSO (2026-07-19 — mesma razão
   // da árvore de critérios: um jurado não pode estar em duas pistas ao
   // mesmo tempo) — só considera preenchido quando TODO recurso que já

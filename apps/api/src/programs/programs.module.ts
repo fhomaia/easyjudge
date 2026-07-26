@@ -8,12 +8,14 @@ import { ProgramCatalogController } from './controllers/program-catalog.controll
 import { ProgramsService } from './services/programs.service';
 import { EventsModule } from '../events/events.module';
 import { UsersModule } from '../users/users.module';
+import { AthletesModule } from '../athletes/athletes.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ProgramParticipation, ProgramProfile]),
     EventsModule,
     UsersModule,
+    AthletesModule,
   ],
   controllers: [
     ProgramsController,

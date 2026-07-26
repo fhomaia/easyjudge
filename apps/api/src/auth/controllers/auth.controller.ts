@@ -62,10 +62,7 @@ export class AuthController {
   @Post('impersonate')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  impersonate(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: ImpersonateDto,
-  ) {
+  impersonate(@Req() req: AuthenticatedRequest, @Body() dto: ImpersonateDto) {
     return this.authService.impersonate(req.user.userId, dto);
   }
 }

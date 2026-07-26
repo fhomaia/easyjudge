@@ -46,6 +46,7 @@ export function HomePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Event | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Event | null>(null);
+  const [revertTarget, setRevertTarget] = useState<Event | null>(null);
   const [startingId, setStartingId] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +137,29 @@ export function HomePage() {
     setEvents((prev) => prev?.filter((e) => e.id !== id) ?? prev);
   }
 
+  function handleViewHistory(event: Event) {
+    navigate(`/events/${event.id}/history`);
+  }
+
+  // Do menu "⋯" de cada evento — o rótulo já muda conforme o status
+  // (ver EventActionsMenu), aqui só decide qual ação de fato roda:
+  // publicar segue o mesmo caminho direto (sem confirmação) do botão
+  // "Publicar evento" que já existia; reverter usa ConfirmDialog, mesma
+  // dinâmica já usada na tela Início (ver EventLiveDesktopView).
+  function handleTogglePublish(event: Event) {
+    if (event.status === "published") {
+      setRevertTarget(event);
+    } else {
+      void handlePublish(event);
+    }
+  }
+
+  async function handleRevert() {
+    if (!revertTarget) return;
+    const updated = await eventsApi.unpublish(revertTarget.id);
+    handleEventUpdated(updated);
+  }
+
   const hasAnyEvents = (events?.length ?? 0) > 0;
   const showingFrom = filteredEvents.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const showingTo = Math.min(currentPage * PAGE_SIZE, filteredEvents.length);
@@ -211,6 +235,8 @@ export function HomePage() {
                                 onPublish={handlePublish}
                                 onEdit={setEditTarget}
                                 onDelete={setDeleteTarget}
+                                onViewHistory={handleViewHistory}
+                                onTogglePublish={handleTogglePublish}
                               />
                             ) : (
                               <EventGridItem
@@ -222,6 +248,8 @@ export function HomePage() {
                                 onPublish={handlePublish}
                                 onEdit={setEditTarget}
                                 onDelete={setDeleteTarget}
+                                onViewHistory={handleViewHistory}
+                                onTogglePublish={handleTogglePublish}
                               />
                             ),
                           )}
@@ -268,6 +296,16 @@ export function HomePage() {
         confirmLabel="Excluir"
         confirmingLabel="Excluindo..."
         onConfirm={handleDelete}
+      />
+
+      <ConfirmDialog
+        open={revertTarget !== null}
+        onOpenChange={(open) => !open && setRevertTarget(null)}
+        title="Reverter publicação?"
+        description="O evento volta para o status Criado e você pode editar as configurações novamente. Ele deixa de ficar visível para os participantes até ser publicado de novo."
+        confirmLabel="Reverter"
+        confirmingLabel="Revertendo..."
+        onConfirm={handleRevert}
       />
     </div>
   );

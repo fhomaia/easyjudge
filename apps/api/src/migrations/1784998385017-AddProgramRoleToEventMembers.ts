@@ -4,9 +4,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // do zero (rename -> create -> cast -> drop), mesmo padrão já usado em
 // migrations anteriores de troca de enum de role (ver
 // RenameGymRoleToProgram/AddGymRoleToUsers).
-export class AddProgramRoleToEventMembers1784998385017
-  implements MigrationInterface
-{
+export class AddProgramRoleToEventMembers1784998385017 implements MigrationInterface {
   name = 'AddProgramRoleToEventMembers1784998385017';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

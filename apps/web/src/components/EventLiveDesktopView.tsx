@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import {
-  AlertTriangle,
+  Bell,
   Building2,
   CalendarDays,
   ChevronRight,
   Clock,
+  Eye,
   Flame,
   Hourglass,
   MapPin,
@@ -12,6 +13,7 @@ import {
   MoreVertical,
   Play,
   Trophy,
+  UserRound,
   Users,
 } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -26,8 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   ENTRY_VISUALS,
-  MOCK_ALERTS,
   StatTile,
+  countdownLabel,
   scheduleItemTitleParts,
   type EventNavTab,
 } from "@/components/EventLiveShared";
@@ -35,8 +37,17 @@ import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatMinutes } from "@/lib/scheduleTime";
 import { computeResourceNextStatus, toIsoDate, type EventLiveSchedule } from "@/lib/eventLiveSchedule";
+import { formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
 import { cn } from "@/lib/utils";
-import type { Event, ScheduleDay, UserProfile } from "@/api/client";
+import type {
+  Event,
+  EventMemberRole,
+  Judge,
+  NotificationView,
+  Program,
+  ScheduleDay,
+  UserProfile,
+} from "@/api/client";
 
 function formatStartedAt(startedAt: string, isoToday: string): string {
   const d = new Date(startedAt);
@@ -56,7 +67,20 @@ interface EventLiveDesktopViewProps {
   nowMinutes: number;
   canStart: boolean;
   starting: boolean;
-  judgeCount: number | null;
+  // Contagens que vêm do próprio catálogo (JudgeParticipation/
+  // ProgramParticipation), não do roster de acessos (EventMember) —
+  // mais confiável (um programa/jurado pode existir sem o papel
+  // correspondente ter sido sincronizado pro roster, ver
+  // EventLiveDashboardPage) e sempre bate com o que o popup mostra.
+  judges: Judge[] | null;
+  programs: Program[] | null;
+  // Espectadores/atletas não têm catálogo próprio — só existem como
+  // papel no roster mesmo, daí ainda vir de memberCounts.
+  memberCounts: Partial<Record<EventMemberRole, number>>;
+  isAdminOrAssessor: boolean;
+  canViewJudges: boolean;
+  completedEntryIds: Set<string>;
+  notifications: NotificationView[] | null;
   // "Ir para agora" só aparece pra quem lança nota (ver
   // EventLiveDashboardPage) — `onGoToNow` nulo significa jurado sem
   // apresentação pendente (botão fica desabilitado).
@@ -65,6 +89,11 @@ interface EventLiveDesktopViewProps {
   delayLabel: string;
   delayProgress: number;
   onOpenJudges: () => void;
+  onOpenPrograms: () => void;
+  // Sem argumento: abre a tela com a lista inteira ("Ver todas"). Com um
+  // href: navega direto pro destino daquela notificação específica (ver
+  // lib/notificationDisplay.notificationHref).
+  onOpenNotifications: (href?: string) => void;
   onStart: () => void;
   onRevert: () => Promise<void>;
   onOpenFullSchedule: () => void;
@@ -81,12 +110,20 @@ export function EventLiveDesktopView({
   nowMinutes,
   canStart,
   starting,
-  judgeCount,
+  judges,
+  programs,
+  memberCounts,
+  isAdminOrAssessor,
+  canViewJudges,
+  completedEntryIds,
+  notifications,
   isJudge,
   onGoToNow,
   delayLabel,
   delayProgress,
   onOpenJudges,
+  onOpenPrograms,
+  onOpenNotifications,
   onStart,
   onRevert,
   onOpenFullSchedule,
@@ -107,8 +144,8 @@ export function EventLiveDesktopView({
     event.status === "published";
 
   const resourceStatuses = useMemo(
-    () => computeResourceNextStatus(days ?? [], live, event.status === "started", isoToday, nowMinutes),
-    [days, live, isoToday, nowMinutes, event.status],
+    () => computeResourceNextStatus(days ?? [], live, completedEntryIds),
+    [days, live, completedEntryIds],
   );
 
   const nextDisplay = live.next ? scheduleItemTitleParts(live.next) : null;
@@ -348,38 +385,53 @@ export function EventLiveDesktopView({
             )}
           </div>
 
-          {/* ALERTAS */}
-          <div className="rounded-2xl border border-border bg-red-500/5 p-4">
+          {/* NOTIFICAÇÕES */}
+          <div className="rounded-2xl border border-border bg-blue-500/5 p-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-red-600">
-                <AlertTriangle className="size-3.5" />
-                ALERTAS
+              <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-blue-600">
+                <Bell className="size-3.5" />
+                NOTIFICAÇÕES
               </span>
-              <span className="flex size-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-semibold text-white">
-                {MOCK_ALERTS.length}
-              </span>
+              {notifications && notifications.length > 0 && (
+                <span className="flex size-5 items-center justify-center rounded-full bg-blue-500 text-[11px] font-semibold text-white">
+                  {notifications.length}
+                </span>
+              )}
             </div>
-            <div className="mt-2 divide-y divide-border">
-              {MOCK_ALERTS.map((alert) => (
-                <button
-                  key={alert.id}
-                  type="button"
-                  className="flex w-full items-center gap-2 py-2 text-left first:pt-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-foreground">{alert.title}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{alert.subtitle}</p>
-                  </div>
-                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-            </div>
-            {/* Sem ação por enquanto — sem tela de alertas ainda. */}
+            {notifications === null || notifications.length === 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {notifications === null ? "Carregando..." : "Nenhuma notificação ainda."}
+              </p>
+            ) : (
+              <div className="mt-2 divide-y divide-border">
+                {notifications.slice(0, 3).map((notification) => {
+                  const href = notificationHref(event.id, notification);
+                  return (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      disabled={!href}
+                      onClick={() => href && onOpenNotifications(href)}
+                      className="flex w-full items-center gap-2 py-2 text-left first:pt-0 disabled:cursor-default"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-foreground">{notification.title}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {formatNotificationRelativeTime(notification.createdAt)}
+                        </p>
+                      </div>
+                      {href && <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <button
               type="button"
-              className="mt-1 text-xs font-medium text-red-600 hover:underline"
+              onClick={() => onOpenNotifications()}
+              className="mt-1 text-xs font-medium text-blue-600 hover:underline"
             >
-              Ver todos os alertas
+              Ver todas as notificações
             </button>
           </div>
         </div>
@@ -493,9 +545,9 @@ export function EventLiveDesktopView({
                 <StatTile
                   icon={Users}
                   iconClassName="bg-emerald-500/10 text-emerald-600"
-                  value={judgeCount === null ? "—" : String(judgeCount)}
+                  value={judges === null ? "—" : String(judges.length)}
                   label="Jurados cadastrados"
-                  onClick={onOpenJudges}
+                  onClick={canViewJudges ? onOpenJudges : undefined}
                 />
                 <StatTile
                   icon={Clock}
@@ -506,31 +558,42 @@ export function EventLiveDesktopView({
                   progress={delayProgress}
                 />
                 <StatTile
-                  icon={Trophy}
+                  icon={Building2}
                   iconClassName="bg-blue-500/10 text-blue-600"
-                  barClassName="bg-blue-500"
-                  value="0"
-                  label="Resultados publicados"
-                  progress={0}
+                  value={programs === null ? "—" : String(programs.length)}
+                  label="Programas cadastrados"
+                  onClick={isAdminOrAssessor ? onOpenPrograms : undefined}
+                />
+                <StatTile
+                  icon={Eye}
+                  iconClassName="bg-slate-500/10 text-slate-600"
+                  value={String(memberCounts.spectator ?? 0)}
+                  label="Espectadores"
+                />
+                <StatTile
+                  icon={UserRound}
+                  iconClassName="bg-pink-500/10 text-pink-600"
+                  value={String(memberCounts.athlete ?? 0)}
+                  label="Atletas"
                 />
               </div>
             </div>
 
-            {live.nextCategoryChange && (
+            {live.currentCategory && (
               <div className="rounded-2xl border border-border bg-violet-500/5 p-4">
-                <p className="text-xs font-semibold tracking-wide text-violet-600">PRÓXIMA CATEGORIA</p>
+                <p className="text-xs font-semibold tracking-wide text-violet-600">CATEGORIA ATUAL</p>
                 <div className="mt-2 flex items-center gap-2.5">
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600">
                     <Users className="size-4" />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">
-                      {live.nextCategoryChange.categoryName}
+                      {live.currentCategory.categoryName}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {live.nextCategoryChange.dayDate === isoToday
-                        ? `Em ${Math.max(0, Math.round(live.nextCategoryChange.start - nowMinutes))} min`
-                        : formatDate(live.nextCategoryChange.dayDate)}
+                      {live.currentCategory.dayDate === isoToday
+                        ? countdownLabel(live.currentCategory.start, nowMinutes)
+                        : formatDate(live.currentCategory.dayDate)}
                     </p>
                   </div>
                 </div>

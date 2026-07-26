@@ -13,11 +13,14 @@ import { UpdateProgramParticipationDto } from '../dto/update-program-participati
 import { UpdateOwnProgramDto } from '../dto/update-own-program.dto';
 import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
+import { EventActivityLogService } from '../../events/services/event-activity-log.service';
+import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { UsersService } from '../../users/services/users.service';
 import type { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { stripUndefined } from '../../common/utils/strip-undefined';
+import { AthletesService } from '../../athletes/services/athletes.service';
 
 interface ProgramUserInfo {
   email: string;
@@ -47,6 +50,8 @@ export class ProgramsService {
     private readonly profilesRepo: Repository<ProgramProfile>,
     private readonly eventsService: EventsService,
     private readonly usersService: UsersService,
+    private readonly athletesService: AthletesService,
+    private readonly activityLogService: EventActivityLogService,
   ) {}
 
   async create(
@@ -110,6 +115,24 @@ export class ProgramsService {
       { userId, email: dto.email, firstName: dto.name },
     );
 
+    // Replica o acesso pra todo atleta já vinculado a este programa
+    // (ver AthleteLink) — o programa está entrando num evento NOVO, e
+    // quem já tem vínculo com ele precisa aparecer aqui também, sem
+    // ação manual (ver AthletesService.grantEventAccessForNewProgramEvent).
+    if (userId) {
+      await this.athletesService.grantEventAccessForNewProgramEvent(
+        userId,
+        event.aliasId,
+      );
+    }
+
+    await this.activityLogService.record(
+      event.aliasId,
+      createdById,
+      EventActivityAction.PROGRAM_CREATED,
+      saved.name,
+    );
+
     return this.toProgramView(saved);
   }
 
@@ -149,6 +172,7 @@ export class ProgramsService {
     eventId: string,
     id: string,
     dto: UpdateProgramParticipationDto,
+    userId: string,
   ): Promise<ProgramParticipation> {
     const participation = await this.findProgramOrThrow(eventId, id);
     if (participation.userId) {
@@ -169,12 +193,24 @@ export class ProgramsService {
     }
     Object.assign(participation, stripUndefined(dto));
     const saved = await this.participationsRepo.save(participation);
+    await this.activityLogService.record(
+      saved.aliasId,
+      userId,
+      EventActivityAction.PROGRAM_UPDATED,
+      saved.name,
+    );
     return this.toProgramView(saved);
   }
 
-  async remove(eventId: string, id: string): Promise<void> {
+  async remove(eventId: string, id: string, userId: string): Promise<void> {
     const participation = await this.findProgramOrThrow(eventId, id);
     await this.participationsRepo.remove(participation);
+    await this.activityLogService.record(
+      participation.aliasId,
+      userId,
+      EventActivityAction.PROGRAM_DELETED,
+      participation.name,
+    );
   }
 
   async setLogo(
@@ -306,6 +342,12 @@ export class ProgramsService {
           email: user.email,
           firstName: `${user.firstName} ${user.lastName}`,
         },
+      );
+      // Mesmo raciocínio do create() — replica pros atletas já
+      // vinculados a este programa.
+      await this.athletesService.grantEventAccessForNewProgramEvent(
+        userId,
+        aliasId,
       );
     }
 

@@ -42,6 +42,16 @@ export class ScheduleDay {
   @Column({ name: 'default_warmup_minutes', type: 'int', default: 10 })
   defaultWarmupMinutes: number;
 
+  // Intervalo fixo inserido como um break (rótulo "Intervalo entre
+  // apresentações", ver ScheduleService) antes de cada apresentação
+  // que não seja a primeira da pista — 0 = sem intervalo (padrão, não
+  // muda o comportamento de eventos já existentes). Mesmo raciocínio
+  // de defaultWarmupMinutes: só vale como valor-padrão pra apresentações
+  // criadas daqui pra frente, mas mudar o número também redimensiona os
+  // intervalos já agendados (ver applyGapDurationToScheduledEntries).
+  @Column({ name: 'default_gap_minutes', type: 'int', default: 0 })
+  defaultGapMinutes: number;
+
   // Marcado pelo produtor quando este dia especificamente não precisa
   // ter todas as equipes/categorias do evento agendadas (ex: um dia
   // com menos categorias por design) — com isso, a etapa "Cronograma"

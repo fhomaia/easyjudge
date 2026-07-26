@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { TeamsService } from '../services/teams.service';
@@ -21,6 +22,7 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { EventMemberGuard } from '../../events/guards/event-member.guard';
 import { EventRoles } from '../../events/decorators/event-roles.decorator';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
+import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
 @Controller('events/:eventId/programs/:programId/teams')
 @UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
@@ -35,8 +37,9 @@ export class TeamsController {
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Body() dto: CreateTeamDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.teamsService.create(eventId, programId, dto);
+    return this.teamsService.create(eventId, programId, dto, req.user.userId);
   }
 
   @Get()
@@ -53,8 +56,15 @@ export class TeamsController {
     @Param('programId') programId: string,
     @Param('teamId') teamId: string,
     @Body() dto: UpdateTeamDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.teamsService.update(eventId, programId, teamId, dto);
+    return this.teamsService.update(
+      eventId,
+      programId,
+      teamId,
+      dto,
+      req.user.userId,
+    );
   }
 
   @Delete(':teamId')
@@ -63,8 +73,14 @@ export class TeamsController {
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('teamId') teamId: string,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.teamsService.remove(eventId, programId, teamId);
+    return this.teamsService.remove(
+      eventId,
+      programId,
+      teamId,
+      req.user.userId,
+    );
   }
 
   @Post(':teamId/categories')

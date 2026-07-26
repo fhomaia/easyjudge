@@ -14,6 +14,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
+import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
 import { MetricTile, type EventNavTab } from "@/components/EventLiveShared";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
@@ -30,6 +31,7 @@ interface EventLiveNotesDesktopViewProps {
   eventNavItems: EventNavTab[];
   assignment: JudgeAssignmentsSummary;
   isAdminOrAssessor: boolean;
+  isAthlete: boolean;
   functionLines: string[];
   myPresentations: JudgePresentationItem[];
   contestedItems: JudgePresentationItem[];
@@ -47,6 +49,7 @@ export function EventLiveNotesDesktopView({
   eventNavItems,
   assignment,
   isAdminOrAssessor,
+  isAthlete,
   functionLines,
   myPresentations,
   contestedItems,
@@ -141,6 +144,8 @@ export function EventLiveNotesDesktopView({
           {!assignment.isJudge ? (
             isAdminOrAssessor ? (
               <AdminNotesOverview eventId={event.id} />
+            ) : isAthlete ? (
+              <AthleteNotesOverview eventId={event.id} />
             ) : (
               <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
                 Você não está escalado como jurado neste evento.

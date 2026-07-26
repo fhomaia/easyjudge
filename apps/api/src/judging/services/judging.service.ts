@@ -135,7 +135,9 @@ export class JudgingService {
     const specialRoleRows = await this.specialRoleAssignmentsRepo.find({
       where: { judgeParticipationId: participation.id },
     });
-    const specialRoles = Array.from(new Set(specialRoleRows.map((r) => r.role)));
+    const specialRoles = Array.from(
+      new Set(specialRoleRows.map((r) => r.role)),
+    );
     const resourceIds = Array.from(
       new Set(specialRoleRows.map((r) => r.resourceId)),
     );

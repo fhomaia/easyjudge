@@ -27,9 +27,11 @@ function isNavItemActive(pathname: string, href: string): boolean {
 }
 
 function NavLinks({
+  profile,
   onNavigate,
   eventNavItems,
 }: {
+  profile: UserProfile | null;
   onNavigate: (href: string) => void;
   eventNavItems?: EventNavItem[];
 }) {
@@ -59,7 +61,7 @@ function NavLinks({
               <span className="relative flex">
                 <Icon className="size-4" />
                 {badge ? (
-                  <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-semibold text-white">
+                  <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
                     {badge}
                   </span>
                 ) : null}
@@ -71,7 +73,9 @@ function NavLinks({
         </>
       )}
 
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+      {NAV_ITEMS.filter(
+        (item) => !item.roles || (profile && item.roles.includes(profile.role)),
+      ).map(({ href, label, icon: Icon }) => (
         <button
           key={href}
           type="button"
@@ -216,7 +220,7 @@ export function AppSidebar({ profile, onLogout, eventNavItems }: AppSidebarProps
           <BrandMark />
         </div>
 
-        <NavLinks onNavigate={navigate} eventNavItems={eventNavItems} />
+        <NavLinks profile={profile} onNavigate={navigate} eventNavItems={eventNavItems} />
         <ProfileFooter profile={profile} onLogout={onLogout} />
       </aside>
     </>

@@ -15,6 +15,8 @@ import {
   IASF_DEFAULT_DEDUCTIONS,
 } from '../constants/iasf-deductions';
 import { EventsService } from '../../events/services/events.service';
+import { EventActivityLogService } from '../../events/services/event-activity-log.service';
+import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
 
 export interface DeductionRuleView {
   type: DeductionType;
@@ -38,6 +40,7 @@ export class RegulationsService {
     @InjectRepository(RegulationDocument)
     private readonly documentsRepo: Repository<RegulationDocument>,
     private readonly eventsService: EventsService,
+    private readonly activityLogService: EventActivityLogService,
   ) {}
 
   async getForEvent(eventId: string): Promise<RegulationView> {
@@ -52,6 +55,7 @@ export class RegulationsService {
   async updateDeductions(
     eventId: string,
     dto: UpdateRegulationDto,
+    userId: string,
   ): Promise<RegulationView> {
     const regulation = await this.getOrCreateForEvent(eventId);
 
@@ -68,6 +72,14 @@ export class RegulationsService {
     }
 
     const saved = await this.regulationsRepo.save(regulation);
+    await this.activityLogService.record(
+      saved.aliasId,
+      userId,
+      EventActivityAction.REGULATION_DEDUCTIONS_UPDATED,
+      saved.deductionMode === RegulationDeductionMode.CUSTOM
+        ? 'Personalizado'
+        : 'IASF',
+    );
     return this.toView(eventId, saved);
   }
 
@@ -75,6 +87,7 @@ export class RegulationsService {
     eventId: string,
     kind: RegulationDocumentKind,
     file: Express.Multer.File,
+    userId: string,
     name?: string,
   ): Promise<RegulationView> {
     const regulation = await this.getOrCreateForEvent(eventId);
@@ -91,12 +104,22 @@ export class RegulationsService {
       mimeType: file.mimetype,
       sizeBytes: file.size,
     });
-    await this.documentsRepo.save(document);
+    const saved = await this.documentsRepo.save(document);
+    await this.activityLogService.record(
+      regulation.aliasId,
+      userId,
+      EventActivityAction.REGULATION_DOCUMENT_UPLOADED,
+      saved.name,
+    );
 
     return this.getForEvent(eventId);
   }
 
-  async deleteDocument(eventId: string, documentId: string): Promise<void> {
+  async deleteDocument(
+    eventId: string,
+    documentId: string,
+    userId: string,
+  ): Promise<void> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const regulation = await this.regulationsRepo.findOneBy({
       aliasId: event.aliasId,
@@ -109,6 +132,12 @@ export class RegulationsService {
     }
 
     await this.documentsRepo.remove(document);
+    await this.activityLogService.record(
+      regulation.aliasId,
+      userId,
+      EventActivityAction.REGULATION_DOCUMENT_REMOVED,
+      document.name,
+    );
   }
 
   private async getOrCreateForEvent(eventId: string): Promise<Regulation> {

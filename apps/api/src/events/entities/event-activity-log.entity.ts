@@ -14,7 +14,10 @@ import { EventActivityAction } from '../enums/event-activity-action.enum';
 // qual evento) — append-only, nunca é editado/apagado por nenhum
 // método de EventsService (mesmo raciocínio de "nunca perder um
 // registro" já aplicado às notas, ver CLAUDE.md). Gravado por
-// EventActivityLogService, chamado a partir de EventsService.
+// EventActivityLogService, chamado a partir de EventsService e (desde
+// 2026-07-26) também de CategoriesService/ProgramsService/TeamsService/
+// RegulationsService/EventStaffService — cobre tanto o ciclo de vida
+// do evento em si quanto as ações nas telas de cadastro.
 @Entity('event_activity_logs')
 export class EventActivityLog {
   @PrimaryGeneratedColumn('uuid')
@@ -32,6 +35,15 @@ export class EventActivityLog {
 
   @Column({ type: 'enum', enum: EventActivityAction })
   action: EventActivityAction;
+
+  // Nome/identificação da entidade afetada (nome da categoria, do
+  // programa, da equipe, do documento, do membro do staff...) — deixa
+  // a mensagem de histórico específica sem precisar de um valor de
+  // enum por combinação ação+entidade. Nulo nas ações de ciclo de vida
+  // do próprio evento (created/updated/published/...), que já são
+  // autoexplicativas sem detalhe extra.
+  @Column({ type: 'varchar', nullable: true })
+  detail: string | null;
 
   @Index()
   @Column({ name: 'actor_id' })
