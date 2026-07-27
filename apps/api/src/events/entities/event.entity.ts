@@ -54,6 +54,12 @@ export class Event {
   @Column({ name: 'started_at', type: 'timestamptz', nullable: true })
   startedAt: Date | null;
 
+  // Preenchido por EventsService.completeEvent quando o evento vira
+  // "completed" (started -> completed, ação manual do admin/assessor,
+  // sem regra automática por data — ver CLAUDE.md "Próximos passos").
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
+  completedAt: Date | null;
+
   // Liberação de notas/contestação/resultado pra equipe/atletas — ação
   // global do evento (não mais por apresentação, ver EventsService.
   // setReleaseFlags), pensada pro produtor liberar tudo de uma vez ao

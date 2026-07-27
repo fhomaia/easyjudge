@@ -37,7 +37,7 @@ export function PublishEventCard({
     setError(null);
     setPublishing(true);
     try {
-      const updated = await eventsApi.publish(event.id);
+      const updated = await eventsApi.publish(event.aliasId);
       onPublished(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível publicar o evento.");

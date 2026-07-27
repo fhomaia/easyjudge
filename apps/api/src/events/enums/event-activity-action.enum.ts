@@ -6,6 +6,7 @@ export enum EventActivityAction {
   PUBLISHED = 'published',
   UNPUBLISHED = 'unpublished',
   STARTED = 'started',
+  COMPLETED = 'completed',
   DELETED = 'deleted',
   // Telas de cadastro do evento (2026-07-26, a pedido do usuário) —
   // escala de arbitragem (judging) e cronograma foram deliberadamente
@@ -26,4 +27,10 @@ export enum EventActivityAction {
   STAFF_MEMBER_ADDED = 'staff_member_added',
   STAFF_MEMBER_UPDATED = 'staff_member_updated',
   STAFF_MEMBER_REMOVED = 'staff_member_removed',
+  // Exceção à exclusão deliberada de cronograma acima (2026-07-27, a
+  // pedido do usuário): só registrada quando o evento NÃO está mais
+  // "created" (ScheduleService.moveEntry) — mover apresentação depois
+  // de publicado/ao vivo já tem valor de auditoria real, diferente do
+  // CRUD comum de construção do cronograma.
+  PRESENTATION_MOVED = 'presentation_moved',
 }

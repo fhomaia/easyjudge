@@ -90,7 +90,7 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
         venue: form.venue,
       });
       if (photo) {
-        event = await eventsApi.uploadLogo(event.id, photo);
+        event = await eventsApi.uploadLogo(event.aliasId, photo);
       }
       onCreated(event);
       handleOpenChange(false);

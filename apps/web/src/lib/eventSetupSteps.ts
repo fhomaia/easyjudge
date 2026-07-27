@@ -114,7 +114,7 @@ export function buildSetupSteps(
         : "Pendente: documentos obrigatórios e um template completo",
       updatedAt: regulation?.updatedAt ?? null,
       actionLabel: regulationCompleted ? "Editar regulamento" : "Iniciar cadastro",
-      href: `/events/${event.id}/regulation`,
+      href: `/events/${event.aliasId}/regulation`,
     },
     {
       key: "categories",
@@ -128,7 +128,7 @@ export function buildSetupSteps(
           : "Nenhuma categoria cadastrada",
       updatedAt: event.categoriesUpdatedAt,
       actionLabel: categoriesCount > 0 ? "Editar categorias" : "Iniciar cadastro",
-      href: `/events/${event.id}/categories`,
+      href: `/events/${event.aliasId}/categories`,
     },
     {
       key: "programs",
@@ -142,7 +142,7 @@ export function buildSetupSteps(
           : "Nenhum programa cadastrado",
       updatedAt: event.programsUpdatedAt,
       actionLabel: programsCount > 0 ? "Editar programas" : "Iniciar cadastro",
-      href: `/events/${event.id}/programs`,
+      href: `/events/${event.aliasId}/programs`,
     },
     {
       // Cronograma vem antes de Painel de jurados nesta lista (pedido
@@ -159,7 +159,7 @@ export function buildSetupSteps(
       detail: scheduleDetail(schedule, scheduleCompleted, scheduleInProgress),
       updatedAt: schedule.updatedAt,
       actionLabel: scheduleCompleted || scheduleInProgress ? "Editar cronograma" : "Iniciar cadastro",
-      href: `/events/${event.id}/schedule`,
+      href: `/events/${event.aliasId}/schedule`,
     },
     {
       key: "judgePanel",
@@ -171,7 +171,7 @@ export function buildSetupSteps(
       detail: judgePanelDetail(hasLegalityJudge, allTemplatesJudgingComplete),
       updatedAt: null,
       actionLabel: judgePanelCompleted ? "Editar escala de arbitragem" : "Iniciar cadastro",
-      href: `/events/${event.id}/judging`,
+      href: `/events/${event.aliasId}/judging`,
     },
   ];
 }

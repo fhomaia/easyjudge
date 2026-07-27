@@ -144,9 +144,9 @@ export function EventLiveNotesDesktopView({
         <main className="flex-1 overflow-y-auto p-6">
           {!assignment.isJudge ? (
             isAdminOrAssessor ? (
-              <AdminNotesOverview eventId={event.id} />
+              <AdminNotesOverview eventId={event.aliasId} />
             ) : isAthlete ? (
-              <AthleteNotesOverview eventId={event.id} />
+              <AthleteNotesOverview eventId={event.aliasId} />
             ) : (
               <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
                 Você não está escalado como jurado neste evento.
@@ -181,7 +181,7 @@ export function EventLiveNotesDesktopView({
                     </div>
                     <button
                       type="button"
-                      onClick={() => navigate(`/events/${event.id}/live/scoring/${nextItem.entry.id}`)}
+                      onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${nextItem.entry.id}`)}
                       className="flex shrink-0 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-primary transition-opacity hover:opacity-90"
                     >
                       Iniciar avaliação
@@ -210,7 +210,7 @@ export function EventLiveNotesDesktopView({
                         <button
                           key={item.entry.id}
                           type="button"
-                          onClick={() => navigate(`/events/${event.id}/live/scoring/${item.entry.id}`)}
+                          onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
                           className="flex w-full items-center gap-4 rounded-xl p-3 text-left hover:bg-red-500/10"
                         >
                           <AlertTriangle className="size-4 shrink-0 text-red-600" />
@@ -249,7 +249,7 @@ export function EventLiveNotesDesktopView({
                         key={item.entry.id}
                         type="button"
                         disabled={withdrawn}
-                        onClick={() => navigate(`/events/${event.id}/live/scoring/${item.entry.id}`)}
+                        onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
                         className={cn(
                           "flex w-full items-center gap-4 rounded-xl p-3 text-left",
                           withdrawn

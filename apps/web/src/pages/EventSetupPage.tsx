@@ -92,7 +92,7 @@ export function EventSetupPage() {
   useEffect(() => {
     if (!event) return;
     if (event.status !== "created") {
-      navigate(`/events/${event.id}/live`, { replace: true });
+      navigate(`/events/${event.aliasId}/live`, { replace: true });
     }
   }, [event, navigate]);
 

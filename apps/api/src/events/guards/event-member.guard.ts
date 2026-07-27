@@ -11,12 +11,13 @@ import { EventMemberRole } from '../enums/event-member-role.enum';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
 // Checa se o usuário logado tem, no EventMember do evento (:eventId da
-// rota), um dos papéis exigidos por @EventRoles(...) — mesmo padrão de
-// RolesGuard/@Roles, mas por papel DE EVENTO, não role global da
-// conta. Os dois guards rodam em conjunto: RolesGuard barra contas do
-// tipo errado (ex: ATHLETE não pode nem tentar), EventMemberGuard barra
-// contas do tipo certo mas sem vínculo (ou vínculo insuficiente) com
-// ESTE evento específico.
+// rota — desde 2026-07-27 é o `aliasId`, não mais o `id` de uma versão
+// específica, ver EventsService.findEventOrThrow), um dos papéis
+// exigidos por @EventRoles(...) — mesmo padrão de RolesGuard/@Roles,
+// mas por papel DE EVENTO, não role global da conta. Os dois guards
+// rodam em conjunto: RolesGuard barra contas do tipo errado (ex: ATHLETE
+// não pode nem tentar), EventMemberGuard barra contas do tipo certo mas
+// sem vínculo (ou vínculo insuficiente) com ESTE evento específico.
 @Injectable()
 export class EventMemberGuard implements CanActivate {
   constructor(

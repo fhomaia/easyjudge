@@ -67,10 +67,7 @@ export function ShareEventDialog({ event, onOpenChange }: ShareEventDialogProps)
       <DialogContent className="gap-7 p-10 sm:max-w-md">
         <div className="grid gap-1.5">
           <DialogTitle className="text-xl font-medium">Compartilhar evento</DialogTitle>
-          <DialogDescription>
-            Quem escanear o QR ou digitar o código ganha acesso de espectador
-            a "{event?.name}".
-          </DialogDescription>
+          <DialogDescription>Escaneie o QR code para acessar {event?.name}</DialogDescription>
         </div>
 
         {joinUrl && event?.eventCode ? (

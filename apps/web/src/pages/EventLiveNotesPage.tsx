@@ -148,11 +148,11 @@ export function EventLiveNotesPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "notas",
-    onNavigateHome: () => navigate(`/events/${event.id}/live`),
-    onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
-    onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
-    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
+    onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),
+    onNavigateResults: () => navigate(`/events/${event.aliasId}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.aliasId}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
@@ -191,7 +191,7 @@ export function EventLiveNotesPage() {
         <button
           type="button"
           aria-label="Notificações"
-          onClick={() => navigate(`/events/${event.id}/live/notifications`)}
+          onClick={() => navigate(`/events/${event.aliasId}/live/notifications`)}
           className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Bell className="size-5" />
@@ -216,11 +216,11 @@ export function EventLiveNotesPage() {
           {!assignment.isJudge ? (
             isAdminOrAssessor ? (
               <div className="p-4">
-                <AdminNotesOverview eventId={event.id} />
+                <AdminNotesOverview eventId={event.aliasId} />
               </div>
             ) : isAthlete ? (
               <div className="p-4">
-                <AthleteNotesOverview eventId={event.id} />
+                <AthleteNotesOverview eventId={event.aliasId} />
               </div>
             ) : (
               <div className="m-4 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -283,7 +283,7 @@ export function EventLiveNotesPage() {
                   )}
                   <button
                     type="button"
-                    onClick={() => navigate(`/events/${event.id}/live/scoring/${nextItem.entry.id}`)}
+                    onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${nextItem.entry.id}`)}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-primary transition-opacity hover:opacity-90"
                   >
                     Iniciar avaliação
@@ -311,7 +311,7 @@ export function EventLiveNotesPage() {
                         <button
                           key={item.entry.id}
                           type="button"
-                          onClick={() => navigate(`/events/${event.id}/live/scoring/${item.entry.id}`)}
+                          onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
                           className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-red-500/10"
                         >
                           <AlertTriangle className="size-4 shrink-0 text-red-600" />
@@ -350,7 +350,7 @@ export function EventLiveNotesPage() {
                           key={item.entry.id}
                           type="button"
                           disabled={withdrawn}
-                          onClick={() => navigate(`/events/${event.id}/live/scoring/${item.entry.id}`)}
+                          onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
                           className={cn(
                             "flex w-full items-center gap-3 rounded-xl p-3 text-left first:mt-0",
                             withdrawn

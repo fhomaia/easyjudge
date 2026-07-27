@@ -30,7 +30,7 @@ export function JoinEventPage() {
       .joinByCode(code)
       .then((event) => {
         if (cancelled) return;
-        navigate(`/events/${event.id}/live/results`, { replace: true });
+        navigate(`/events/${event.aliasId}/live/results`, { replace: true });
       })
       .catch((err) => {
         if (cancelled) return;

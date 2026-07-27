@@ -126,7 +126,14 @@ export class NotificationsService {
     eventId: string,
     userId: string,
   ): Promise<{ aliasId: string; member: EventMember }> {
-    const event = await this.eventsRepo.findOneBy({ id: eventId });
+    // `eventId` é o `aliasId` da rota (não mais o `id` de uma versão
+    // específica, ver EventsService.findEventOrThrow) — resolve pra
+    // versão ATIVA. Consulta própria (não usa EventsService) pra evitar
+    // ciclo de import, ver comentário no topo deste arquivo.
+    const event = await this.eventsRepo.findOneBy({
+      aliasId: eventId,
+      active: true,
+    });
     if (!event) throw new ForbiddenException('Evento não encontrado.');
     const member = await this.membersRepo.findOneBy({
       aliasId: event.aliasId,

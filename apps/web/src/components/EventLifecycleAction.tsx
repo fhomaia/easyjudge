@@ -6,17 +6,15 @@ interface EventLifecycleActionProps {
   event: Event;
   onStart: () => void;
   starting: boolean;
-  onPublish: () => void;
-  publishing: boolean;
 }
 
-export function EventLifecycleAction({
-  event,
-  onStart,
-  starting,
-  onPublish,
-  publishing,
-}: EventLifecycleActionProps) {
+// Publicar/Concluir saíram daqui (2026-07-27, a pedido do usuário) —
+// continuam acessíveis pelo menu "⋯" (ver EventActionsMenu, publicar/
+// reverter) e pela tela "Início" do evento ao vivo (concluir, ver
+// EventLiveDesktopView/EventLiveDashboardPage), só não mais como botão
+// solto na listagem. "Iniciar evento" continua aqui de propósito — é a
+// única ação de ciclo de vida que o usuário pediu pra manter na lista.
+export function EventLifecycleAction({ event, onStart, starting }: EventLifecycleActionProps) {
   const canStart =
     event.currentUserRole === "admin" && event.status === "published" && isEventDay(event);
 
@@ -30,21 +28,6 @@ export function EventLifecycleAction({
       >
         <BlinkingDot colorClassName="bg-emerald-500" />
         {starting ? "Iniciando..." : "Iniciar evento"}
-      </button>
-    );
-  }
-
-  const canPublish = event.currentUserRole === "admin" && event.status === "created";
-
-  if (canPublish) {
-    return (
-      <button
-        type="button"
-        onClick={onPublish}
-        disabled={publishing}
-        className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
-      >
-        {publishing ? "Publicando..." : "Publicar evento"}
       </button>
     );
   }

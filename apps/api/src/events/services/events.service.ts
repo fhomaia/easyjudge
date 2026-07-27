@@ -218,8 +218,11 @@ export class EventsService {
     });
   }
 
-  async findOneForUser(id: string, userId: string): Promise<EventWithRole> {
-    const event = await this.eventsRepo.findOneBy({ id });
+  async findOneForUser(
+    aliasId: string,
+    userId: string,
+  ): Promise<EventWithRole> {
+    const event = await this.eventsRepo.findOneBy({ aliasId, active: true });
     if (!event) throw new NotFoundException('Evento não encontrado');
 
     const member = await this.membersRepo.findOneBy({
@@ -250,14 +253,14 @@ export class EventsService {
   // estava publicado, editar o reverte pra "criado" automaticamente —
   // só uma nova publicação (ver publishEvent) registra uma versão nova.
   async updateEvent(
-    id: string,
+    aliasId: string,
     dto: UpdateEventDto,
     userId: string,
   ): Promise<EventWithRole> {
     // Assessor também pode editar as configurações do evento (só não
     // mexe em acessos/pessoas nem no ciclo de vida — publicar/iniciar/
     // excluir continuam admin-only, ver os outros métodos abaixo).
-    const event = await this.getOwnEventOrThrow(id, userId, [
+    const event = await this.getOwnEventOrThrow(aliasId, userId, [
       EventMemberRole.ADMIN,
       EventMemberRole.ASSESSOR,
     ]);
@@ -297,8 +300,8 @@ export class EventsService {
   // que causou um bug real ("Easy Judge Cup" aparecendo com 0
   // categorias/0 programas depois de republicar, porque o passo de
   // adoção não existia ainda naquela época).
-  async publishEvent(id: string, userId: string): Promise<EventWithRole> {
-    const event = await this.getOwnEventOrThrow(id, userId);
+  async publishEvent(aliasId: string, userId: string): Promise<EventWithRole> {
+    const event = await this.getOwnEventOrThrow(aliasId, userId);
 
     if (event.status !== EventStatus.CREATED) {
       throw new ConflictException(
@@ -343,8 +346,8 @@ export class EventsService {
 
   // Inicia o evento (published -> started) — transição de ciclo de
   // vida in-place, não versiona (diferente de publishEvent).
-  async startEvent(id: string, userId: string): Promise<EventWithRole> {
-    const event = await this.getOwnEventOrThrow(id, userId);
+  async startEvent(aliasId: string, userId: string): Promise<EventWithRole> {
+    const event = await this.getOwnEventOrThrow(aliasId, userId);
 
     if (event.status !== EventStatus.PUBLISHED) {
       throw new ConflictException('Só é possível iniciar um evento publicado.');
@@ -361,27 +364,73 @@ export class EventsService {
     return this.attachRole(saved, userId);
   }
 
-  // Reverte a publicação (published -> created), in-place — mesmo
-  // raciocínio do revert automático em updateEvent, só que como ação
-  // explícita (o admin ou assessor quer voltar a editar as
-  // configurações sem mexer em nenhum campo). Só a partir de
-  // "published": um evento já "started" não tem caminho de volta
-  // ainda (decisão consciente — reverter um evento ao vivo é bem mais
-  // delicado que desfazer uma publicação, fica pra quando isso for
-  // pedido).
-  async unpublishEvent(id: string, userId: string): Promise<EventWithRole> {
-    const event = await this.getOwnEventOrThrow(id, userId, [
+  // Conclui o evento (started -> completed), in-place — ação manual do
+  // admin/assessor (mesmo par de papéis de updateEvent/unpublishEvent;
+  // diferente de startEvent, que é admin-only), sem nenhuma regra
+  // automática por data (ver CLAUDE.md "Próximos passos" — decisão
+  // consciente de deixar 100% manual por enquanto).
+  async completeEvent(
+    aliasId: string,
+    userId: string,
+  ): Promise<EventWithRole> {
+    const event = await this.getOwnEventOrThrow(aliasId, userId, [
       EventMemberRole.ADMIN,
       EventMemberRole.ASSESSOR,
     ]);
 
-    if (event.status !== EventStatus.PUBLISHED) {
+    if (event.status !== EventStatus.STARTED) {
       throw new ConflictException(
-        'Só é possível reverter um evento com status "publicado".',
+        'Só é possível concluir um evento iniciado.',
+      );
+    }
+
+    event.status = EventStatus.COMPLETED;
+    event.completedAt = new Date();
+    const saved = await this.eventsRepo.save(event);
+    await this.activityLogService.record(
+      saved.aliasId,
+      userId,
+      EventActivityAction.COMPLETED,
+    );
+    return this.attachRole(saved, userId);
+  }
+
+  // Reverte a publicação (published/started -> created), in-place —
+  // mesmo raciocínio do revert automático em updateEvent, só que como
+  // ação explícita (o admin ou assessor quer voltar a editar as
+  // configurações sem mexer em nenhum campo). **Atualização
+  // (2026-07-27, a pedido do usuário):** passou a aceitar também
+  // "started" — o popup de edição de evento (`EditEventDialog`) trava
+  // os campos e oferece "Reverter publicação" tanto pra published
+  // quanto pra started, então o backend precisou acompanhar. Zera
+  // `startedAt` quando a origem é started (senão sobraria um "iniciado
+  // em ..." de uma sessão anterior depois de reiniciar o evento).
+  // **Risco consciente, não resolvido ainda**: reverter um evento
+  // started que já tem `ScoreEvent` lançado não é bloqueado — os
+  // dados de nota continuam no banco (event sourcing, nunca perdidos),
+  // mas a competição volta a aparecer como "criada" com notas já
+  // registradas por trás. Aceito por ser exatamente o que foi pedido;
+  // revisitar se isso confundir um admin na prática.
+  async unpublishEvent(
+    aliasId: string,
+    userId: string,
+  ): Promise<EventWithRole> {
+    const event = await this.getOwnEventOrThrow(aliasId, userId, [
+      EventMemberRole.ADMIN,
+      EventMemberRole.ASSESSOR,
+    ]);
+
+    if (
+      event.status !== EventStatus.PUBLISHED &&
+      event.status !== EventStatus.STARTED
+    ) {
+      throw new ConflictException(
+        'Só é possível reverter um evento publicado ou iniciado.',
       );
     }
 
     event.status = EventStatus.CREATED;
+    event.startedAt = null;
     const saved = await this.eventsRepo.save(event);
     await this.activityLogService.record(
       saved.aliasId,
@@ -421,8 +470,8 @@ export class EventsService {
   // ScheduleResource/ScheduleEntry/Team/CriterionJudgeAssignment saem
   // de graça via cascata das próprias FKs deles (scheduleDayId/
   // programId/judgeParticipationId), sem precisar de mais nada aqui.
-  async deleteEvent(id: string, userId: string): Promise<void> {
-    const event = await this.getOwnEventOrThrow(id, userId);
+  async deleteEvent(aliasId: string, userId: string): Promise<void> {
+    const event = await this.getOwnEventOrThrow(aliasId, userId);
 
     await this.dataSource.transaction(async (manager) => {
       for (const entity of EVENT_SCOPED_ENTITIES) {
@@ -442,8 +491,8 @@ export class EventsService {
     );
   }
 
-  async setEventLogo(id: string, file: Express.Multer.File) {
-    const event = await this.findEventOrThrow(id);
+  async setEventLogo(aliasId: string, file: Express.Multer.File) {
+    const event = await this.findEventOrThrow(aliasId);
     event.logoUrl = `/uploads/logos/${file.filename}`;
     return this.eventsRepo.save(event);
   }
@@ -454,7 +503,7 @@ export class EventsService {
   // TODAS as versões do aliasId, não só a ativa (o log sobrevive a
   // republicações/exclusão, ver EventActivityLog).
   async getActivityLog(
-    id: string,
+    aliasId: string,
     userId: string,
   ): Promise<
     Array<{
@@ -465,7 +514,7 @@ export class EventsService {
       createdAt: Date;
     }>
   > {
-    const event = await this.getOwnEventOrThrow(id, userId, [
+    const event = await this.getOwnEventOrThrow(aliasId, userId, [
       EventMemberRole.ADMIN,
       EventMemberRole.ASSESSOR,
     ]);
@@ -487,14 +536,14 @@ export class EventsService {
   // dessa cascata — resultado final é uma liberação independente das
   // outras duas (ver Event.resultsReleasedAt).
   async setReleaseFlags(
-    id: string,
+    aliasId: string,
     changes: {
       scoresReleased?: boolean;
       contestationReleased?: boolean;
       resultsReleased?: boolean;
     },
   ): Promise<Event> {
-    const event = await this.findEventOrThrow(id);
+    const event = await this.findEventOrThrow(aliasId);
     // Guardado ANTES de mutar — só dispara notificação na transição
     // false -> true (liberar de verdade), nunca ao desligar nem ao
     // "reforçar" um valor que já estava ligado.
@@ -547,19 +596,26 @@ export class EventsService {
     return saved;
   }
 
-  // Usado por CategoriesService e TeamsService para validar que o evento
-  // existe antes de criar um recurso vinculado a ele.
-  async findEventOrThrow(id: string): Promise<Event> {
-    const event = await this.eventsRepo.findOneBy({ id });
+  // Resolve o `aliasId` (identidade lógica estável do evento através das
+  // republicações — não mais o `id` de uma versão específica, ver
+  // "Endereçamento por aliasId nas rotas HTTP" no CLAUDE.md, 2026-07-27)
+  // pra versão ATIVA — usado por praticamente todo domínio filho
+  // (categories/programs/teams/judges/judging/schedule/regulations/
+  // scoring/...) pra validar que o evento existe antes de criar/ler um
+  // recurso vinculado a ele.
+  async findEventOrThrow(aliasId: string): Promise<Event> {
+    const event = await this.eventsRepo.findOneBy({ aliasId, active: true });
     if (!event) throw new NotFoundException('Evento não encontrado');
     return event;
   }
 
-  // Resolve :id (de uma versão específica) -> membership do usuário
-  // logado — usado pelo EventMemberGuard, que decide o que fazer com
-  // `member: null` (barra com 403). Não lança por conta própria (ao
-  // contrário de getOwnEventOrThrow), porque quem chama pode querer
-  // tratar "sem membership" de formas diferentes.
+  // Resolve :eventId (aliasId) -> membership do usuário logado — usado
+  // pelo EventMemberGuard, que decide o que fazer com `member: null`
+  // (barra com 403). Não lança por conta própria (ao contrário de
+  // getOwnEventOrThrow), porque quem chama pode querer tratar "sem
+  // membership" de formas diferentes. O `event` retornado é usado por
+  // alguns chamadores (ex.: ScoringService) pra ler campos da versão
+  // ativa (`status`, `resultsReleasedAt`), não só `aliasId`.
   async getMemberForEventId(
     eventId: string,
     userId: string,
@@ -690,9 +746,9 @@ export class EventsService {
   // "Atletas" do painel Início. Acesso amplo de propósito (não é uma
   // ação de gestão, só uma contagem) — quem chama decide o guard.
   async getMemberRoleCounts(
-    eventId: string,
+    aliasId: string,
   ): Promise<Partial<Record<EventMemberRole, number>>> {
-    const event = await this.findEventOrThrow(eventId);
+    const event = await this.findEventOrThrow(aliasId);
     const rows = await this.membersRepo.query<
       Array<{ role: EventMemberRole; count: number }>
     >(
@@ -752,24 +808,22 @@ export class EventsService {
     );
   }
 
-  // Usado por update/publish/start/delete: só quem tem um dos papéis
-  // permitidos (por padrão só admin — publicar/iniciar/excluir
-  // continuam restritos a admin; updateEvent passa [ADMIN, ASSESSOR]
-  // explicitamente) pode mexer no evento, e só na versão ativa — uma
-  // linha antiga (active=false) é histórico imutável, não dá pra
-  // editar/publicar em cima dela (isso colidiria com o índice único de
-  // "uma linha ativa por aliasId").
+  // Usado por update/publish/start/complete/unpublish/delete: só quem
+  // tem um dos papéis permitidos (por padrão só admin — publicar/
+  // iniciar continuam restritos a admin; updateEvent/unpublishEvent/
+  // completeEvent passam [ADMIN, ASSESSOR] explicitamente) pode mexer
+  // no evento. `aliasId` já resolve direto pra versão ativa
+  // (findEventOrThrow filtra `active: true`) — diferente de quando
+  // este método recebia o `id` de uma versão específica, não precisa
+  // mais checar `event.active` à parte aqui: uma linha antiga
+  // simplesmente não é encontrável por `aliasId` (ela existe só como
+  // histórico/auditoria, nunca como algo endereçável por esta rota).
   private async getOwnEventOrThrow(
-    id: string,
+    aliasId: string,
     userId: string,
     allowedRoles: EventMemberRole[] = [EventMemberRole.ADMIN],
   ): Promise<Event> {
-    const event = await this.findEventOrThrow(id);
-    if (!event.active) {
-      throw new ConflictException(
-        'Esta é uma versão antiga do evento — edite ou publique a versão atual.',
-      );
-    }
+    const event = await this.findEventOrThrow(aliasId);
     const member = await this.membersRepo.findOneBy({
       aliasId: event.aliasId,
       userId,

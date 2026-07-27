@@ -32,6 +32,13 @@ import { logoUploadOptions } from '../../common/config/logo-upload.config';
 // de criado, quem pode ver/editar/publicar um evento específico é
 // controlado por membership (EventMember), não pelo UserRole global —
 // ver EventsService.
+//
+// **`:id` nas rotas abaixo é o `aliasId`** (identidade lógica estável
+// do evento através das republicações), não mais o `id` de uma versão
+// específica — mudança de 2026-07-27 (ver "Endereçamento por aliasId
+// nas rotas HTTP" no CLAUDE.md). O path/nome do parâmetro não mudou, só
+// o que ele representa — `EventsService` resolve `:id` sempre pra
+// versão ATIVA daquele `aliasId` (`findEventOrThrow`/`getOwnEventOrThrow`).
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EventsController {
@@ -94,6 +101,12 @@ export class EventsController {
   @HttpCode(HttpStatus.OK)
   unpublish(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.eventsService.unpublishEvent(id, req.user.userId);
+  }
+
+  @Post(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  complete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.eventsService.completeEvent(id, req.user.userId);
   }
 
   @Get(':id/activity')

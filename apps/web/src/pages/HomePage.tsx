@@ -52,7 +52,6 @@ export function HomePage() {
   const [shareTarget, setShareTarget] = useState<Event | null>(null);
   const [joinByCodeOpen, setJoinByCodeOpen] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -118,15 +117,34 @@ export function HomePage() {
     });
   }
 
+  // Publish/start/unpublish/complete/update devolvem o Event "cru" (ver
+  // EventsService.attachRole) — sem categoriesCount/programsCount, que
+  // só existem na resposta de findAllForUser/findOneForUser (ver tipo
+  // EventWithRole). Sem esse merge seletivo, qualquer ação de ciclo de
+  // vida "zerava" a contagem já exibida na lista local (bug real pego
+  // testando o revert de dentro do EditEventDialog).
   function handleEventUpdated(event: Event) {
-    setEvents((prev) => prev?.map((e) => (e.aliasId === event.aliasId ? event : e)) ?? prev);
+    setEvents(
+      (prev) =>
+        prev?.map((e) =>
+          e.aliasId === event.aliasId
+            ? {
+                ...event,
+                categoriesCount: event.categoriesCount ?? e.categoriesCount,
+                programsCount: event.programsCount ?? e.programsCount,
+                categoriesUpdatedAt: event.categoriesUpdatedAt ?? e.categoriesUpdatedAt,
+                programsUpdatedAt: event.programsUpdatedAt ?? e.programsUpdatedAt,
+              }
+            : e,
+        ) ?? prev,
+    );
   }
 
   async function handleStart(event: Event) {
     setError(null);
-    setStartingId(event.id);
+    setStartingId(event.aliasId);
     try {
-      const updated = await eventsApi.start(event.id);
+      const updated = await eventsApi.start(event.aliasId);
       handleEventUpdated(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro inesperado. Tente novamente.");
@@ -137,26 +155,23 @@ export function HomePage() {
 
   async function handlePublish(event: Event) {
     setError(null);
-    setPublishingId(event.id);
     try {
-      const updated = await eventsApi.publish(event.id);
+      const updated = await eventsApi.publish(event.aliasId);
       handleEventUpdated(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro inesperado. Tente novamente.");
-    } finally {
-      setPublishingId(null);
     }
   }
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    const id = deleteTarget.id;
-    await eventsApi.remove(id);
-    setEvents((prev) => prev?.filter((e) => e.id !== id) ?? prev);
+    const aliasId = deleteTarget.aliasId;
+    await eventsApi.remove(aliasId);
+    setEvents((prev) => prev?.filter((e) => e.aliasId !== aliasId) ?? prev);
   }
 
   function handleViewHistory(event: Event) {
-    navigate(`/events/${event.id}/history`);
+    navigate(`/events/${event.aliasId}/history`);
   }
 
   // Do menu "⋯" de cada evento — o rótulo já muda conforme o status
@@ -174,8 +189,17 @@ export function HomePage() {
 
   async function handleRevert() {
     if (!revertTarget) return;
-    const updated = await eventsApi.unpublish(revertTarget.id);
+    const updated = await eventsApi.unpublish(revertTarget.aliasId);
     handleEventUpdated(updated);
+  }
+
+  // EditEventDialog reverte publicação por dentro de si mesmo (ver
+  // "Reverta a publicação para editar") e continua aberto depois —
+  // precisa que a mudança de status chegue de volta pro `event` que ele
+  // recebe via prop (`editTarget`), não só pra lista `events`.
+  function handleEditDialogUpdated(event: Event) {
+    handleEventUpdated(event);
+    setEditTarget(event);
   }
 
   const hasAnyEvents = (events?.length ?? 0) > 0;
@@ -251,12 +275,10 @@ export function HomePage() {
                           {paginatedEvents.map((event) =>
                             effectiveView === "list" ? (
                               <EventListItem
-                                key={event.id}
+                                key={event.aliasId}
                                 event={event}
-                                starting={startingId === event.id}
+                                starting={startingId === event.aliasId}
                                 onStart={handleStart}
-                                publishing={publishingId === event.id}
-                                onPublish={handlePublish}
                                 onEdit={setEditTarget}
                                 onDelete={setDeleteTarget}
                                 onViewHistory={handleViewHistory}
@@ -265,12 +287,10 @@ export function HomePage() {
                               />
                             ) : (
                               <EventGridItem
-                                key={event.id}
+                                key={event.aliasId}
                                 event={event}
-                                starting={startingId === event.id}
+                                starting={startingId === event.aliasId}
                                 onStart={handleStart}
-                                publishing={publishingId === event.id}
-                                onPublish={handlePublish}
                                 onEdit={setEditTarget}
                                 onDelete={setDeleteTarget}
                                 onViewHistory={handleViewHistory}
@@ -322,7 +342,7 @@ export function HomePage() {
       <EditEventDialog
         event={editTarget}
         onOpenChange={(open) => !open && setEditTarget(null)}
-        onUpdated={handleEventUpdated}
+        onUpdated={handleEditDialogUpdated}
       />
 
       <ConfirmDialog

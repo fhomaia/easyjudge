@@ -12,13 +12,14 @@ export interface EventFormValues {
 interface EventFormFieldsProps {
   form: EventFormValues;
   onChange: (key: keyof EventFormValues, value: string) => void;
+  disabled?: boolean;
 }
 
 // "Dias de competição" saiu do formulário (2026-07-16) — o número de
 // dias do evento agora é controlado na tela de Cronograma, através do
 // botão "+ Dia" (faz mais sentido lá, já que é onde os dias
 // efetivamente existem/são usados).
-export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
+export function EventFormFields({ form, onChange, disabled = false }: EventFormFieldsProps) {
   return (
     <>
       <div className="grid gap-2">
@@ -28,6 +29,7 @@ export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
           autoFocus
           value={form.name}
           onChange={(e) => onChange("name", e.target.value)}
+          disabled={disabled}
           required
         />
       </div>
@@ -38,6 +40,7 @@ export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
           id="event-start-date"
           value={form.startDate}
           onChange={(value) => onChange("startDate", value)}
+          disabled={disabled}
         />
       </div>
 
@@ -48,6 +51,7 @@ export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
           placeholder="Cidade, UF"
           value={form.location}
           onChange={(e) => onChange("location", e.target.value)}
+          disabled={disabled}
           required
         />
       </div>
@@ -59,6 +63,7 @@ export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
           placeholder="Ex. Expominas"
           value={form.venue}
           onChange={(e) => onChange("venue", e.target.value)}
+          disabled={disabled}
         />
       </div>
     </>

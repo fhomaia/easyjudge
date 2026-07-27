@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { BlinkingDot } from "@/components/BlinkingDot";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EventStatusBadge } from "@/components/EventStatusBadge";
 import { MobileNavSheet } from "@/components/MobileNavSheet";
 import { EventLiveDesktopView } from "@/components/EventLiveDesktopView";
@@ -96,6 +97,7 @@ export function EventLiveDashboardPage() {
   const [programsDialogOpen, setProgramsDialogOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -212,7 +214,7 @@ export function EventLiveDashboardPage() {
   // pós-evento, então volta pra Home por enquanto.
   useEffect(() => {
     if (!event) return;
-    if (event.status === "created") navigate(`/events/${event.id}/setup`, { replace: true });
+    if (event.status === "created") navigate(`/events/${event.aliasId}/setup`, { replace: true });
     else if (event.status === "completed") navigate("/", { replace: true });
   }, [event, navigate]);
 
@@ -224,7 +226,7 @@ export function EventLiveDashboardPage() {
     const onlyProgram =
       event.currentUserRoles.includes("program") &&
       !event.currentUserRoles.some((r) => r === "admin" || r === "assessor" || r === "judge");
-    if (onlyProgram) navigate(`/events/${event.id}/live/team`, { replace: true });
+    if (onlyProgram) navigate(`/events/${event.aliasId}/live/team`, { replace: true });
   }, [event, navigate]);
 
   // Sem WebSocket ainda (ver "Próximos passos" do projeto) — o horário
@@ -264,7 +266,7 @@ export function EventLiveDashboardPage() {
 
   function handleGoToNow() {
     if (!event || !nextJudgePresentationId) return;
-    navigate(`/events/${event.id}/live/scoring/${nextJudgePresentationId}`);
+    navigate(`/events/${event.aliasId}/live/scoring/${nextJudgePresentationId}`);
   }
 
   // "Atraso atual" (card RESUMO DO EVENTO) — compara o horário AGENDADO
@@ -314,7 +316,7 @@ export function EventLiveDashboardPage() {
     if (!event) return;
     setStarting(true);
     try {
-      const updated = await eventsApi.start(event.id);
+      const updated = await eventsApi.start(event.aliasId);
       setEvent(updated);
     } catch (err) {
       // Sem sistema de toast no projeto ainda — silencioso é melhor que
@@ -333,7 +335,15 @@ export function EventLiveDashboardPage() {
   // manualmente aqui.
   async function handleRevert() {
     if (!event) return;
-    const updated = await eventsApi.unpublish(event.id);
+    const updated = await eventsApi.unpublish(event.aliasId);
+    setEvent(updated);
+  }
+
+  // Sem try/catch, mesmo raciocínio de handleRevert acima — o
+  // ConfirmDialog trata o erro inline e mantém o popup aberto.
+  async function handleComplete() {
+    if (!event) return;
+    const updated = await eventsApi.complete(event.aliasId);
     setEvent(updated);
   }
 
@@ -351,6 +361,7 @@ export function EventLiveDashboardPage() {
   // disponível enquanto ele não tiver sido iniciado.
   const canStart = event.currentUserRoles.includes("admin") && event.status === "published";
   const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
+  const canComplete = isAdminOrAssessor && event.status === "started";
   // "Jurados cadastrados" — quem lança nota também pode ver quem mais
   // tá julgando o evento (ver JudgesController.findAll, ampliado pra
   // jurado); "Programas cadastrados" continua só admin/assessor (é
@@ -359,11 +370,11 @@ export function EventLiveDashboardPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "inicio",
-    onNavigateHome: () => navigate(`/events/${event.id}/live`),
-    onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
-    onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
-    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
+    onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),
+    onNavigateResults: () => navigate(`/events/${event.aliasId}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.aliasId}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
@@ -398,7 +409,7 @@ export function EventLiveDashboardPage() {
         <button
           type="button"
           aria-label="Notificações"
-          onClick={() => navigate(`/events/${event.id}/live/notifications`)}
+          onClick={() => navigate(`/events/${event.aliasId}/live/notifications`)}
           className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Bell className="size-5" />
@@ -422,36 +433,51 @@ export function EventLiveDashboardPage() {
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-xl">
           <div className="flex items-center justify-between gap-3 px-4 pt-4">
-            {event.status === "started" ? (
-              <span className="flex items-center gap-2 text-sm font-semibold text-emerald-600">
-                <BlinkingDot colorClassName="bg-emerald-500" />
-                Evento em andamento
-              </span>
-            ) : canStart ? (
-              <button
-                type="button"
-                onClick={handleStart}
-                disabled={starting}
-                className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-600 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
-              >
-                <BlinkingDot colorClassName="bg-emerald-500" />
-                {starting ? "Iniciando..." : "Iniciar evento"}
-              </button>
-            ) : (
-              <EventStatusBadge status={event.status} />
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {event.status === "started" ? (
+                <span className="flex items-center gap-2 text-sm font-semibold text-emerald-600">
+                  <BlinkingDot colorClassName="bg-emerald-500" />
+                  Evento em andamento
+                </span>
+              ) : canStart ? (
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  disabled={starting}
+                  className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-600 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+                >
+                  <BlinkingDot colorClassName="bg-emerald-500" />
+                  {starting ? "Iniciando..." : "Iniciar evento"}
+                </button>
+              ) : (
+                <EventStatusBadge status={event.status} />
+              )}
+            </div>
 
-            {assignment.isJudge && (
-              <button
-                type="button"
-                onClick={handleGoToNow}
-                disabled={!nextJudgePresentationId}
-                className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
-              >
-                <Clock className="size-4" />
-                Ir para agora
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {canComplete && (
+                <button
+                  type="button"
+                  onClick={() => setCompleteDialogOpen(true)}
+                  className="flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1.5 text-sm font-medium text-violet-600 transition-colors hover:bg-violet-500/20"
+                >
+                  <BlinkingDot colorClassName="bg-violet-500" />
+                  Concluir evento
+                </button>
+              )}
+
+              {assignment.isJudge && (
+                <button
+                  type="button"
+                  onClick={handleGoToNow}
+                  disabled={!nextJudgePresentationId}
+                  className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <Clock className="size-4" />
+                  Ir para agora
+                </button>
+              )}
+            </div>
           </div>
 
           {live.next ? (
@@ -566,7 +592,7 @@ export function EventLiveDashboardPage() {
               </span>
               <button
                 type="button"
-                onClick={() => navigate(`/events/${event.id}/live/notifications`)}
+                onClick={() => navigate(`/events/${event.aliasId}/live/notifications`)}
                 className="rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground/70 transition-colors hover:bg-muted"
               >
                 Ver todas
@@ -580,7 +606,7 @@ export function EventLiveDashboardPage() {
               <div className="mt-1 divide-y divide-border">
                 {notifications.slice(0, 4).map((notification) => {
                   const Icon = NOTIFICATION_ICONS[notification.type];
-                  const href = notificationHref(event.id, notification);
+                  const href = notificationHref(event.aliasId, notification);
                   return (
                     <button
                       key={notification.id}
@@ -667,6 +693,8 @@ export function EventLiveDashboardPage() {
       nowMinutes={nowMinutes}
       canStart={canStart}
       starting={starting}
+      canComplete={canComplete}
+      onOpenComplete={() => setCompleteDialogOpen(true)}
       judges={judges}
       programs={programs}
       memberCounts={memberCounts}
@@ -680,13 +708,23 @@ export function EventLiveDashboardPage() {
       delayProgress={delayProgress}
       onOpenJudges={() => setJudgesDialogOpen(true)}
       onOpenPrograms={() => setProgramsDialogOpen(true)}
-      onOpenNotifications={(href) => navigate(href ?? `/events/${event.id}/live/notifications`)}
+      onOpenNotifications={(href) => navigate(href ?? `/events/${event.aliasId}/live/notifications`)}
       onStart={handleStart}
       onRevert={handleRevert}
-      onOpenFullSchedule={() => navigate(`/events/${event.id}/live/schedule`)}
+      onOpenFullSchedule={() => navigate(`/events/${event.aliasId}/live/schedule`)}
       eventNavItems={eventNavTabs}
       profile={profile}
       onLogout={handleLogout}
+    />
+
+    <ConfirmDialog
+      open={completeDialogOpen}
+      onOpenChange={setCompleteDialogOpen}
+      title="Concluir evento?"
+      description="Esta ação encerra o evento em definitivo. Deseja prosseguir?"
+      confirmLabel="Concluir"
+      confirmingLabel="Concluindo..."
+      onConfirm={handleComplete}
     />
 
     <JudgesSummaryDialog open={judgesDialogOpen} onOpenChange={setJudgesDialogOpen} judges={judges} />

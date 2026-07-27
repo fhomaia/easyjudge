@@ -91,11 +91,11 @@ export function EventLiveTeamNotesPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "notas",
-    onNavigateHome: () => navigate(`/events/${event.id}/live`),
-    onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
-    onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
-    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
+    onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),
+    onNavigateResults: () => navigate(`/events/${event.aliasId}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.aliasId}/live/notifications`),
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
 

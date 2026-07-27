@@ -82,7 +82,7 @@ export function buildEventNavTabs(opts: {
   };
   const notasTab: EventNavTab = {
     key: "notas",
-    label: "Notas",
+    label: "Súmulas",
     icon: ClipboardList,
     current: opts.current === "notas",
     onClick: opts.onNavigateNotes,

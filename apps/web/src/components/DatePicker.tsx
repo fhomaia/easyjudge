@@ -11,9 +11,16 @@ interface DatePickerProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  disabled?: boolean;
 }
 
-export function DatePicker({ id, value, onChange, placeholder = "Selecione uma data" }: DatePickerProps) {
+export function DatePicker({
+  id,
+  value,
+  onChange,
+  placeholder = "Selecione uma data",
+  disabled = false,
+}: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : undefined;
 
@@ -22,8 +29,9 @@ export function DatePicker({ id, value, onChange, placeholder = "Selecione uma d
       <PopoverTrigger
         id={id}
         type="button"
+        disabled={disabled}
         className={cn(
-          "flex h-12 w-full items-center gap-2.5 rounded-lg border border-transparent bg-muted px-5 text-base text-foreground transition-colors outline-none hover:bg-muted/70 data-[popup-open]:border-primary data-[popup-open]:bg-primary/[0.06]",
+          "flex h-12 w-full items-center gap-2.5 rounded-lg border border-transparent bg-muted px-5 text-base text-foreground transition-colors outline-none hover:bg-muted/70 data-[popup-open]:border-primary data-[popup-open]:bg-primary/[0.06] disabled:pointer-events-none disabled:opacity-50",
           !selected && "text-muted-foreground",
         )}
       >

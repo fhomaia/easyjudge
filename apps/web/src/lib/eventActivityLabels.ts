@@ -6,6 +6,7 @@ export const EVENT_ACTIVITY_ACTION_LABELS: Record<EventActivityAction, string> =
   published: "Evento publicado",
   unpublished: "Publicação revertida",
   started: "Evento iniciado",
+  completed: "Evento concluído",
   deleted: "Evento excluído",
   category_created: "Categoria criada",
   category_updated: "Categoria editada",
@@ -22,4 +23,5 @@ export const EVENT_ACTIVITY_ACTION_LABELS: Record<EventActivityAction, string> =
   staff_member_added: "Pessoa adicionada aos acessos",
   staff_member_updated: "Papéis de acesso alterados",
   staff_member_removed: "Pessoa removida dos acessos",
+  presentation_moved: "Apresentação remanejada no cronograma",
 };

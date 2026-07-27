@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeft,
   CalendarCheck,
   ClipboardList,
   Flag,
@@ -24,6 +25,7 @@ export const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   evaluation_pending: Hourglass,
   contestation_requested: Gavel,
   presentation_cancelled: XCircle,
+  presentation_moved: ArrowRightLeft,
 };
 
 export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/formatRelativeTime";
@@ -49,6 +51,9 @@ export function notificationHref(eventId: string, notification: NotificationView
     // Apresentação cancelada não pode mais ser pontuada — leva pro
     // cronograma (onde a desistência fica marcada), não pra súmula.
     case "presentation_cancelled":
+    // Mesmo raciocínio pra "movida" — é sobre reposicionamento no
+    // cronograma, não sobre pontuação.
+    case "presentation_moved":
       return `/events/${eventId}/live/schedule`;
     default:
       return null;

@@ -14,8 +14,6 @@ interface EventGridItemProps {
   event: Event;
   starting: boolean;
   onStart: (event: Event) => void;
-  publishing: boolean;
-  onPublish: (event: Event) => void;
   onEdit: (event: Event) => void;
   onDelete: (event: Event) => void;
   onViewHistory: (event: Event) => void;
@@ -27,8 +25,6 @@ export function EventGridItem({
   event,
   starting,
   onStart,
-  publishing,
-  onPublish,
   onEdit,
   onDelete,
   onViewHistory,
@@ -48,9 +44,9 @@ export function EventGridItem({
       whileHover={{ y: -2 }}
       onClick={
         isConfigurable
-          ? () => navigate(`/events/${event.id}/setup`)
+          ? () => navigate(`/events/${event.aliasId}/setup`)
           : isLive
-            ? () => navigate(`/events/${event.id}/live`)
+            ? () => navigate(`/events/${event.aliasId}/live`)
             : undefined
       }
       className={cn(
@@ -99,13 +95,7 @@ export function EventGridItem({
         onClick={(e) => e.stopPropagation()}
       >
         <EventStatusIndicator event={event} />
-        <EventLifecycleAction
-          event={event}
-          starting={starting}
-          onStart={() => onStart(event)}
-          publishing={publishing}
-          onPublish={() => onPublish(event)}
-        />
+        <EventLifecycleAction event={event} starting={starting} onStart={() => onStart(event)} />
       </div>
     </motion.div>
   );

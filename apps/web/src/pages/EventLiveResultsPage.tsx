@@ -179,11 +179,11 @@ export function EventLiveResultsPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "resultados",
-    onNavigateHome: () => navigate(`/events/${event.id}/live`),
-    onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
-    onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
-    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
+    onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),
+    onNavigateResults: () => navigate(`/events/${event.aliasId}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.aliasId}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });

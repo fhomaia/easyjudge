@@ -22,6 +22,9 @@ import { Team } from '../../teams/entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
 import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
+import { EventActivityLogService } from '../../events/services/event-activity-log.service';
+import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
+import { EventStatus } from '../../events/enums/event-status.enum';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 import { addDaysToDateString } from '../../common/utils/add-days-to-date-string';
 import { NotificationsService } from '../../notifications/services/notifications.service';
@@ -78,6 +81,7 @@ export class ScheduleService {
     private readonly categoriesRepo: Repository<Category>,
     private readonly eventsService: EventsService,
     private readonly notificationsService: NotificationsService,
+    private readonly activityLogService: EventActivityLogService,
   ) {}
 
   async getDays(eventId: string): Promise<ScheduleDayView[]> {
@@ -470,12 +474,17 @@ export class ScheduleService {
       );
       // Inserir esta apresentação no meio de um recurso já ocupado
       // empurra o que vem depois dela (noutra apresentação/aquecimento
-      // já agendado) pra mais tarde — sem reconciliar, o intervalo do
-      // par empurrado (aquecimento ou "Aguardando aquecimento") fica
-      // com o valor antigo, criando o mesmo tipo de conflito do bug de
-      // mover apresentação.
+      // já agendado) pra mais tarde — as três reconciliações
+      // (aquecimento, ordem entre categorias da mesma equipe, pista)
+      // são interdependentes, rodam em conjunto até estabilizar (mesmo
+      // raciocínio/mesmo bug de reconciliação incompleta corrigido em
+      // movePresentationWithWarmup).
+      for (let pass = 0; pass < 3; pass++) {
+        await this.reconcileWarmupDelays(dayId);
+        await this.reconcileTeamWarmupOrder(dayId, dto.teamId!);
+        await this.reconcileMatGaps(dayId);
+      }
       await this.reconcileWarmupDelays(dayId);
-      await this.reconcileMatGaps(dayId);
       return this.attachNames(entries);
     }
 
@@ -500,6 +509,7 @@ export class ScheduleService {
     dayId: string,
     entryId: string,
     dto: MoveScheduleEntryDto,
+    userId: string,
   ): Promise<ScheduleEntryView> {
     const day = await this.findDayOrThrow(eventId, dayId);
     const entry = await this.findEntryInDayOrThrow(dayId, entryId);
@@ -514,7 +524,12 @@ export class ScheduleService {
     // apresentação atrás) — o usuário pode reposicionar o aquecimento
     // de forma independente sem afetar quando a equipe se apresenta.
     if (entry.type === ScheduleEntryType.PRESENTATION) {
-      return this.movePresentationWithWarmup(day, entry, dto);
+      const teamName = entry.teamId
+        ? (await this.teamsRepo.findOneBy({ id: entry.teamId }))?.name
+        : null;
+      const view = await this.movePresentationWithWarmup(day, entry, dto);
+      await this.notifyPresentationMoved(eventId, teamName, userId);
+      return view;
     }
 
     await this.findResourceOrThrow(dayId, dto.resourceId);
@@ -542,6 +557,34 @@ export class ScheduleService {
     return view;
   }
 
+  // Notifica (audiência ALL, pedido do usuário: "quem vê? todos") e
+  // registra no histórico do evento quando uma apresentação é movida —
+  // 2026-07-27. Só a partir de "published" em diante: mover apresentação
+  // enquanto o evento ainda está "created" é só ajuste de construção do
+  // cronograma (sem plateia/participantes acompanhando ainda), sem valor
+  // de notificar ninguém — mesma exceção documentada em
+  // EventActivityAction.PRESENTATION_MOVED.
+  private async notifyPresentationMoved(
+    eventId: string,
+    teamName: string | null | undefined,
+    userId: string,
+  ): Promise<void> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    if (event.status === EventStatus.CREATED) return;
+    await this.notificationsService.create(
+      event.aliasId,
+      NotificationType.PRESENTATION_MOVED,
+      NotificationAudience.ALL,
+      `${teamName ?? 'Equipe'} teve a apresentação remanejada no cronograma`,
+    );
+    await this.activityLogService.record(
+      event.aliasId,
+      userId,
+      EventActivityAction.PRESENTATION_MOVED,
+      teamName ?? undefined,
+    );
+  }
+
   // Remove a apresentação (e o grupo inteiro vinculado a ela — mesma
   // resolução do removeEntry) e a recria na posição pedida via
   // createPresentationWithWarmup, que já sabe calcular aquecimento e
@@ -562,6 +605,18 @@ export class ScheduleService {
         'Este recurso não aceita apresentações — habilite "Aceita apresentações" em Gerenciar recursos.',
       );
     }
+    // Checagem adiantada, ANTES de remover a apresentação original —
+    // pego em 2026-07-27 testando a feature de mover apresentação na
+    // tela ao vivo: sem isso, mover pra um recurso sem aquecimento
+    // vinculado removia a apresentação (e o aquecimento antigo) e só
+    // DEPOIS falhava dentro de createPresentationWithWarmup (mesma
+    // checagem, mas tarde demais) — sem transação cobrindo o método
+    // inteiro, a remoção não era desfeita, apagando a apresentação de
+    // verdade sem recriar em lugar nenhum. Repetir aqui a mesma
+    // validação de getAvailableWarmupResourceForMat evita esse caminho
+    // destrutivo continuar acessível (builder de setup, drag-and-drop,
+    // usa o mesmo endpoint e sofria do mesmo risco).
+    await this.getAvailableWarmupResourceForMat(day, targetResource);
 
     const linkedEntries = await this.entriesRepo.find({
       where: { linkedEntryId: presentation.id },
@@ -606,6 +661,24 @@ export class ScheduleService {
       },
     );
 
+    // Corrige a ordem dos aquecimentos da MESMA equipe entre si, o
+    // atraso de disponibilidade (lado do aquecimento) e o "Aguardando
+    // aquecimento" (lado da pista) — as três reconciliações são
+    // interdependentes (mudar uma pode tornar a outra desatualizada),
+    // por isso rodam em conjunto, repetidas até estabilizar. **Bug real
+    // pego em 2026-07-27, testando a feature de mover apresentação**:
+    // rodando cada uma só uma vez, numa ordem fixa terminando em
+    // reconcileMatGaps, sobrava uma "Aguardando disponibilidade da
+    // equipe" desnecessária no início do dia — a folga que
+    // reconcileMatGaps cria do lado da pista (última a rodar) podia
+    // tornar aquele atraso obsoleto sem nunca ser limpo, porque
+    // reconcileWarmupDelays não rodava de novo depois. A passada final
+    // isolada cobre esse caso.
+    for (let pass = 0; pass < 3; pass++) {
+      await this.reconcileWarmupDelays(day.id);
+      await this.reconcileTeamWarmupOrder(day.id, teamId);
+      await this.reconcileMatGaps(day.id);
+    }
     await this.reconcileWarmupDelays(day.id);
 
     const [view] = await this.attachNames([newPresentation]);
@@ -1275,6 +1348,37 @@ export class ScheduleService {
           where: { resourceId: resource.id },
           order: { order: 'ASC' },
         });
+
+        // Espelho da limpeza de reconcileMatGaps — remove "Aguardando
+        // disponibilidade da equipe" que ficaram perdidos (não estão
+        // mais IMEDIATAMENTE antes do próprio aquecimento vinculado à
+        // mesma apresentação), pelo mesmo motivo: inserir um aquecimento
+        // "na frente" de outro (`insertAt`/troca de ordem) pode empurrar
+        // um intervalo que já pertencia certinho a ele.
+        let removedOrphan = false;
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
+          if (
+            e.type !== ScheduleEntryType.BREAK ||
+            e.label !== 'Aguardando disponibilidade da equipe' ||
+            !e.linkedEntryId
+          ) {
+            continue;
+          }
+          const next = entries[i + 1];
+          const isCorrectlyPlaced =
+            !!next &&
+            next.type === ScheduleEntryType.WARMUP &&
+            next.linkedEntryId === e.linkedEntryId;
+          if (!isCorrectlyPlaced) {
+            await this.entriesRepo.remove(e);
+            await this.renumberResource(resource.id);
+            removedOrphan = true;
+            break;
+          }
+        }
+        if (removedOrphan) continue;
+
         let elapsed = 0;
         let changed = false;
         for (let i = 0; i < entries.length; i++) {
@@ -1399,6 +1503,38 @@ export class ScheduleService {
           where: { resourceId: resource.id },
           order: { order: 'ASC' },
         });
+
+        // Limpa intervalos "Aguardando aquecimento" perdidos — não
+        // estão mais IMEDIATAMENTE antes da própria apresentação
+        // vinculada. Acontece quando outra apresentação é inserida
+        // "na frente" (`insertAt` menor) empurrando um intervalo que já
+        // pertencia certinho a uma apresentação mais adiante, sem que
+        // nada reconheça que aquele intervalo "andou" de lugar (2026-07-27,
+        // achado testando várias movimentações seguidas na mesma dupla
+        // equipe+pista — ver CLAUDE.md). Sem essa limpeza, o loop
+        // abaixo (que só olha o item IMEDIATAMENTE anterior de cada
+        // apresentação) nunca reconhece o intervalo órfão como "seu" e
+        // cria um novo do zero, deixando o antigo pra trás pra sempre.
+        let removedOrphan = false;
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
+          if (
+            e.type !== ScheduleEntryType.BREAK ||
+            e.label !== 'Aguardando aquecimento' ||
+            !e.linkedEntryId
+          ) {
+            continue;
+          }
+          const next = entries[i + 1];
+          if (!next || next.id !== e.linkedEntryId) {
+            await this.entriesRepo.remove(e);
+            await this.renumberResource(resource.id);
+            removedOrphan = true;
+            break;
+          }
+        }
+        if (removedOrphan) continue;
+
         let elapsed = 0;
         let changed = false;
         for (let i = 0; i < entries.length; i++) {
@@ -1462,6 +1598,93 @@ export class ScheduleService {
         }
         if (!changed) break;
       }
+    }
+  }
+
+  // Garante que, pra uma mesma equipe, a ordem dos aquecimentos (na fila
+  // do recurso de aquecimento) bate com a ordem cronológica das
+  // apresentações correspondentes — nunca dois aquecimentos da mesma
+  // equipe seguidos com as duas apresentações só depois (2026-07-27, a
+  // pedido do usuário: precisa ser intercalado,
+  // aquecimento->apresentação->aquecimento->apresentação). Criar ou
+  // mover uma apresentação pode deixar o aquecimento de OUTRA
+  // apresentação (não criada/movida agora) da mesma equipe fora de
+  // ordem, porque createPresentationWithWarmup sempre insere o
+  // aquecimento novo no FIM da fila, sem considerar se isso deixa dois
+  // aquecimentos da mesma equipe adjacentes. Corrige TROCANDO A ORDEM
+  // (não o conteúdo) dos dois aquecimentos invertidos — cada aquecimento
+  // continua vinculado (linkedEntryId) à própria apresentação, só a
+  // posição na fila muda — repetindo até não sobrar par invertido.
+  // Só considera pares no MESMO recurso de aquecimento (equipe com
+  // categorias em pistas/aquecimentos pareados diferentes não tem esse
+  // conflito, já que são filas independentes).
+  private async reconcileTeamWarmupOrder(
+    dayId: string,
+    teamId: string,
+  ): Promise<void> {
+    const day = await this.daysRepo.findOneBy({ id: dayId });
+    if (!day) return;
+
+    let safety = 0;
+    while (safety++ < 20) {
+      const resources = await this.resourcesRepo.find({
+        where: { scheduleDayId: dayId },
+      });
+      const resourceIds = resources.map((r) => r.id);
+      const allEntries = resourceIds.length
+        ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
+        : [];
+      const timesByResource = new Map<
+        string,
+        Map<string, { start: number; end: number }>
+      >();
+      for (const resource of resources) {
+        timesByResource.set(
+          resource.id,
+          await this.getResourceEntryTimes(resource.id, day.startMinutes),
+        );
+      }
+
+      const teamWarmups = allEntries.filter(
+        (e) =>
+          e.type === ScheduleEntryType.WARMUP &&
+          e.teamId === teamId &&
+          e.linkedEntryId,
+      );
+
+      let swapped = false;
+      for (const a of teamWarmups) {
+        for (const b of teamWarmups) {
+          if (a.id === b.id || a.resourceId !== b.resourceId) continue;
+          if (a.order >= b.order) continue; // só olha cada par uma vez
+          const presentationA = allEntries.find(
+            (e) => e.id === a.linkedEntryId,
+          );
+          const presentationB = allEntries.find(
+            (e) => e.id === b.linkedEntryId,
+          );
+          if (!presentationA || !presentationB) continue;
+          const timeA = timesByResource
+            .get(presentationA.resourceId)
+            ?.get(presentationA.id);
+          const timeB = timesByResource
+            .get(presentationB.resourceId)
+            ?.get(presentationB.id);
+          if (!timeA || !timeB) continue;
+          // a aquece antes de b na fila, mas a apresenta DEPOIS de b —
+          // par invertido, troca a ordem dos dois aquecimentos.
+          if (timeA.start > timeB.start) {
+            const aOrder = a.order;
+            const bOrder = b.order;
+            await this.entriesRepo.update(a.id, { order: bOrder });
+            await this.entriesRepo.update(b.id, { order: aOrder });
+            swapped = true;
+            break;
+          }
+        }
+        if (swapped) break;
+      }
+      if (!swapped) break;
     }
   }
 

@@ -1540,47 +1540,492 @@ número, caractere especial) + confirmar senha → conta criada e já loga
   reduzido), mas ficaria incorreto no dia que alguma tela passasse a
   confiar nesse campo pra distinguir os dois papéis.
 
+- **Transição `started` -> `completed` ("Concluir evento",
+  2026-07-27).** Fecha a lacuna que só tinha `created` ⇄ `published` →
+  `started` — `EventStatus.COMPLETED` já existia no enum desde a
+  migration de status original, mas sem nenhuma rota que
+  transicionasse pra ele (ver item 2 antigo de "Próximos passos").
+  Decisão de regra (pedida ao usuário): 100% manual, sem nenhum
+  gatilho automático por data/fim de `competitionDays` — mesma
+  filosofia de `startEvent`, só que **admin e assessor** podem
+  concluir (`EventsService.completeEvent`, allowedRoles
+  `[ADMIN, ASSESSOR]`), diferente de `startEvent`/`publishEvent`, que
+  continuam admin-only. Pedido explícito do usuário: assessor também
+  gerencia o ciclo de vida operacional do evento ao vivo, não só
+  configurações antes de publicar.
+  - **Backend**: `Event.completedAt` (nullable, nunca reescrito, mesmo
+    padrão de `startedAt`) + `EventActivityAction.COMPLETED` +
+    `POST /events/:id/complete` (in-place, não versiona — igual
+    `startEvent`). Bloqueia (`409`) fora de `status=started`.
+  - **Gotcha real, pego no teste manual via curl**: `EventActivityAction`
+    (enum TypeScript) ganhar um valor novo **não é suficiente** — o
+    Postgres tem seu próprio tipo `enum` pra essa coluna
+    (`event_activity_logs_action_enum`, criado por
+    `CreateEventActivityLogs`/ampliado por `ExpandEventActivityLog`) e
+    precisa de uma migration própria (`ALTER TYPE ... ADD VALUE`) pra
+    aceitar `'completed'`. Sem ela, `activityLogService.record(...)`
+    deu `500` (`22P02 invalid input value for enum`) **depois** que o
+    `UPDATE` do `Event.status` já tinha sido salvo com sucesso (as duas
+    escritas não estão numa transação compartilhada, mesmo padrão já
+    aceito em `startEvent`/`publishEvent`/`unpublishEvent`) — ou seja,
+    o evento silenciosamente virava "completed" de verdade mesmo com a
+    resposta HTTP sendo um erro 500. Corrigido com uma migration
+    dedicada (`AddCompletedToEventActivityLogAction`, `ADD VALUE`
+    direto, sem precisar do rename→create→cast→drop completo já que é
+    só uma adição). **Vale lembrar deste padrão** ("todo valor novo de
+    `EventActivityAction` precisa de uma migration Postgres própria,
+    não só do enum TS") na próxima vez que uma ação de ciclo de vida
+    ganhar um valor novo.
+  - **Frontend**: botão "Concluir evento" (roxo/`violet-500`,
+    `BlinkingDot` — mesmo componente do "Iniciar evento" emerald e do
+    "Ao vivo" vermelho, só a cor muda) nos 3 lugares onde "Iniciar
+    evento" já aparecia — `EventLifecycleAction` (Home, lista e grade),
+    `EventLiveDashboardPage` (mobile) e `EventLiveDesktopView`
+    (desktop) — sempre ao lado do indicador de status existente, nunca
+    no lugar dele (pedido explícito do usuário: "além da tag ao vivo").
+    **Diferente de Iniciar/Publicar** (que chamam a API direto no
+    clique): o clique só abre um `ConfirmDialog` (mesmo componente
+    genérico já usado pra excluir/reverter publicação) — a chamada de
+    verdade (`eventsApi.complete`) só acontece na confirmação, pedido
+    explícito do usuário ("deve abrir popup de confirmação"). Na Home,
+    estado (`completeTarget`) e diálogo vivem em `HomePage`; no painel
+    ao vivo, como o botão existe tanto na visão mobile quanto desktop
+    (que são dois blocos JSX/componentes distintos renderizados juntos
+    por `EventLiveDashboardPage`), o estado do diálogo
+    (`completeDialogOpen`) também vive só no componente pai, com um
+    único `ConfirmDialog` compartilhado pelas duas visões (evita
+    duplicar o popup por view).
+
+## Endereçamento por `aliasId` nas rotas HTTP (2026-07-27)
+
+Fecha de vez o item que ficava pendente desde 2026-07-19 (o refactor
+interno das entidades filhas do evento — ver "Atualização (2026-07-19)"
+no topo do arquivo — já endereçava `categories`/`program_participations`/
+`schedule_days`/etc. por `aliasId`, mas as ROTAS HTTP ainda esperavam o
+`id` de uma versão específica). Pesquisa feita antes de tocar em código
+confirmou que nenhuma feature real dependia de endereçar uma versão
+antiga e inativa pelo `id` dela — o próprio backend já tratava isso como
+erro (`getOwnEventOrThrow` rejeitava `active=false` com `409`), e a tela
+de "Histórico" (`EventActivityLog`) já é só uma lista de ações via
+`aliasId`, nunca precisou resolver o conteúdo de uma linha `Event`
+específica antiga.
+
+- **O que mudou de verdade**: só a RESOLUÇÃO do parâmetro de rota, em
+  toda parte que antes fazia `eventsRepo.findOneBy({ id })`. Os PATHS
+  em si não mudaram (continuam `/events/:id`, `/events/:eventId/...`) —
+  só o que o valor desse parâmetro precisa SER, que passou de "o `id`
+  de uma versão específica" para "o `aliasId` (estável através das
+  republicações)". `EventsService.findEventOrThrow`/`getOwnEventOrThrow`
+  (usados por praticamente todo domínio filho — categories, programs,
+  teams, judges, judging, schedule, regulations, scoring, event-staff,
+  member-counts) agora fazem `findOneBy({ aliasId, active: true })` em
+  vez de `findOneBy({ id })`; `EventsService.findOneForUser` (`GET
+  /events/:id`) idem. `getOwnEventOrThrow` perdeu o `if (!event.active)
+  throw ConflictException(...)` — virou código morto, já que uma versão
+  antiga simplesmente não é mais encontrável por `aliasId` (antes disso
+  dava pra "achar" o `id` de uma versão antiga e essa checagem barrava a
+  ação com `409`; agora o mesmo caso dá `404`, não existe mais como
+  estado intermediário).
+- **`NotificationsService.resolveMemberOrThrow`** tinha uma query
+  duplicada própria (`eventsRepo.findOneBy({ id: eventId })`, não passa
+  por `EventsService` de propósito — evita import cíclico, ver
+  comentário no arquivo) — precisou do mesmo ajuste manualmente.
+- **`ProgramsService.findAllForUser`/`JudgesService.findAllForUser`**
+  (`GET /programs/me`/`GET /judges/me`, catálogo do próprio usuário
+  PROGRAM/JUDGE através de todos os eventos onde participa): faziam um
+  join manual (`event.aliasId = p.aliasId AND event.active = true`) e
+  devolviam `event.id` como `eventId` pro frontend, com um comentário
+  explícito dizendo que isso "precisava continuar sendo um id de versão
+  navegável" — exatamente o ponto que este refactor deveria revisitar.
+  Trocado pra devolver `p.aliasId` diretamente (o join com `Event`
+  continua existindo, só que agora exclusivamente pra trazer
+  `eventName`/`startDate` de exibição, não mais o identificador).
+- **Frontend**: nenhuma rota do `App.tsx` mudou (`/events/:id/setup`,
+  `/events/:id/live/...` etc. continuam com o mesmo path) — só o VALOR
+  guardado nesse `:id` mudou, então as ~15 páginas que só repassam
+  `useParams().id` pra `xApi.list(id)` **não precisaram de nenhuma
+  edição** (o `id` da URL já vira aliasId automaticamente assim que a
+  navegação que leva até ali passa a usar `event.aliasId`). O trabalho
+  de verdade foi trocar todo `event.id` por `event.aliasId` nos pontos
+  que constroem a PRIMEIRA navegação pra dentro do evento ou
+  chamam um endpoint de mutação do próprio evento
+  (`eventsApi.update/publish/start/unpublish/complete/remove/
+  uploadLogo`) — `HomePage.tsx`, `EventGridItem.tsx`/`EventListItem.tsx`,
+  `EditEventDialog.tsx`/`CreateEventDialog.tsx`/`PublishEventCard.tsx`,
+  `EventSetupPage.tsx`, `lib/eventSetupSteps.ts`, e as 8 páginas/
+  componentes do painel "evento ao vivo" (`EventLiveDashboardPage`,
+  `EventLiveDesktopView`, `EventLiveSchedulePage`, `EventLiveNotesPage`/
+  `EventLiveNotesDesktopView`, `EventLiveResultsPage`,
+  `EventLiveNotificationsPage`, `EventLiveTeamNotesPage`,
+  `JoinEventPage`) — cerca de 60 ocorrências ao todo. `HomePage.tsx`
+  já usava `aliasId` em dois lugares antes disso (`handleEventUpdated`/
+  `handleEventJoined`, pra não duplicar item na lista local depois de
+  um republish) — essa era a evidência de que o design já sabia do
+  problema; agora `startingId`/`publishingId` (tracking de qual card
+  está em loading) e as `key` de lista também passaram a usar
+  `aliasId`, mais estável que `id` através de um republish.
+- **Testado via curl** (evento criado → publicado → despublicado →
+  republicado de novo, gerando 3 `id`s de linha diferentes sob o mesmo
+  `aliasId`): `GET /events/:aliasId` sempre devolve a versão ATIVA mais
+  recente, não importa quantas vezes o evento foi republicado; `GET`/
+  `POST .../start` usando o `id` de uma versão antiga (agora inativa)
+  dá `404` (antes do refactor, `GET` funcionava pra sempre nessa versão
+  velha, e ações de escrita davam `409` "versão antiga" em vez de
+  `404`); endpoints filhos (`member-counts`, `staff`, `notifications`,
+  `schedule/days`, `programs`) resolvem certo usando o `aliasId` como
+  `:eventId`.
+- **Ponta solta consciente**: existe um processo Node rodando
+  `dist/src/main` (build antigo, anterior a este refactor) numa porta
+  local — não foi tocado durante o teste (identidade/origem incerta,
+  não criado nesta sessão); os testes acima rodaram numa porta separada
+  pra não interferir nele. Vale conferir/reiniciar esse processo antes
+  de testar a feature manualmente pelo navegador, senão o comportamento
+  observado será o antigo (pré-refactor).
+
+## Ajustes no ciclo de vida do evento (2026-07-27, mesmo dia da feature "Concluir evento")
+
+Rodada de refinamentos pedidos depois de ver a primeira versão de
+"Concluir evento" (ver seção acima) funcionando.
+
+- **Botões "Publicar evento"/"Concluir evento" saíram da listagem da
+  Home** (`EventLifecycleAction.tsx` simplificado — só "Iniciar evento"
+  continua ali, único que o usuário pediu pra manter). Publicar segue
+  acessível pelo menu "⋯" (`EventActionsMenu`, inalterado); concluir
+  segue acessível só pela tela "Início" do evento ao vivo (ver item
+  abaixo) — não existe mais nenhum caminho pra concluir a partir da
+  Home. `HomePage.tsx` perdeu `completeTarget`/`handleComplete`/o
+  `ConfirmDialog` de conclusão (viraram código morto) e `publishingId`
+  inteiro (não tinha mais nenhum lugar que lesse esse estado depois que
+  o botão saiu da listagem).
+- **"Concluir evento" na tela "Início" agora fica no lado OPOSTO da
+  tag "Evento em andamento"/horário de início** (pedido explícito do
+  usuário) — em vez de `gap-2` colado à tag, o container virou
+  `justify-between` (desktop, `EventLiveDesktopView.tsx`) ou dois
+  `<div>`s separados dentro do mesmo `justify-between` (mobile,
+  `EventLiveDashboardPage.tsx`, onde "Concluir evento" agora agrupa com
+  "Ir para agora" no lado direito, já que os dois brigavam pelo mesmo
+  espaço).
+- **Copy trocado**: popup de confirmação de "Concluir evento" —
+  `"Esta ação encerra o evento em definitivo. Deseja prosseguir?"`
+  (era `"O evento sai de \"Ao vivo\"..."`); `ShareEventDialog` —
+  `"Escaneie o QR code para acessar {nome do evento}"` (era
+  `"Quem escanear o QR ou digitar o código ganha acesso de
+  espectador..."`).
+- **`EditEventDialog` trava campos + oferece "Reverter publicação" pra
+  evento `published` OU `started`** (antes: campos sempre editáveis,
+  inclusive pra `published` — salvar silenciosamente revertia o status
+  pra `created` por trás, sem avisar; `started` já dava 409 genérico do
+  backend, sem UI própria). Agora: `isLocked = status === "published" ||
+  status === "started"` desabilita todos os campos
+  (`EventFormFields`/`DatePicker` ganharam prop `disabled`) e mostra um
+  banner âmbar "Reverta a publicação do evento para editar"; o botão
+  vira "Reverter publicação", que abre o MESMO `ConfirmDialog` (mesmo
+  copy) já usado na Home/tela Início. **Depois de reverter com
+  sucesso, o popup de edição continua aberto** (só o `ConfirmDialog`
+  interno fecha) — os campos voltam a ficar editáveis e o botão volta a
+  "Salvar alterações" sozinho, porque `onUpdated` (agora
+  `HomePage.handleEditDialogUpdated`) atualiza tanto a lista `events`
+  quanto o próprio `editTarget` que o dialog recebe via prop, disparando
+  o `useEffect` que resincroniza o form.
+  - **Decisão do usuário, veio de uma pergunta de esclarecimento**:
+    `EventsService.unpublishEvent` passou a aceitar `started -> created`
+    também (antes só `published -> created` — reverter um evento "ao
+    vivo" era descrito como "decisão consciente, fica pra quando isso
+    for pedido"; agora foi pedido). Zera `event.startedAt` nessa
+    transição (senão sobraria um "iniciado em ..." de uma sessão
+    anterior). **Risco aceito e não resolvido**: reverter um `started`
+    que já tem `ScoreEvent` lançado não é bloqueado — os dados de nota
+    continuam no banco (event sourcing), mas a competição volta a
+    aparecer como "criada" com notas já registradas por trás disso.
+    Revisitar se confundir um admin na prática.
+- **Bug real pego durante o teste manual (não introduzido nesta
+  rodada, mas exposto por ela)**: `publishEvent`/`startEvent`/
+  `unpublishEvent`/`completeEvent`/`updateEvent` devolvem o `Event` via
+  `EventsService.attachRole`, que **não inclui**
+  `categoriesCount`/`programsCount` (só existem na resposta de
+  `findAllForUser`/`findOneForUser`, ver tipo `EventWithRole`). Antes,
+  qualquer ação de ciclo de vida disparada da Home (`handleStart`,
+  `handlePublish`, reverter via "⋯") substituía o item da lista local
+  inteiro por essa resposta "mais magra", zerando a contagem exibida
+  até o próximo refresh da página. Ficou muito mais visível com o
+  revert de dentro do `EditEventDialog` (mesma tela, sem navegar,
+  então o "zerado" ficava óbvio). Corrigido em
+  `HomePage.handleEventUpdated`: em vez de substituir o item inteiro,
+  faz merge preservando `categoriesCount`/`programsCount`/
+  `categoriesUpdatedAt`/`programsUpdatedAt` do item antigo quando a
+  resposta não os traz (`event.categoriesCount ?? e.categoriesCount`).
+- **Incidente real durante o teste desta feature**: ao verificar
+  visualmente o fluxo "Reverter publicação" pelo navegador (sessão já
+  logada como o usuário real), o clique de teste **reverteu de
+  verdade** o evento real "Easy Judge Cup" de `started` pra `created`
+  — perdendo o `startedAt` original (zerado por
+  `unpublishEvent`, sem como recuperar). O usuário optou por deixar
+  como está e ajustar manualmente depois, em vez de eu tentar
+  "restaurar" (republicar geraria uma versão nova com `startedAt`
+  novo, não o original). Lição registrada em memória — testes visuais
+  de ações que mutam estado devem usar um evento descartável, não a
+  conta real logada no Chrome.
+
+## Mover apresentação durante o evento ao vivo (2026-07-27)
+
+Feature nova na tela "Cronograma completo" (`EventLiveSchedulePage.tsx`,
+`/events/:id/live/schedule`): admin/assessor podem mudar a pista e/ou
+a posição de uma apresentação já agendada **enquanto o evento está
+rolando**, sem precisar voltar pro construtor de cronograma do Setup.
+
+- **Decisão de design consultada com o usuário antes de implementar**:
+  popup (escolher pista + posição), não drag-and-drop — tela é
+  mobile-first e arrastar é impreciso num evento já em andamento, sob
+  pressão. Mesma interação em mobile e desktop (não dois padrões
+  diferentes). Escopo explicitamente **admin/assessor apenas** (pedido
+  do usuário) — programa continua só com "Sinalizar desistência".
+- **Reaproveita o endpoint de mover que já existia** pro construtor de
+  cronograma do Setup (`PATCH .../schedule/days/:dayId/entries/:entryId/move`,
+  usado pelo drag-and-drop de `SchedulePage.tsx`) — guards já eram
+  admin/assessor-only, não precisou de nenhuma mudança de permissão.
+- **Só move apresentações dentro do MESMO dia** (o endpoint não suporta
+  trocar de dia) e só a partir do menu "⋯" de uma linha `presentation`
+  não desistida — mesmo padrão de menu já usado pra "Sinalizar
+  desistência" (`WithdrawPresentationDialog`), agora com um item
+  "Mover apresentação" adicional quando `canMove` (admin/assessor).
+- **`MovePresentationDialog.tsx`** (novo componente): pista (`Select`,
+  só recursos com `supportsPresentations`) + posição (`Select` com
+  opções "No início da pista" / "Antes de {equipe}" pra cada
+  apresentação já na pista de destino / "No fim da pista"). O `order`
+  numérico mandado pro backend é calculado como **índice dentro do
+  array de siblings da pista de destino, DEPOIS de excluir a própria
+  apresentação e qualquer entry ligada a ela por `linkedEntryId`
+  (ex.: o intervalo "Aguardando aquecimento" quando vive na mesma
+  pista)** — reproduz exatamente o que
+  `ScheduleService.movePresentationWithWarmup`/
+  `createPresentationWithWarmup` fazem de verdade no banco (código
+  lido e a matemática validada via curl com um cenário de 2 equipes/2
+  apresentações antes de confiar nisso — mover a apresentação A com
+  `order=1` colocou A imediatamente antes de B, exatamente como a
+  opção "Antes de Equipe B" previa). **Sem preview de conflito** — o
+  backend nunca rejeita por sobreposição de horário (sempre absorve
+  deslocando aquecimento/intervalos automaticamente), só bloqueia
+  presentation → recurso sem `supportsPresentations` ou sem área de
+  aquecimento vinculada; um aviso informativo no popup já cobre a
+  expectativa ("O aquecimento e os intervalos automáticos são
+  reorganizados sozinhos, se precisar").
+  - **Default de posição pensado pra evitar mover sem querer**: se a
+    pista escolhida é a mesma de origem, a posição pré-selecionada é a
+    que representa "não mudar nada" (a próxima apresentação que já vem
+    depois dela hoje) — confirmar sem tocar em nada não move a
+    apresentação pro fim da pista à toa.
+  - Depois de mover, a página recarrega `scheduleApi.listDays` inteiro
+    (`refreshDays`, já existia pro fluxo de desistência) — a resposta
+    do próprio `moveEntry` só devolve a entry movida, insuficiente pra
+    refletir tudo que mudou (aquecimento recalculado, intervalos
+    automáticos inseridos/removidos em outros recursos).
+
+- **Bug real de perda de dados encontrado e corrigido durante o teste
+  manual desta feature** (`ScheduleService.movePresentationWithWarmup`,
+  já existia antes — usado também pelo drag-and-drop do Setup, não é
+  bug introduzido por esta feature, só exposto por ela): mover uma
+  apresentação pra uma pista **sem área de aquecimento vinculada**
+  fazia o método remover a apresentação (e seu aquecimento antigo)
+  **antes** de tentar recriar no destino — e como
+  `createPresentationWithWarmup` só valida a existência de aquecimento
+  vinculado (`getAvailableWarmupResourceForMat`) DEPOIS dessa remoção,
+  sem nenhuma transação cobrindo o método inteiro, a falha (`409`)
+  acontecia tarde demais: a apresentação já tinha sido apagada e nunca
+  era recriada em lugar nenhum — **perda de dado real durante um
+  evento ao vivo seria catastrófico aqui**. Corrigido repetindo a
+  mesma checagem de `getAvailableWarmupResourceForMat` bem no início de
+  `movePresentationWithWarmup`, ANTES de qualquer remoção — vira `409`
+  cedo, sem tocar em nada. Confirmado via curl: a mesma operação que
+  antes apagava a apresentação agora falha e o estado da pista de
+  origem fica bit-a-bit idêntico antes/depois. **Ponta solta
+  consciente**: o método continua sem transação de verdade cobrindo
+  remoção+recriação — a checagem adiantada cobre o caso concreto
+  encontrado (aquecimento ausente), mas qualquer OUTRA exceção que
+  `createPresentationWithWarmup` viesse a lançar no futuro (nova
+  validação adicionada ali sem repetir aqui) teria o mesmo risco. Uma
+  transação de verdade exigiria passar um `EntityManager` por toda a
+  cadeia de métodos privados usados (`insertIntoResource`,
+  `renumberResource`, `reconcileWarmupDelays`,
+  `getAvailableWarmupResourceForMat`, etc.) — refactor maior, fora de
+  escopo desta correção pontual.
+
+- **Teste visual completo no navegador (2026-07-27), evento
+  "Easy Judge Cup" — confirmado pelo usuário que este evento específico
+  não é dado real, pode ser mexido livremente.** Cenário: uma equipe
+  (Hurrycane) com duas apresentações (Nível 1 e Nível 2) na mesma pista,
+  cada uma com aquecimento próprio na "Aquecimento 1" vinculada. Mover
+  Nível 2 pra antes de Nível 1 (e depois o inverso, pra confirmar
+  simetria) confirmou visualmente:
+  - **Intervalo desnecessário é removido**: o "Aguardando disponibilidade
+    da equipe" (atraso de aquecimento) que existia por causa da ordem
+    antiga sumiu quando deixou de ser necessário.
+  - **Aquecimento da apresentação MOVIDA é recalculado** pra continuar
+    terminando a tempo da nova posição.
+  - **Achado real inicial (corrigido logo em seguida, ver abaixo):** o
+    aquecimento da apresentação **não movida** não acompanhava a
+    mudança de posição da outra — ficava exatamente onde estava antes.
+    Isso deixava dois aquecimentos da MESMA equipe seguidos na fila
+    (ex.: aquece Nível 2, aquece Nível 1, só depois apresenta as duas)
+    em vez de intercalado. Causa raiz: `createPresentationWithWarmup`
+    sempre insere o aquecimento novo no FIM da fila de aquecimento
+    atual, sem checar se isso deixa dois aquecimentos da mesma equipe
+    adjacentes — `getTeamBusyWindows` só evita SOBREPOSIÇÃO de horário,
+    não império uma ordem "aquecimento->apresentação->aquecimento->
+    apresentação" entre categorias diferentes da mesma equipe.
+  - **Corrigido a pedido do usuário**: nova função
+    `ScheduleService.reconcileTeamWarmupOrder(dayId, teamId)` — depois
+    de criar/mover uma apresentação, verifica se algum par de
+    aquecimentos da MESMA equipe (no mesmo recurso de aquecimento) está
+    "invertido" (aquecimento A antes de aquecimento B na fila, mas
+    apresentação A depois da apresentação B no horário) e corrige
+    **trocando a ORDEM dos dois aquecimentos** (não o conteúdo — cada
+    aquecimento continua vinculado à própria apresentação via
+    `linkedEntryId`), repetindo até não sobrar par invertido. Chamada
+    em `movePresentationWithWarmup` **e** em `createEntry` (o mesmo
+    problema podia ocorrer numa criação normal, não só num move, se a
+    equipe já tivesse outra categoria agendada).
+  - **Segundo bug real, pego testando a PRÓPRIA correção acima**: o
+    usuário notou que sobrava um "Aguardando disponibilidade da equipe"
+    de 10min bem no início do dia, antes até do primeiro aquecimento —
+    sem nenhum motivo (nada precede o primeiro aquecimento do dia pra
+    equipe "esperar"). Causa: `reconcileWarmupDelays`/
+    `reconcileTeamWarmupOrder`/`reconcileMatGaps` são **interdependentes**
+    (mudar uma pode tornar outra desatualizada) — rodá-las uma vez cada,
+    numa ordem fixa terminando em `reconcileMatGaps`, deixava uma espera
+    calculada por uma passada ANTERIOR de `reconcileWarmupDelays` sem
+    nunca ser re-verificada depois que `reconcileMatGaps` (que roda por
+    último) mudava a folga do lado da pista — a espera ficava obsoleta
+    mas nunca era removida, porque não havia mais nenhuma chamada de
+    `reconcileWarmupDelays` depois dela. Corrigido rodando as três em
+    conjunto, dentro de um laço (3 repetições) seguido de uma
+    `reconcileWarmupDelays` final — tanto em `movePresentationWithWarmup`
+    quanto em `createEntry`. **Reconfirmado visualmente** repetindo o
+    mesmo teste: `aquecimento1 (08:00-08:10) → apresentação1
+    (08:10-08:11) → [1min legítimo, equipe ainda apresentando Nível 1] →
+    aquecimento2 (08:11-08:21) → apresentação2 (08:21-...)` — sem
+    nenhuma folga sobrando no início, só o mínimo necessário entre as
+    duas categorias. Isso também resolve, na
+    prática, a maior parte do "achado inicial" acima (aquecimento
+    terminando cedo demais) — já que a intercalação correta naturalmente
+    aproxima cada aquecimento do início da própria apresentação; o
+    limite teórico ("nunca existe uma regra de máximo, só de mínimo")
+    continua existindo pra casos que não envolvam duas categorias da
+    mesma equipe, mas deixou de se manifestar neste cenário concreto.
+  - **Terceiro bug real, mais profundo — pego repetindo o teste várias
+    vezes seguidas na mesma dupla equipe+pista.** O usuário perguntou
+    "será que foi um problema da criação do cronograma?" — não: a
+    criação inicial (testada logo no começo) sempre saiu limpa. O
+    problema é gerado pelo **mover**, especificamente por inserir uma
+    apresentação "na frente" de outra que já tinha seu próprio intervalo
+    "Aguardando aquecimento"/"Aguardando disponibilidade da equipe" —
+    `insertIntoResource(resource.id, insertAt=0, ...)` empurra TUDO que
+    já estava na pista pra depois, inclusive um intervalo que já
+    pertencia certinho a uma apresentação mais adiante, sem que nada
+    reconheça essa mudança de posição. `reconcileMatGaps`/
+    `reconcileWarmupDelays` só verificam o item **imediatamente
+    anterior** de cada apresentação/aquecimento — se o intervalo certo
+    não está mais lá (porque outra coisa foi inserida entre ele e a
+    apresentação dele), o código nunca o reconhece como "seu" e cria um
+    novo do zero, deixando o antigo "órfão" espalhado pelo cronograma
+    pra sempre (confirmado via SQL direto: dois intervalos "Aguardando
+    aquecimento" com `linked_entry_id` apontando pra apresentação 2,
+    mas fisicamente posicionados ANTES da apresentação 1). Minha
+    primeira tentativa de correção (fundir intervalos CONSECUTIVOS do
+    mesmo tipo) não resolvia isso, porque os intervalos órfãos nem
+    ficavam consecutivos ao intervalo certo — ficavam espalhados perto
+    de uma apresentação diferente da deles. **Correção definitiva**:
+    trocar a checagem de "funde vizinhos" por uma limpeza mais geral,
+    rodada no início de cada passada de `reconcileMatGaps`/
+    `reconcileWarmupDelays` — para cada intervalo "Aguardando
+    aquecimento"/"Aguardando disponibilidade da equipe", verifica se o
+    item que vem logo DEPOIS dele é de fato a apresentação/aquecimento
+    ao qual está vinculado (`linkedEntryId`); se não for, o intervalo
+    está "perdido" e é removido (o resto da reconciliação recria um
+    novo, corretamente posicionado, se ainda for necessário). Testado
+    via SQL direto no banco em dois sentidos (mover Nível 1 antes de
+    Nível 2, depois o inverso de novo) — resultado final sempre com
+    exatamente um intervalo por apresentação, vinculado e posicionado
+    corretamente, sem sobra nem duplicata, estável em movimentações
+    repetidas.
+  - **Bug visual real pego e corrigido**: o `Select` de "Posição" no
+    popup, com um rótulo longo tipo "Antes de Hurrycane · Group Stunt
+    All Star COED Nível 1", estourava a largura do `DialogContent`
+    inteiro (o `SelectTrigger` do shadcn usa `w-fit` +
+    `whitespace-nowrap` por padrão — sem uma largura própria pra
+    truncar contra, o `line-clamp-1` do componente base não tem efeito
+    nenhum). Mesmo problema, mesma correção já usada em outro lugar do
+    projeto (`EventLiveSchedulePage.tsx`, filtros de Programa/Equipe):
+    `className="w-full min-w-0"` no `SelectTrigger` + `className="truncate"`
+    no `SelectValue`, forçando o trigger a respeitar a largura do
+    container em vez de crescer com o conteúdo.
+
+## Notificação e log ao mover apresentação (2026-07-27)
+
+Complemento da feature "Mover apresentação" (ver seções acima): ao mover
+uma apresentação com sucesso, dispara notificação (audiência `ALL` —
+"quem vê? todos", pedido explícito do usuário) e registra no histórico
+do evento — **só quando o evento não está mais `created`** (fase de
+construção do cronograma, no Setup, não notifica ninguém; a partir de
+`published`/`started`/`completed`, sim).
+
+- **`NotificationType.PRESENTATION_MOVED`** (`'presentation_moved'`) e
+  **`EventActivityAction.PRESENTATION_MOVED`** (mesmo valor de string,
+  namespaces/enums diferentes) — cada um com sua própria migration
+  `ALTER TYPE ... ADD VALUE` no Postgres (mesmo gotcha já documentado
+  antes neste arquivo: enum TS novo não é suficiente sozinho).
+  `EventActivityAction.PRESENTATION_MOVED` é uma exceção explícita à
+  decisão de 2026-07-26 de deixar cronograma de fora do log de
+  atividade — só essa ação específica, e só fora de `created`, tem
+  valor de auditoria real o suficiente pra justificar a exceção.
+- **`ScheduleService.moveEntry`** ganhou parâmetro `userId` (novo, o
+  controller agora usa `@Req() req: AuthenticatedRequest` — antes não
+  precisava). Só o caminho de `presentation` notifica/loga (o "move
+  simples" de aquecimento/intervalo/abertura/premiação não gera nada
+  disso — mover uma apresentação é o evento que importa pra plateia).
+  Helper privado `notifyPresentationMoved(eventId, teamName, userId)`
+  busca o `Event` de novo (`eventsService.findEventOrThrow`, mesmo
+  padrão redundante já aceito em `setWithdrawn`) só pra ler `.status`/
+  `.aliasId` — sai cedo (`return`) se `status === CREATED`.
+- **Título da notificação**: `"${teamName} teve a apresentação
+  remanejada no cronograma"`. Sem `scheduleEntryId` (a apresentação
+  movida ganha um `id` novo no processo — mover é remove+recria, ver
+  seção "Mover apresentação" acima —, então não há um id estável pra
+  vincular; o clique na notificação leva direto pro cronograma
+  completo, mesmo destino de `presentation_cancelled`, não precisa de
+  deep-link pra uma entry específica).
+- **Testado via `fetch` direto na página** (não pelo popup — o clique
+  do mouse estava travando na sessão do Chrome nesta rodada de teste,
+  gotcha de ferramenta registrado, não do código) nos dois sentidos:
+  evento `published` → mover apresentação → notificação `ALL` +
+  entrada no log aparecem; revertido pra `created` → mover a mesma
+  apresentação de novo → contagem de notificações e de log permanece
+  EXATAMENTE igual (nenhuma nova linha) — confirma a condição de
+  status funcionando nos dois lados.
+
 ## Próximos passos (não iniciados ainda)
 
 **Atualização (2026-07-27):** os itens 1 ("lançamento de notas") e 6
 ("jornada do atleta/espectador") desta lista, como estava escrita até
 2026-07-19, **já foram feitos** — ver seção "Nota sobre este arquivo"
-no topo e "Jornada do usuário" logo abaixo dela. Lista renumerada só
-com o que continua de fato pendente:
+no topo e "Jornada do usuário" logo abaixo dela. O item 2 antigo
+("transição de status `completed`") **também já foi feito** nesta
+mesma data — ver "Transição `started` -> `completed`" logo acima. O
+antigo item 3 ("endereçamento por aliasId nas rotas HTTP") **também já
+foi feito**, nesta mesma data — ver seção logo acima. Lista renumerada
+só com o que continua de fato pendente:
 
 1. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
    Supabase Realtime) para o painel do produtor — confirmado que ainda
    não existe (nenhuma dependência de socket/realtime em nenhum dos
    dois `package.json`), painel ao vivo hoje se atualiza por
    polling/refetch manual.
-2. Transição de status `completed` ("concluir evento") — `created` ⇄
-   `published` → `started` já existem (`PATCH /events/:id`, `POST
-   /events/:id/publish`, `POST /events/:id/start`); o enum
-   `EventStatus.COMPLETED` já existe mas não tem nenhuma rota que
-   transicione pra ele. Falta decidir a regra (manual pelo admin?
-   automático quando os `competitionDays` terminam?)
-3. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
-   é por `id` de versão específica — ver gotcha de versionamento
-   acima). **Atualização (2026-07-19):** o refactor de endereçar as
-   entidades filhas do evento por `aliasId` internamente (não mais por
-   `id` de versão) já foi feito — `categories`/`program_participations`/
-   `schedule_days`/`regulations`/`judge_participations`/
-   `special_role_assignments` agora guardam `alias_id` (sem FK, mesmo
-   padrão de `EventMember.aliasId`), e `EventsService.publishEvent`
-   não precisa mais "adotar" entidades filhas numa republicação (ver
-   seção "Gerenciamento de acessos do evento" mais abaixo pro contexto
-   do bug que motivou isso). O que falta de verdade agora é só o
-   endereçamento HTTP em si: as rotas continuam usando o `id` de uma
-   versão específica (`/events/:eventId/...`), não o `aliasId` —
-   trocar isso é mudança maior (afeta como o frontend guarda/navega
-   links de evento) e continua fora de escopo por enquanto.
-4. Cobertura de testes automatizados: nenhum service/guard do projeto
+2. Cobertura de testes automatizados: nenhum service/guard do projeto
    tem `.spec.ts` ainda — todo o backend segue validado só manualmente
    (curl/navegador), o que já escalou mal o suficiente pra virar risco
    real com esse volume de domínios interdependentes (hoje inclui
    `scoring`/`notifications`/`athletes` também, não só os módulos de
    setup do evento).
-5. **Backfill de documentação (2026-07-19 → 2026-07-26).** O período
+3. **Backfill de documentação (2026-07-19 → 2026-07-26).** O período
    que construiu lançamento de notas, o painel "evento ao vivo"
    inteiro, notificações, jornada do atleta e impersonation não tem o
    detalhamento de decisão/gotcha que o resto deste arquivo tem (ver
@@ -1592,6 +2037,23 @@ com o que continua de fato pendente:
 
 ## Gotchas / decisões técnicas já resolvidas (não repetir o troubleshooting)
 
+- **`cd apps/web && npx tsc --noEmit -p .` NÃO faz typecheck de
+  verdade — compila ZERO arquivos, sempre "limpo" mesmo com erros reais**
+  (pego em 2026-07-27, depois de ter "confirmado" duas rodadas de
+  mudanças como limpas quando na verdade havia `Record` incompletos
+  reais — ver `EVENT_ACTIVITY_ACTION_LABELS`/`EVENT_ACTIVITY_ACTION_ICONS`
+  abaixo). Causa: `apps/web/tsconfig.json` (raiz) é só um manifesto de
+  **project references** (`"files": []`, só `references` pra
+  `tsconfig.app.json`/`tsconfig.node.json`) — pensado pra `tsc -b`
+  (modo build/composite), não pra `tsc --noEmit -p .` direto (que nesse
+  modo só processa o que `files`/`include` da raiz listam, ou seja,
+  nada). O comando certo é **`npx tsc -b --force`** (mesmo que
+  `npm run build` roda antes do `vite build`) — ele de fato desce nos
+  dois projetos referenciados e reporta erro real. Confirmar com
+  `npx tsc --noEmit -p . --listFilesOnly | wc -l`: se der `0`, o
+  comando não está checando nada. `apps/api` não tem esse problema
+  (`tsconfig.json` tem `include` de verdade via ausência de
+  `"files": []`/`references`) — só o `apps/web` precisa do `-b`.
 - **Organização de pastas por domínio, com `controllers/`/`services/`
   próprios dentro de cada um** (decisão de 2026-07-12, ver "Estrutura do
   repositório"). Quando um domínio filho precisa validar algo do

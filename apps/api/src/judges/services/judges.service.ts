@@ -314,9 +314,10 @@ export class JudgesService {
     const profile = await this.getOrCreateProfile(userId);
     // JudgeParticipation não tem mais relação TypeORM com Event (só
     // aliasId, sem FK) — join manual pela versão ATIVA de cada aliasId,
-    // já que o eventId devolvido pro frontend precisa continuar sendo o
-    // id de uma versão navegável (rotas continuam endereçadas por id de
-    // versão, não por aliasId).
+    // só pra trazer nome/data do evento pra exibição; o `eventId`
+    // devolvido pro frontend é o próprio `p.aliasId` (rotas agora são
+    // endereçadas por aliasId, não mais por `id` de versão — ver
+    // "Endereçamento por aliasId nas rotas HTTP" no CLAUDE.md).
     const rows = await this.participationsRepo
       .createQueryBuilder('p')
       .leftJoin(
@@ -326,7 +327,7 @@ export class JudgesService {
       )
       .where('p.userId = :userId', { userId })
       .select('p.id', 'id')
-      .addSelect('event.id', 'eventId')
+      .addSelect('p.aliasId', 'eventId')
       .addSelect('event.name', 'eventName')
       .addSelect('event.startDate', 'startDate')
       .orderBy('p.createdAt', 'DESC')

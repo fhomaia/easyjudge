@@ -1,6 +1,8 @@
 import {
+  ArrowRightLeft,
   Building2,
   CalendarCheck,
+  CheckCircle2,
   FileText,
   Percent,
   PlayCircle,
@@ -20,7 +22,9 @@ export const EVENT_ACTIVITY_ACTION_ICONS: Record<EventActivityAction, LucideIcon
   published: Send,
   unpublished: Undo2,
   started: PlayCircle,
+  completed: CheckCircle2,
   deleted: Trash2,
+  presentation_moved: ArrowRightLeft,
   category_created: Tag,
   category_updated: Tag,
   category_deleted: Tag,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  ArrowRightLeft,
   Building2,
   CalendarDays,
   Download,
@@ -26,6 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MovePresentationDialog } from "@/components/MovePresentationDialog";
 import { WithdrawPresentationDialog } from "@/components/WithdrawPresentationDialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -90,9 +92,15 @@ export function EventLiveSchedulePage() {
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[] | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<FullScheduleItem | null>(null);
+  const [moveTarget, setMoveTarget] = useState<FullScheduleItem | null>(null);
 
   const [search, setSearch] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState<Set<ScheduleEntryType>>(new Set(TYPE_ORDER));
+  // "Intervalos" (break) começa oculto por padrão pra todo mundo
+  // (2026-07-27, a pedido do usuário) — só admin/assessor conseguem
+  // reexibi-lo (ver botão de filtro abaixo, escondido pra quem não é).
+  const [selectedTypes, setSelectedTypes] = useState<Set<ScheduleEntryType>>(
+    new Set(TYPE_ORDER.filter((t) => t !== "break")),
+  );
   const [teamId, setTeamId] = useState("all");
   const [programId, setProgramId] = useState("all");
 
@@ -143,7 +151,7 @@ export function EventLiveSchedulePage() {
   // pra um evento já publicado/em andamento/concluído.
   useEffect(() => {
     if (!event) return;
-    if (event.status === "created") navigate(`/events/${event.id}/setup`, { replace: true });
+    if (event.status === "created") navigate(`/events/${event.aliasId}/setup`, { replace: true });
   }, [event, navigate]);
 
   // Só pra decidir em quais linhas um Programa vê "Sinalizar
@@ -261,6 +269,12 @@ export function EventLiveSchedulePage() {
     refreshDays();
   }
 
+  async function handleMoveConfirm(resourceId: string, order: number) {
+    if (!id || !moveTarget) return;
+    await scheduleApi.moveEntry(id, moveTarget.dayId, moveTarget.entry.id, { resourceId, order });
+    refreshDays();
+  }
+
   if (!event || !days || !teams) {
     return (
       <div className="flex h-svh items-center justify-center bg-background text-sm text-muted-foreground">
@@ -275,11 +289,11 @@ export function EventLiveSchedulePage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "cronograma",
-    onNavigateHome: () => navigate(`/events/${event.id}/live`),
-    onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
-    onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
-    onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
+    onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
+    onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),
+    onNavigateResults: () => navigate(`/events/${event.aliasId}/live/results`),
+    onNavigateNotifications: () => navigate(`/events/${event.aliasId}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,
     centerTab: resolveCenterTab(event.currentUserRoles),
   });
@@ -396,7 +410,7 @@ export function EventLiveSchedulePage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {TYPE_ORDER.map((type) => {
+              {TYPE_ORDER.filter((type) => type !== "break" || isAdminOrAssessor).map((type) => {
                 const visual = ENTRY_VISUALS[type];
                 const Icon = visual.icon;
                 const selected = selectedTypes.has(type);
@@ -478,6 +492,12 @@ export function EventLiveSchedulePage() {
                             !withdrawn &&
                             (isAdminOrAssessor ||
                               (isProgram && myTeamIdSet.has(item.entry.teamId ?? "")));
+                          // Só admin/assessor (pedido explícito do
+                          // usuário) — mudar equipe de programa não
+                          // decide onde a própria apresentação entra no
+                          // cronograma, só sinaliza desistência.
+                          const canMove =
+                            item.entry.type === "presentation" && !withdrawn && isAdminOrAssessor;
                           return (
                             <div
                               key={item.entry.id}
@@ -524,7 +544,7 @@ export function EventLiveSchedulePage() {
                               <span className="hidden shrink-0 truncate rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary sm:block">
                                 {item.resourceName}
                               </span>
-                              {canWithdraw && (
+                              {(canWithdraw || canMove) && (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger
                                     render={
@@ -538,10 +558,18 @@ export function EventLiveSchedulePage() {
                                     <MoreVertical className="size-4" />
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => setWithdrawTarget(item)}>
-                                      <XCircle data-icon="inline-start" />
-                                      Sinalizar desistência
-                                    </DropdownMenuItem>
+                                    {canMove && (
+                                      <DropdownMenuItem onClick={() => setMoveTarget(item)}>
+                                        <ArrowRightLeft data-icon="inline-start" />
+                                        Mover apresentação
+                                      </DropdownMenuItem>
+                                    )}
+                                    {canWithdraw && (
+                                      <DropdownMenuItem onClick={() => setWithdrawTarget(item)}>
+                                        <XCircle data-icon="inline-start" />
+                                        Sinalizar desistência
+                                      </DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               )}
@@ -566,6 +594,13 @@ export function EventLiveSchedulePage() {
         teamName={withdrawTarget?.entry.teamName ?? "Equipe"}
         canRemoveFromSchedule={isAdminOrAssessor}
         onConfirm={handleWithdrawConfirm}
+      />
+
+      <MovePresentationDialog
+        item={moveTarget}
+        day={days.find((d) => d.id === moveTarget?.dayId) ?? null}
+        onOpenChange={(open) => !open && setMoveTarget(null)}
+        onConfirm={handleMoveConfirm}
       />
     </div>
   );

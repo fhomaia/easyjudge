@@ -67,6 +67,8 @@ interface EventLiveDesktopViewProps {
   nowMinutes: number;
   canStart: boolean;
   starting: boolean;
+  canComplete: boolean;
+  onOpenComplete: () => void;
   // Contagens que vêm do próprio catálogo (JudgeParticipation/
   // ProgramParticipation), não do roster de acessos (EventMember) —
   // mais confiável (um programa/jurado pode existir sem o papel
@@ -110,6 +112,8 @@ export function EventLiveDesktopView({
   nowMinutes,
   canStart,
   starting,
+  canComplete,
+  onOpenComplete,
   judges,
   programs,
   memberCounts,
@@ -235,7 +239,7 @@ export function EventLiveDesktopView({
           </div>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           {event.status === "started" ? (
             <span className="flex items-center gap-2 text-sm font-semibold text-emerald-600">
               <BlinkingDot colorClassName="bg-emerald-500" />
@@ -258,6 +262,17 @@ export function EventLiveDesktopView({
             </button>
           ) : (
             <EventStatusBadge status={event.status} />
+          )}
+
+          {canComplete && (
+            <button
+              type="button"
+              onClick={onOpenComplete}
+              className="flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1.5 text-sm font-medium text-violet-600 transition-colors hover:bg-violet-500/20"
+            >
+              <BlinkingDot colorClassName="bg-violet-500" />
+              Concluir evento
+            </button>
           )}
         </div>
       </header>
@@ -405,7 +420,7 @@ export function EventLiveDesktopView({
             ) : (
               <div className="mt-2 divide-y divide-border">
                 {notifications.slice(0, 3).map((notification) => {
-                  const href = notificationHref(event.id, notification);
+                  const href = notificationHref(event.aliasId, notification);
                   return (
                     <button
                       key={notification.id}

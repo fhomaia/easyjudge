@@ -175,6 +175,7 @@ export interface Event {
   eventCode: string | null;
   status: EventStatus;
   startedAt: string | null;
+  completedAt: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -208,6 +209,7 @@ export type EventActivityAction =
   | "published"
   | "unpublished"
   | "started"
+  | "completed"
   | "deleted"
   | "category_created"
   | "category_updated"
@@ -223,7 +225,8 @@ export type EventActivityAction =
   | "regulation_deductions_updated"
   | "staff_member_added"
   | "staff_member_updated"
-  | "staff_member_removed";
+  | "staff_member_removed"
+  | "presentation_moved";
 
 export interface EventActivityLogEntry {
   id: string;
@@ -258,6 +261,9 @@ export const eventsApi = {
 
   unpublish: (id: string) =>
     authRequest<Event>(`/events/${id}/unpublish`, { method: "POST" }),
+
+  complete: (id: string) =>
+    authRequest<Event>(`/events/${id}/complete`, { method: "POST" }),
 
   // Resgate de código/QR (ver Event.eventCode) — dá acesso de
   // espectador ao evento pra quem chamou. Sem membership prévia
@@ -1466,7 +1472,8 @@ export type NotificationType =
   | "contestation_released"
   | "evaluation_pending"
   | "contestation_requested"
-  | "presentation_cancelled";
+  | "presentation_cancelled"
+  | "presentation_moved";
 
 export interface NotificationView {
   id: string;

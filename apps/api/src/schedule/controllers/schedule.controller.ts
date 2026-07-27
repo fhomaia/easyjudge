@@ -8,8 +8,10 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 import { ScheduleService } from '../services/schedule.service';
 import { UpdateScheduleDayDto } from '../dto/update-schedule-day.dto';
 import { CreateScheduleResourceDto } from '../dto/create-schedule-resource.dto';
@@ -135,8 +137,15 @@ export class ScheduleController {
     @Param('dayId') dayId: string,
     @Param('entryId') entryId: string,
     @Body() dto: MoveScheduleEntryDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.scheduleService.moveEntry(eventId, dayId, entryId, dto);
+    return this.scheduleService.moveEntry(
+      eventId,
+      dayId,
+      entryId,
+      dto,
+      req.user.userId,
+    );
   }
 
   @Delete('days/:dayId/entries/:entryId')
