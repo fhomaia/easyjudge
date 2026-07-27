@@ -9,6 +9,7 @@ import { In, Not, Repository } from 'typeorm';
 import { ScoreEvent } from '../entities/score-event.entity';
 import { ScoreEventKind } from '../enums/score-event-kind.enum';
 import { ScoreEventInputDto } from '../dto/score-event-input.dto';
+import { WithdrawPresentationDto } from '../dto/withdraw-presentation.dto';
 import { Category } from '../../categories/entities/category.entity';
 import { CategoryFormat } from '../../categories/enums/category-format.enum';
 import { Team } from '../../teams/entities/team.entity';
@@ -127,6 +128,12 @@ export interface AdminOverviewEntryView {
   // precisar abrir o detalhe por critério só pra ver o resultado.
   finalResult: number;
   percentage: number;
+  // Presença nesta lista já é uma exceção (ver buildTeamScopedOverview/
+  // getAdminOverview — normalmente só entra apresentação 100%
+  // pontuada); desistida entra mesmo incompleta, sempre com esse campo
+  // true e finalResult/percentage zerados (nunca foi avaliada de
+  // verdade).
+  withdrawn: boolean;
 }
 
 // Liberação global do evento — "Liberar notas"/"Liberar contestação"/
@@ -593,14 +600,19 @@ export class ScoringService {
             assignmentsState,
             specialRoles,
           );
-          if (!complete) continue;
+          // Desistida é a única exceção ao "só entra se 100%
+          // pontuada" — nunca vai ficar completa (ninguém pode mais
+          // lançar nota pra ela), mas precisa aparecer marcada nas
+          // súmulas mesmo assim (ver ScoringService.withdrawPresentation).
+          if (!complete && !entry.withdrawnAt) continue;
 
-          const { finalResult, percentage } =
-            await this.computePresentationResult(
-              entry.id,
-              category,
-              deductionValueByType,
-            );
+          const { finalResult, percentage } = entry.withdrawnAt
+            ? { finalResult: 0, percentage: 0 }
+            : await this.computePresentationResult(
+                entry.id,
+                category,
+                deductionValueByType,
+              );
 
           results.push({
             scheduleEntryId: entry.id,
@@ -611,6 +623,7 @@ export class ScoringService {
             contestationRequested: !!entry.contestationRequestedAt,
             finalResult,
             percentage,
+            withdrawn: !!entry.withdrawnAt,
           });
         }
       }
@@ -1043,14 +1056,15 @@ export class ScoringService {
             assignmentsState,
             specialRoles,
           );
-          if (!complete) continue;
+          if (!complete && !entry.withdrawnAt) continue;
 
-          const { finalResult, percentage } =
-            await this.computePresentationResult(
-              entry.id,
-              category,
-              deductionValueByType,
-            );
+          const { finalResult, percentage } = entry.withdrawnAt
+            ? { finalResult: 0, percentage: 0 }
+            : await this.computePresentationResult(
+                entry.id,
+                category,
+                deductionValueByType,
+              );
 
           results.push({
             scheduleEntryId: entry.id,
@@ -1061,6 +1075,7 @@ export class ScoringService {
             contestationRequested: !!entry.contestationRequestedAt,
             finalResult,
             percentage,
+            withdrawn: !!entry.withdrawnAt,
           });
         }
       }
@@ -1421,6 +1436,14 @@ export class ScoringService {
           eventId,
           input.scheduleEntryId,
         );
+        // Apresentação desistida não aceita mais nenhum ScoreEvent —
+        // ver ScoringService.withdrawPresentation, que só permite
+        // sinalizar desistência enquanto não existe nenhum evento ainda.
+        if (entry.withdrawnAt) {
+          throw new ForbiddenException(
+            'Esta apresentação foi cancelada — não é mais possível lançar notas para ela.',
+          );
+        }
         resourceId = entry.resourceId;
         resourceCache.set(input.scheduleEntryId, resourceId);
       }
@@ -1922,6 +1945,90 @@ export class ScoringService {
         'Esta apresentação não pertence ao seu programa.',
       );
     }
+  }
+
+  // Ids das equipes do Programa chamador neste evento — usado pelo
+  // frontend do cronograma (EventLiveSchedulePage) pra decidir em quais
+  // linhas mostrar a opção "Sinalizar desistência" (só nas apresentações
+  // das próprias equipes). Rota bem enxuta de propósito — não é o
+  // overview completo (que só lista apresentação já pontuada), só os
+  // ids mesmo.
+  async getMyTeamIds(eventId: string, userId: string): Promise<string[]> {
+    const participation = await this.assertProgramParticipation(
+      eventId,
+      userId,
+    );
+    const myTeams = await this.teamsRepo.find({
+      where: { programId: participation.id },
+    });
+    return myTeams.map((t) => t.id);
+  }
+
+  // Fluxo de desistência (2026-07-26) — admin/assessor pode sinalizar
+  // desistência de QUALQUER apresentação do evento; programa só das
+  // apresentações das próprias equipes (jurado/atleta/espectador não
+  // podem). Em ambos os casos só é permitido enquanto a apresentação
+  // não tiver NENHUM ScoreEvent — "avaliada" aqui é qualquer sinal de
+  // que já começou (inclusive só o cronômetro do Jurado de Legalidade),
+  // não só nota lançada. `removeFromSchedule` só tem efeito pra
+  // admin/assessor — vem sempre `false` pra programa, mesmo que o DTO
+  // mande outra coisa (não é decisão do programa).
+  async withdrawPresentation(
+    eventId: string,
+    userId: string,
+    scheduleEntryId: string,
+    dto: WithdrawPresentationDto,
+  ): Promise<void> {
+    const entry = await this.scheduleService.findEntryInEventOrThrow(
+      eventId,
+      scheduleEntryId,
+    );
+    if (entry.type !== ScheduleEntryType.PRESENTATION) {
+      throw new BadRequestException(
+        'Este item do cronograma não é uma apresentação.',
+      );
+    }
+    if (entry.withdrawnAt) {
+      throw new ConflictException(
+        'Esta apresentação já foi marcada como desistência.',
+      );
+    }
+
+    const { member } = await this.eventsService.getMemberForEventId(
+      eventId,
+      userId,
+    );
+    const isStaff = !!member?.roles.some(
+      (r) => r === EventMemberRole.ADMIN || r === EventMemberRole.ASSESSOR,
+    );
+    let removeFromSchedule = false;
+    if (isStaff) {
+      removeFromSchedule = !!dto.removeFromSchedule;
+    } else if (member?.roles.includes(EventMemberRole.PROGRAM)) {
+      if (!entry.teamId) {
+        throw new ForbiddenException(
+          'Esta apresentação não pertence ao seu programa.',
+        );
+      }
+      await this.assertProgramOwnsTeam(eventId, userId, entry.teamId);
+    } else {
+      throw new ForbiddenException(
+        'Você não tem permissão para sinalizar desistência.',
+      );
+    }
+
+    const alreadyEvaluated = await this.scoreEventsRepo.count({
+      where: { scheduleEntryId },
+    });
+    if (alreadyEvaluated > 0) {
+      throw new ConflictException(
+        'Esta apresentação já começou a ser avaliada — não é mais possível sinalizar desistência.',
+      );
+    }
+
+    await this.scheduleService.setWithdrawn(eventId, scheduleEntryId, {
+      removeFromSchedule,
+    });
   }
 
   private async assertJudgeParticipation(eventId: string, userId: string) {

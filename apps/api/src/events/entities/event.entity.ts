@@ -36,6 +36,15 @@ export class Event {
   @Column({ name: 'logo_url', type: 'varchar', nullable: true })
   logoUrl: string | null;
 
+  // Código de compartilhamento (QR + texto) — igual ao aliasId, é
+  // estável através das versões: gerado uma única vez no primeiro
+  // publish (EventsService.publishEvent) e carregado adiante em toda
+  // republicação seguinte, nunca muda depois disso. Único no banco
+  // (índice parcial, só entre linhas não-nulas). Só existe a partir do
+  // primeiro publish — evento em "created" ainda não tem.
+  @Column({ name: 'event_code', type: 'varchar', length: 16, nullable: true })
+  eventCode: string | null;
+
   @Column({ type: 'enum', enum: EventStatus, default: EventStatus.CREATED })
   status: EventStatus;
 

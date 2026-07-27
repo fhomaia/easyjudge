@@ -30,6 +30,17 @@ export class TeamScoringController {
     return this.scoringService.getTeamOverview(eventId, req.user.userId);
   }
 
+  // Antes de ':scheduleEntryId' de propósito — rota literal precisa vir
+  // primeiro nesta classe, senão o Nest resolve "my-team-ids" como valor
+  // de :scheduleEntryId (rotas são casadas na ordem de declaração).
+  @Get('my-team-ids')
+  getMyTeamIds(
+    @Param('eventId') eventId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.scoringService.getMyTeamIds(eventId, req.user.userId);
+  }
+
   @Get(':scheduleEntryId')
   getDetail(
     @Param('eventId') eventId: string,

@@ -10,6 +10,7 @@ import {
   Percent,
   Scale,
   Trophy,
+  XCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -242,14 +243,20 @@ export function EventLiveNotesDesktopView({
                     const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
                     const isNext = index === nextIndex;
                     const contested = Boolean(item.entry.contestationRequestedAt);
+                    const withdrawn = Boolean(item.entry.withdrawnAt);
                     return (
                       <button
                         key={item.entry.id}
                         type="button"
+                        disabled={withdrawn}
                         onClick={() => navigate(`/events/${event.id}/live/scoring/${item.entry.id}`)}
                         className={cn(
                           "flex w-full items-center gap-4 rounded-xl p-3 text-left",
-                          isNext ? "bg-primary/5 ring-1 ring-primary/30" : "hover:bg-muted",
+                          withdrawn
+                            ? "cursor-default opacity-60"
+                            : isNext
+                              ? "bg-primary/5 ring-1 ring-primary/30"
+                              : "hover:bg-muted",
                         )}
                       >
                         <div className="w-16 shrink-0">
@@ -281,6 +288,12 @@ export function EventLiveNotesDesktopView({
                             <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
                               <AlertTriangle className="size-3.5" />
                               Contestação
+                            </span>
+                          )}
+                          {withdrawn && (
+                            <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+                              <XCircle className="size-3.5" />
+                              Desistência
                             </span>
                           )}
                         </div>

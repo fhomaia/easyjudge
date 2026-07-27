@@ -20,6 +20,7 @@ interface EventGridItemProps {
   onDelete: (event: Event) => void;
   onViewHistory: (event: Event) => void;
   onTogglePublish: (event: Event) => void;
+  onShare: (event: Event) => void;
 }
 
 export function EventGridItem({
@@ -32,6 +33,7 @@ export function EventGridItem({
   onDelete,
   onViewHistory,
   onTogglePublish,
+  onShare,
 }: EventGridItemProps) {
   const isAdmin = event.currentUserRole === "admin";
   const isAssessor = event.currentUserRole === "assessor";
@@ -68,6 +70,7 @@ export function EventGridItem({
               onDelete={onDelete}
               onViewHistory={onViewHistory}
               onTogglePublish={onTogglePublish}
+              onShare={onShare}
             />
           </div>
         )}

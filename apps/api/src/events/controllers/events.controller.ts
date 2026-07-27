@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from '../services/events.service';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
+import { JoinEventByCodeDto } from '../dto/join-event-by-code.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -41,6 +42,21 @@ export class EventsController {
   @HttpCode(HttpStatus.CREATED)
   create(@Body() dto: CreateEventDto, @Req() req: AuthenticatedRequest) {
     return this.eventsService.createEvent(dto, req.user.userId);
+  }
+
+  // Sem @Roles/@EventRoles de propósito — resgate de código/QR (ver
+  // Event.eventCode) é a única rota deste controller pensada pra quem
+  // ainda NÃO tem nenhuma relação com o evento; a checagem (código
+  // existe? evento visível?) é toda feita dentro do service. Antes das
+  // rotas ":id/..." pra não competir com elas na resolução de rota
+  // (mesma convenção já usada em outros controllers do projeto).
+  @Post('join-by-code')
+  @HttpCode(HttpStatus.OK)
+  joinByCode(
+    @Body() dto: JoinEventByCodeDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.eventsService.joinByCode(dto.code, req.user.userId);
   }
 
   @Get()

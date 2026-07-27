@@ -1814,6 +1814,35 @@ export class ScheduleService {
     );
   }
 
+  // Setter puro — toda a validação de elegibilidade (quem pode, time é
+  // dele, ainda não foi avaliada) já rodou em
+  // ScoringService.withdrawPresentation antes de chamar isto. Mesmo
+  // padrão de setContestationRequested: persiste a flag e já dispara a
+  // notificação daqui (tem os dois — repo/nome do time e
+  // notificationsService — à mão).
+  async setWithdrawn(
+    eventId: string,
+    entryId: string,
+    options: { removeFromSchedule: boolean },
+  ): Promise<void> {
+    const entry = await this.findEntryInEventOrThrow(eventId, entryId);
+    entry.withdrawnAt = new Date();
+    entry.removedFromSchedule = options.removeFromSchedule;
+    await this.entriesRepo.save(entry);
+
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const team = entry.teamId
+      ? await this.teamsRepo.findOneBy({ id: entry.teamId })
+      : null;
+    await this.notificationsService.create(
+      event.aliasId,
+      NotificationType.PRESENTATION_CANCELLED,
+      NotificationAudience.ALL,
+      `${team?.name ?? 'Equipe'} cancelada`,
+      entry.id,
+    );
+  }
+
   // Jurado marca a contestação como resolvida (ver
   // ScoringService.resolveContestation, que já validou que a
   // apresentação tem contestação solicitada antes de chamar isto) —

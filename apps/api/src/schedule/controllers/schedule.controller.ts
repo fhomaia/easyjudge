@@ -33,16 +33,21 @@ import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 export class ScheduleController {
   constructor(private readonly scheduleService: ScheduleService) {}
 
-  // Override do @EventRoles de classe (ADMIN/ASSESSOR) só pra esta
-  // rota — jurado precisa LER o cronograma pra saber o que julgar
-  // (telas "Início"/"Notas" do evento ao vivo), mas continua sem poder
+  // Override do @Roles/@EventRoles de classe (ADMIN/ASSESSOR) só pra
+  // esta rota — jurado precisa LER o cronograma pra saber o que julgar
+  // (telas "Início"/"Notas" do evento ao vivo) e, desde o fluxo de
+  // desistência (2026-07-26), programa também precisa LER pra ver/
+  // sinalizar desistência das próprias apresentações na tela de
+  // cronograma ao vivo (EventLiveSchedulePage). Continua sem poder
   // editar nada aqui (as outras rotas deste controller continuam
   // admin/assessor only).
   @Get('days')
+  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM)
   @EventRoles(
     EventMemberRole.ADMIN,
     EventMemberRole.ASSESSOR,
     EventMemberRole.JUDGE,
+    EventMemberRole.PROGRAM,
   )
   getDays(@Param('eventId') eventId: string) {
     return this.scheduleService.getDays(eventId);

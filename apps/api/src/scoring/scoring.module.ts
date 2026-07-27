@@ -8,6 +8,7 @@ import { AdminScoringController } from './controllers/admin-scoring.controller';
 import { TeamScoringController } from './controllers/team-scoring.controller';
 import { ResultsController } from './controllers/results.controller';
 import { AthleteScoringController } from './controllers/athlete-scoring.controller';
+import { WithdrawalController } from './controllers/withdrawal.controller';
 import { ScoringService } from './services/scoring.service';
 import { EventsModule } from '../events/events.module';
 import { JudgesModule } from '../judges/judges.module';
@@ -38,6 +39,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     TeamScoringController,
     ResultsController,
     AthleteScoringController,
+    WithdrawalController,
   ],
   providers: [ScoringService],
 })

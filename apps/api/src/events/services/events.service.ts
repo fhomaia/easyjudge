@@ -5,8 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, Repository } from 'typeorm';
+import { Brackets, DataSource, EntityManager, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
+import { generateEventCode } from '../../common/utils/generate-event-code';
 import { Event } from '../entities/event.entity';
 import { EventMember } from '../entities/event-member.entity';
 import { EventMemberRole } from '../enums/event-member-role.enum';
@@ -62,12 +63,19 @@ const VISIBLE_TO_NON_STAFF = [
 // Uma pessoa pode ter mais de um papel no mesmo evento (roles[], ver
 // EventMember) — pra telas que só entendem "um papel" (badges na Home,
 // EventLifecycleAction), reduz pro mais "forte" dessa lista, nessa
-// ordem de precedência.
+// ordem de precedência. ATHLETE precisa vir antes de SPECTATOR: um
+// atleta que escaneou o QR do evento antes de vincular a conta (ganha
+// SPECTATOR ali) e depois vira atleta de um programa participante
+// (ganha ATHLETE via AthletesService.syncEventAccessForLink, que só
+// ACRESCENTA papel, nunca troca) fica com roles=[spectator, athlete] —
+// sem ATHLETE aqui, esse método devolvia "spectator" pra essa pessoa,
+// mesmo com o papel de atleta já concedido.
 const ROLE_PRECEDENCE = [
   EventMemberRole.ADMIN,
   EventMemberRole.ASSESSOR,
   EventMemberRole.JUDGE,
   EventMemberRole.PROGRAM,
+  EventMemberRole.ATHLETE,
   EventMemberRole.SPECTATOR,
 ];
 
@@ -302,6 +310,12 @@ export class EventsService {
       event.active = false;
       await manager.save(event);
 
+      // Gera o código só na primeira publicação (event.eventCode ainda
+      // nulo); nas seguintes, só carrega o mesmo código adiante — ver
+      // comentário em Event.eventCode.
+      const eventCode =
+        event.eventCode ?? (await this.generateUniqueEventCode(manager));
+
       const newVersion = manager.create(Event, {
         name: event.name,
         startDate: event.startDate,
@@ -310,6 +324,7 @@ export class EventsService {
         venue: event.venue,
         logoUrl: event.logoUrl,
         createdById: event.createdById,
+        eventCode,
         id: randomUUID(),
         aliasId: event.aliasId,
         version: event.version + 1,
@@ -607,6 +622,33 @@ export class EventsService {
     await this.membersRepo.save(member);
   }
 
+  // Resgate de código/QR (ver Event.eventCode) — qualquer usuário
+  // autenticado, sem exigir membership prévia (chamado de uma tela
+  // pública, ver EventsController.joinByCode), ganha SPECTATOR no
+  // evento. upsertMemberRole já é idempotente: se a pessoa já tiver
+  // qualquer papel (inclusive admin/jurado), só acrescenta SPECTATOR
+  // ao array — mesmo comportamento já aceito nos outros syncs
+  // automáticos de papel (jurado/programa/atleta), inofensivo.
+  async joinByCode(code: string, userId: string): Promise<EventWithRole> {
+    const normalized = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const event = await this.eventsRepo.findOneBy({
+      eventCode: normalized,
+      active: true,
+    });
+    if (!event || !VISIBLE_TO_NON_STAFF.includes(event.status)) {
+      throw new NotFoundException('Código de evento inválido.');
+    }
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    await this.upsertMemberRole(event.aliasId, EventMemberRole.SPECTATOR, {
+      userId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    });
+    return this.attachRole(event, userId);
+  }
+
   // Inverso de upsertMemberRole — tira `role` do roles[] da pessoa; se
   // não sobrar nenhum papel, remove a linha inteira.
   async removeMemberRole(
@@ -681,6 +723,26 @@ export class EventsService {
       .andWhere('userId IS NULL')
       .execute();
     return result.affected ?? 0;
+  }
+
+  // Gera um Event.eventCode ainda não usado — tenta persistir dentro
+  // da MESMA transação de publishEvent (via `manager`, não
+  // `this.eventsRepo`) e, se colidir com o índice único parcial
+  // (Postgres 23505), tenta de novo com outro candidato. Alfabeto de 8
+  // caracteres (~32^8 combinações) torna uma colisão real quase
+  // impossível — o retry é só rede de segurança.
+  private async generateUniqueEventCode(
+    manager: EntityManager,
+  ): Promise<string> {
+    const repo = manager.getRepository(Event);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = generateEventCode();
+      const exists = await repo.findOneBy({ eventCode: candidate });
+      if (!exists) return candidate;
+    }
+    throw new ConflictException(
+      'Não foi possível gerar um código único para o evento — tente publicar novamente.',
+    );
   }
 
   private canSee(roles: EventMemberRole[], status: EventStatus): boolean {

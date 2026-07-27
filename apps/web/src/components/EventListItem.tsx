@@ -20,6 +20,7 @@ interface EventListItemProps {
   onDelete: (event: Event) => void;
   onViewHistory: (event: Event) => void;
   onTogglePublish: (event: Event) => void;
+  onShare: (event: Event) => void;
 }
 
 export function EventListItem({
@@ -32,6 +33,7 @@ export function EventListItem({
   onDelete,
   onViewHistory,
   onTogglePublish,
+  onShare,
 }: EventListItemProps) {
   const isAdmin = event.currentUserRole === "admin";
   const isAssessor = event.currentUserRole === "assessor";
@@ -98,6 +100,7 @@ export function EventListItem({
           onDelete={onDelete}
           onViewHistory={onViewHistory}
           onTogglePublish={onTogglePublish}
+          onShare={onShare}
         />
       </div>
     </motion.div>

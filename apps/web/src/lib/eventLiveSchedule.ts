@@ -2,6 +2,7 @@ import type { ScheduleDay, ScheduleEntry, ScheduleEntryType, ScheduleResource } 
 import { computeResourceTimes } from "@/lib/scheduleTime";
 import { isAutoWaitBreak } from "@/lib/scheduleEntryKind";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
+import { filterRemovedFromSchedule } from "@/lib/scheduleWithdrawal";
 
 // "Próxima apresentação"/"Depois disso"/cronograma do desktop mostram
 // qualquer componente real do cronograma (apresentação, intervalo,
@@ -102,7 +103,9 @@ export function computeResourceNextStatus(
   live: EventLiveSchedule,
   completedEntryIds: Set<string> = new Set(),
 ): ResourceNextStatus[] {
-  const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
   const activeDayDate = live.next?.dayDate ?? sortedDays[0]?.date;
   const activeDay = activeDayDate ? sortedDays.find((d) => d.date === activeDayDate) : undefined;
   if (!activeDay) return [];
@@ -212,7 +215,9 @@ export function computeEventLiveSchedule(
   days: ScheduleDay[],
   completedEntryIds: Set<string> = new Set(),
 ): EventLiveSchedule {
-  const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
 
   const allItems: LiveScheduleItem[] = [];
   const allWarmups: (NextWarmup & { dayDate: string; linkedEntryId: string | null })[] = [];

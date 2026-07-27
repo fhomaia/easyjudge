@@ -7,8 +7,10 @@ import {
   FileSpreadsheet,
   FileText,
   MapPin,
+  MoreVertical,
   Search,
   Trophy,
+  XCircle,
 } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import {
@@ -24,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { WithdrawPresentationDialog } from "@/components/WithdrawPresentationDialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -33,7 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
-import { resolveCenterTab } from "@/lib/eventNavPriority";
+import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatMinutes } from "@/lib/scheduleTime";
@@ -51,6 +54,7 @@ import {
   notificationsApi,
   scheduleApi,
   scoringApi,
+  teamScoringApi,
   teamsApi,
   usersApi,
   type Event,
@@ -84,6 +88,8 @@ export function EventLiveSchedulePage() {
   const [teams, setTeams] = useState<TeamWithProgram[] | null>(null);
   const [completedEntryIds, setCompletedEntryIds] = useState<string[]>([]);
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
+  const [myTeamIds, setMyTeamIds] = useState<string[] | null>(null);
+  const [withdrawTarget, setWithdrawTarget] = useState<FullScheduleItem | null>(null);
 
   const [search, setSearch] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<ScheduleEntryType>>(new Set(TYPE_ORDER));
@@ -139,6 +145,17 @@ export function EventLiveSchedulePage() {
     if (!event) return;
     if (event.status === "created") navigate(`/events/${event.id}/setup`, { replace: true });
   }, [event, navigate]);
+
+  // Só pra decidir em quais linhas um Programa vê "Sinalizar
+  // desistência" (só das próprias equipes) — admin/assessor não precisa
+  // disso, vê em qualquer apresentação.
+  useEffect(() => {
+    if (!id || !event?.currentUserRoles.includes("program")) return;
+    teamScoringApi
+      .getMyTeamIds(id)
+      .then(setMyTeamIds)
+      .catch(() => setMyTeamIds(null));
+  }, [id, event]);
 
   // Se o programa selecionado mudar e a equipe escolhida não pertencer
   // mais a ele, volta o filtro de equipe pra "todas" em vez de deixar um
@@ -229,6 +246,21 @@ export function EventLiveSchedulePage() {
     });
   }
 
+  // Recarrega o cronograma depois de uma desistência confirmada — a
+  // apresentação some/fica marcada dependendo da escolha do admin (ver
+  // WithdrawPresentationDialog), mais simples que atualizar o estado
+  // local na mão em duas variações.
+  function refreshDays() {
+    if (!id) return;
+    scheduleApi.listDays(id).then(setDays).catch(() => {});
+  }
+
+  async function handleWithdrawConfirm(removeFromSchedule: boolean) {
+    if (!id || !withdrawTarget) return;
+    await scoringApi.withdrawPresentation(id, withdrawTarget.entry.id, { removeFromSchedule });
+    refreshDays();
+  }
+
   if (!event || !days || !teams) {
     return (
       <div className="flex h-svh items-center justify-center bg-background text-sm text-muted-foreground">
@@ -237,11 +269,15 @@ export function EventLiveSchedulePage() {
     );
   }
 
+  const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
+  const isProgram = event.currentUserRoles.includes("program");
+  const myTeamIdSet = new Set(myTeamIds ?? []);
+
   const eventNavTabs = buildEventNavTabs({
     current: "cronograma",
     onNavigateHome: () => navigate(`/events/${event.id}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
     onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,
@@ -436,12 +472,19 @@ export function EventLiveSchedulePage() {
                           const Icon = visual.icon;
                           const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
                           const isCurrent = item.entry.id === currentEntryId;
+                          const withdrawn = Boolean(item.entry.withdrawnAt);
+                          const canWithdraw =
+                            item.entry.type === "presentation" &&
+                            !withdrawn &&
+                            (isAdminOrAssessor ||
+                              (isProgram && myTeamIdSet.has(item.entry.teamId ?? "")));
                           return (
                             <div
                               key={item.entry.id}
                               className={cn(
                                 "flex items-center gap-3 rounded-lg px-2 py-2.5 first:pt-1 last:pb-1",
                                 isCurrent && "bg-violet-500/5 ring-1 ring-violet-500/30",
+                                withdrawn && "opacity-60",
                               )}
                             >
                               <div className="w-14 shrink-0">
@@ -472,9 +515,36 @@ export function EventLiveSchedulePage() {
                                   </p>
                                 )}
                               </div>
+                              {withdrawn && (
+                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+                                  <XCircle className="size-3.5" />
+                                  Desistência
+                                </span>
+                              )}
                               <span className="hidden shrink-0 truncate rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary sm:block">
                                 {item.resourceName}
                               </span>
+                              {canWithdraw && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <button
+                                        type="button"
+                                        aria-label="Mais opções"
+                                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                      />
+                                    }
+                                  >
+                                    <MoreVertical className="size-4" />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => setWithdrawTarget(item)}>
+                                      <XCircle data-icon="inline-start" />
+                                      Sinalizar desistência
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </div>
                           );
                         })}
@@ -489,6 +559,14 @@ export function EventLiveSchedulePage() {
 
         <EventLiveBottomNav tabs={eventNavTabs} className="sm:hidden" />
       </main>
+
+      <WithdrawPresentationDialog
+        open={withdrawTarget !== null}
+        onOpenChange={(open) => !open && setWithdrawTarget(null)}
+        teamName={withdrawTarget?.entry.teamName ?? "Equipe"}
+        canRemoveFromSchedule={isAdminOrAssessor}
+        onConfirm={handleWithdrawConfirm}
+      />
     </div>
   );
 }

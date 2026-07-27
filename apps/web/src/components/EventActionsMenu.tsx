@@ -1,4 +1,4 @@
-import { History, Pencil, Send, Trash2, Undo2, MoreVertical } from "lucide-react";
+import { History, Pencil, QrCode, Send, Trash2, Undo2, MoreVertical } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,7 @@ interface EventActionsMenuProps {
   onDelete: (event: Event) => void;
   onViewHistory: (event: Event) => void;
   onTogglePublish: (event: Event) => void;
+  onShare: (event: Event) => void;
 }
 
 // Reaproveitado por EventListItem/EventGridItem — antes cada um tinha
@@ -33,11 +34,13 @@ export function EventActionsMenu({
   onDelete,
   onViewHistory,
   onTogglePublish,
+  onShare,
 }: EventActionsMenuProps) {
   if (!isAdmin && !isAssessor) return null;
 
   const canTogglePublish =
     isAdmin && (event.status === "created" || event.status === "published");
+  const canShare = isAdmin && event.status !== "created";
 
   return (
     <div className="flex items-center gap-1">
@@ -72,6 +75,12 @@ export function EventActionsMenu({
                 <Send data-icon="inline-start" />
               )}
               {event.status === "published" ? "Reverter publicação" : "Publicar"}
+            </DropdownMenuItem>
+          )}
+          {canShare && (
+            <DropdownMenuItem onClick={() => onShare(event)}>
+              <QrCode data-icon="inline-start" />
+              Compartilhar evento
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

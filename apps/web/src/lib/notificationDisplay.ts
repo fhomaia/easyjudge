@@ -6,6 +6,7 @@ import {
   Hourglass,
   Play,
   Trophy,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
 import type { NotificationType, NotificationView } from "@/api/client";
@@ -22,6 +23,7 @@ export const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   contestation_released: Flag,
   evaluation_pending: Hourglass,
   contestation_requested: Gavel,
+  presentation_cancelled: XCircle,
 };
 
 export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/formatRelativeTime";
@@ -44,6 +46,10 @@ export function notificationHref(eventId: string, notification: NotificationView
       return notification.scheduleEntryId
         ? `/events/${eventId}/live/scoring/${notification.scheduleEntryId}`
         : null;
+    // Apresentação cancelada não pode mais ser pontuada — leva pro
+    // cronograma (onde a desistência fica marcada), não pra súmula.
+    case "presentation_cancelled":
+      return `/events/${eventId}/live/schedule`;
     default:
       return null;
   }

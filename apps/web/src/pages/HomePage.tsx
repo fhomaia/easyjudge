@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus } from "lucide-react";
+import { Plus, Ticket } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CreateEventDialog } from "@/components/CreateEventDialog";
 import { EditEventDialog } from "@/components/EditEventDialog";
+import { ShareEventDialog } from "@/components/ShareEventDialog";
+import { JoinByCodeDialog } from "@/components/JoinByCodeDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EventStatCards } from "@/components/EventStatCards";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -47,6 +49,8 @@ export function HomePage() {
   const [editTarget, setEditTarget] = useState<Event | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Event | null>(null);
   const [revertTarget, setRevertTarget] = useState<Event | null>(null);
+  const [shareTarget, setShareTarget] = useState<Event | null>(null);
+  const [joinByCodeOpen, setJoinByCodeOpen] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +102,20 @@ export function HomePage() {
 
   function handleEventCreated(event: Event) {
     setEvents((prev) => [event, ...(prev ?? [])]);
+  }
+
+  // "Tenho um código" pode devolver um evento que a pessoa já vê na
+  // lista (ex: já era espectador, ou é o próprio admin testando o
+  // código) — atualiza em vez de duplicar, diferente de
+  // handleEventCreated (que só é chamado pra evento genuinamente novo).
+  function handleEventJoined(event: Event) {
+    setEvents((prev) => {
+      if (!prev) return [event];
+      const alreadyInList = prev.some((e) => e.aliasId === event.aliasId);
+      return alreadyInList
+        ? prev.map((e) => (e.aliasId === event.aliasId ? event : e))
+        : [event, ...prev];
+    });
   }
 
   function handleEventUpdated(event: Event) {
@@ -185,10 +203,16 @@ export function HomePage() {
                         Gerencie todos os seus eventos de cheerleading.
                       </p>
                     </div>
-                    <Button onClick={() => setCreateOpen(true)}>
-                      <Plus data-icon="inline-start" />
-                      Novo evento
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" onClick={() => setJoinByCodeOpen(true)}>
+                        <Ticket data-icon="inline-start" />
+                        Tenho um código
+                      </Button>
+                      <Button onClick={() => setCreateOpen(true)}>
+                        <Plus data-icon="inline-start" />
+                        Novo evento
+                      </Button>
+                    </div>
                   </div>
 
                   <EventStatCards events={events} />
@@ -237,6 +261,7 @@ export function HomePage() {
                                 onDelete={setDeleteTarget}
                                 onViewHistory={handleViewHistory}
                                 onTogglePublish={handleTogglePublish}
+                                onShare={setShareTarget}
                               />
                             ) : (
                               <EventGridItem
@@ -250,6 +275,7 @@ export function HomePage() {
                                 onDelete={setDeleteTarget}
                                 onViewHistory={handleViewHistory}
                                 onTogglePublish={handleTogglePublish}
+                                onShare={setShareTarget}
                               />
                             ),
                           )}
@@ -281,6 +307,17 @@ export function HomePage() {
       </main>
 
       <CreateEventDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={handleEventCreated} />
+
+      <JoinByCodeDialog
+        open={joinByCodeOpen}
+        onOpenChange={setJoinByCodeOpen}
+        onJoined={handleEventJoined}
+      />
+
+      <ShareEventDialog
+        event={shareTarget}
+        onOpenChange={(open) => !open && setShareTarget(null)}
+      />
 
       <EditEventDialog
         event={editTarget}

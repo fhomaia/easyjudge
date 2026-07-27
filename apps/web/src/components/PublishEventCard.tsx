@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Check, CheckCircle2, PartyPopper, Rocket } from "lucide-react";
+import { Check, CheckCircle2, PartyPopper, QrCode, Rocket } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/FormError";
+import { ShareEventDialog } from "@/components/ShareEventDialog";
 import { eventsApi, ApiError, type Event } from "@/api/client";
 
 interface PublishEventCardProps {
@@ -28,6 +29,7 @@ export function PublishEventCard({
 }: PublishEventCardProps) {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const alreadyPublished = event.status !== "created";
 
@@ -55,6 +57,14 @@ export function PublishEventCard({
         <p className="max-w-md text-sm text-muted-foreground">
           &quot;{event.name}&quot; já está publicado e visível pra quem tem acesso a ele.
         </p>
+        <Button type="button" variant="outline" onClick={() => setSharing(true)}>
+          <QrCode data-icon="inline-start" />
+          Compartilhar evento
+        </Button>
+        <ShareEventDialog
+          event={sharing ? event : null}
+          onOpenChange={(open) => setSharing(open)}
+        />
       </div>
     );
   }

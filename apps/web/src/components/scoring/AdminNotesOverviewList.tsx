@@ -1,9 +1,14 @@
 import { ChevronRight } from "lucide-react";
 import { formatPercent, formatPoints } from "@/lib/formatNumber";
+import { cn } from "@/lib/utils";
 import type { AdminOverviewEntry } from "@/api/client";
 
 // Lista de apresentações 100% pontuadas (as incompletas ficam ocultas
-// — decisão do usuário) na visão do admin/assessor da tela de Notas.
+// — decisão do usuário) na visão do admin/assessor da tela de Notas —
+// com UMA exceção: apresentação com desistência sinalizada também
+// entra aqui (mesmo nunca tendo sido pontuada), sempre inativa e com a
+// badge "Desistência" (ver ScoringService.getAdminOverview/
+// buildTeamScopedOverview).
 interface AdminNotesOverviewListProps {
   entries: AdminOverviewEntry[];
   onSelect: (scheduleEntryId: string) => void;
@@ -24,8 +29,14 @@ export function AdminNotesOverviewList({ entries, onSelect }: AdminNotesOverview
         <button
           key={entry.scheduleEntryId}
           type="button"
+          disabled={entry.withdrawn}
           onClick={() => onSelect(entry.scheduleEntryId)}
-          className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left hover:border-primary/40 hover:bg-primary/5"
+          className={cn(
+            "flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left",
+            entry.withdrawn
+              ? "cursor-default opacity-60"
+              : "hover:border-primary/40 hover:bg-primary/5",
+          )}
         >
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-foreground">{entry.teamName}</p>
@@ -33,16 +44,23 @@ export function AdminNotesOverviewList({ entries, onSelect }: AdminNotesOverview
               {entry.categoryName} · {entry.resourceName}
             </p>
           </div>
-          <div className="shrink-0 text-right">
-            <p className="text-sm font-bold text-foreground">{formatPoints(entry.finalResult)} pts</p>
-            <p className="text-xs text-muted-foreground">{formatPercent(entry.percentage)}</p>
-          </div>
+          {!entry.withdrawn && (
+            <div className="shrink-0 text-right">
+              <p className="text-sm font-bold text-foreground">{formatPoints(entry.finalResult)} pts</p>
+              <p className="text-xs text-muted-foreground">{formatPercent(entry.percentage)}</p>
+            </div>
+          )}
+          {entry.withdrawn && (
+            <span className="shrink-0 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+              Desistência
+            </span>
+          )}
           {entry.contestationRequested && (
             <span className="shrink-0 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
               Contestação
             </span>
           )}
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          {!entry.withdrawn && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
         </button>
       ))}
     </div>

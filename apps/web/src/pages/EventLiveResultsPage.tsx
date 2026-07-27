@@ -4,7 +4,7 @@ import { Building2, CalendarDays, ChevronDown, MapPin, Medal, Star, Trophy, User
 import { AppSidebar } from "@/components/AppSidebar";
 import { EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
-import { resolveCenterTab } from "@/lib/eventNavPriority";
+import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatPercent, formatPoints } from "@/lib/formatNumber";
 import { FORMAT_LABELS } from "@/lib/categoryLabels";
@@ -181,7 +181,7 @@ export function EventLiveResultsPage() {
     current: "resultados",
     onNavigateHome: () => navigate(`/events/${event.id}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
     onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,

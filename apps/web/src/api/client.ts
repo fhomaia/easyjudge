@@ -167,6 +167,12 @@ export interface Event {
   location: string;
   venue: string | null;
   logoUrl: string | null;
+  // Código de compartilhamento (QR + texto) — só existe a partir do
+  // primeiro publish, estável através das versões (ver
+  // EventsService.publishEvent). null pra evento ainda "created", ou
+  // já publicado antes desta feature existir (até a próxima
+  // republicação).
+  eventCode: string | null;
   status: EventStatus;
   startedAt: string | null;
   createdById: string;
@@ -252,6 +258,15 @@ export const eventsApi = {
 
   unpublish: (id: string) =>
     authRequest<Event>(`/events/${id}/unpublish`, { method: "POST" }),
+
+  // Resgate de código/QR (ver Event.eventCode) — dá acesso de
+  // espectador ao evento pra quem chamou. Sem membership prévia
+  // exigida (funciona pra qualquer usuário autenticado).
+  joinByCode: (code: string) =>
+    authRequest<Event>("/events/join-by-code", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
 
   getActivityLog: (id: string) =>
     authRequest<EventActivityLogEntry[]>(`/events/${id}/activity`),
@@ -894,6 +909,8 @@ export interface ScheduleEntry {
   label: string | null;
   contestationRequestedAt: string | null;
   contestationResolvedAt: string | null;
+  withdrawnAt: string | null;
+  removedFromSchedule: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -1188,6 +1205,7 @@ export interface AdminOverviewEntry {
   contestationRequested: boolean;
   finalResult: number;
   percentage: number;
+  withdrawn: boolean;
 }
 
 // Liberação global do evento — "Liberar notas"/"Liberar contestação"/
@@ -1335,6 +1353,12 @@ export const teamScoringApi = {
     authRequest<void>(`/events/${eventId}/scoring/team/${scheduleEntryId}/contest`, {
       method: "POST",
     }),
+
+  // Ids das próprias equipes neste evento — usado pelo cronograma
+  // (EventLiveSchedulePage) pra decidir em quais linhas mostrar
+  // "Sinalizar desistência" (só nas apresentações do próprio programa).
+  getMyTeamIds: (eventId: string) =>
+    authRequest<string[]>(`/events/${eventId}/scoring/team/my-team-ids`),
 };
 
 // Visão do Atleta na tela de Notas — igual à do Programa, mas
@@ -1392,6 +1416,19 @@ export const scoringApi = {
       body: JSON.stringify({ events }),
     }),
 
+  // Fluxo de desistência — admin/assessor (qualquer apresentação) ou
+  // programa (só das próprias equipes). `removeFromSchedule` só tem
+  // efeito pra admin/assessor (ver ScoringService.withdrawPresentation).
+  withdrawPresentation: (
+    eventId: string,
+    scheduleEntryId: string,
+    payload: { removeFromSchedule?: boolean },
+  ) =>
+    authRequest<void>(`/events/${eventId}/scoring/entries/${scheduleEntryId}/withdraw`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   headJudge: {
     getRoster: (eventId: string, scheduleEntryId: string) =>
       authRequest<HeadJudgeRoster>(
@@ -1428,7 +1465,8 @@ export type NotificationType =
   | "results_released"
   | "contestation_released"
   | "evaluation_pending"
-  | "contestation_requested";
+  | "contestation_requested"
+  | "presentation_cancelled";
 
 export interface NotificationView {
   id: string;

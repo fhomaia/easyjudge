@@ -8,8 +8,23 @@ import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/FormError";
 import { RegisterDialog } from "@/components/RegisterDialog";
 import { BrandBackdrop } from "@/components/BrandBackdrop";
-import { authApi, ApiError } from "@/api/client";
+import { consumePendingJoinCode } from "@/lib/pendingJoinCode";
+import { authApi, eventsApi, ApiError } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+
+// Se o usuário chegou aqui vindo de um /join/:code (ver JoinEventPage)
+// enquanto deslogado, o código ficou guardado — resgata (melhor
+// esforço, erro é ignorado: o login/cadastro já aconteceu de qualquer
+// forma) antes de ir pra Home, onde o evento já aparece na lista.
+async function joinPendingEventIfAny() {
+  const code = consumePendingJoinCode();
+  if (!code) return;
+  try {
+    await eventsApi.joinByCode(code);
+  } catch {
+    // melhor esforço — código inválido/expirado não deve travar o login
+  }
+}
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -28,6 +43,7 @@ export function LoginPage() {
     try {
       const { accessToken } = await authApi.login(email, password);
       login(accessToken);
+      await joinPendingEventIfAny();
       navigate("/");
     } catch (err) {
       setError(
@@ -106,7 +122,9 @@ export function LoginPage() {
       <RegisterDialog
         open={registerOpen}
         onOpenChange={setRegisterOpen}
-        onSuccess={() => navigate("/")}
+        onSuccess={() => {
+          void joinPendingEventIfAny().then(() => navigate("/"));
+        }}
       />
     </div>
   );

@@ -20,12 +20,16 @@ import { ScoringTemplatesListPage } from "@/pages/ScoringTemplatesListPage";
 import { ScoringTemplateBuilderPage } from "@/pages/ScoringTemplateBuilderPage";
 import { AthletesManagementPage } from "@/pages/AthletesManagementPage";
 import { AthleteProgramsPage } from "@/pages/AthleteProgramsPage";
+import { JoinEventPage } from "@/pages/JoinEventPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { GuestRoute } from "@/components/GuestRoute";
 
 function App() {
   return (
     <Routes>
+      {/* Fora de GuestRoute/ProtectedRoute de propósito — precisa
+          funcionar logado ou deslogado (ver JoinEventPage). */}
+      <Route path="/join/:code" element={<JoinEventPage />} />
       <Route element={<GuestRoute />}>
         <Route path="/login" element={<LoginPage />} />
       </Route>

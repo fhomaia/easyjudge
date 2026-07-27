@@ -1,5 +1,6 @@
 import type { ScheduleDay, ScheduleEntry } from "@/api/client";
 import { computeResourceTimes } from "@/lib/scheduleTime";
+import { filterRemovedFromSchedule } from "@/lib/scheduleWithdrawal";
 
 export interface FullScheduleItem {
   entry: ScheduleEntry;
@@ -20,7 +21,9 @@ export interface FullScheduleItem {
 // premiação, de qualquer dia, sem filtro nenhum — a tela de "Cronograma
 // completo" que consome isso é quem filtra (tipo/equipe/programa/busca).
 export function computeFullSchedule(days: ScheduleDay[]): FullScheduleItem[] {
-  const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
   const items: FullScheduleItem[] = [];
 
   for (const day of sortedDays) {

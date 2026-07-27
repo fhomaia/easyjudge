@@ -12,6 +12,7 @@ import {
   Percent,
   Scale,
   Trophy,
+  XCircle,
 } from "lucide-react";
 import { MobileNavSheet } from "@/components/MobileNavSheet";
 import { EventLiveNotesDesktopView } from "@/components/EventLiveNotesDesktopView";
@@ -24,7 +25,7 @@ import { formatMinutes } from "@/lib/scheduleTime";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import { toIsoDate } from "@/lib/eventLiveSchedule";
 import { buildJudgePresentationList, functionLabelsFor, type JudgePresentationItem } from "@/lib/judgeSchedule";
-import { resolveCenterTab } from "@/lib/eventNavPriority";
+import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { cn } from "@/lib/utils";
 import {
   categoriesApi,
@@ -111,7 +112,13 @@ export function EventLiveNotesPage() {
     if (!days || !assignment) return [];
     return buildJudgePresentationList(days, categoriesById, assignment, submittedSet);
   }, [days, assignment, categoriesById, submittedSet]);
-  const nextIndex = myPresentations.findIndex((item) => !item.submitted);
+  // Desistida nunca fica "submitted" de verdade (ninguém pontua) mas
+  // também não é mais "a próxima" — pula pra não mandar o jurado pra
+  // uma súmula que não aceita mais nota (ver ScoringService.
+  // buildScoreEventRows).
+  const nextIndex = myPresentations.findIndex(
+    (item) => !item.submitted && !item.entry.withdrawnAt,
+  );
   const completedCount = myPresentations.filter((item) => item.submitted).length;
   // Contestações pendentes (a resolvida some da lista — deixou de
   // precisar de atenção), na ordem em que a equipe solicitou —
@@ -143,7 +150,7 @@ export function EventLiveNotesPage() {
     current: "notas",
     onNavigateHome: () => navigate(`/events/${event.id}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
     onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,
@@ -337,14 +344,20 @@ export function EventLiveNotesPage() {
                       const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
                       const isNext = index === nextIndex;
                       const contested = Boolean(item.entry.contestationRequestedAt);
+                      const withdrawn = Boolean(item.entry.withdrawnAt);
                       return (
                         <button
                           key={item.entry.id}
                           type="button"
+                          disabled={withdrawn}
                           onClick={() => navigate(`/events/${event.id}/live/scoring/${item.entry.id}`)}
                           className={cn(
                             "flex w-full items-center gap-3 rounded-xl p-3 text-left first:mt-0",
-                            isNext ? "bg-primary/5 ring-1 ring-primary/30" : "hover:bg-muted",
+                            withdrawn
+                              ? "cursor-default opacity-60"
+                              : isNext
+                                ? "bg-primary/5 ring-1 ring-primary/30"
+                                : "hover:bg-muted",
                           )}
                         >
                           <div className="w-14 shrink-0">
@@ -376,6 +389,12 @@ export function EventLiveNotesPage() {
                               <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
                                 <AlertTriangle className="size-3.5" />
                                 Contestação
+                              </span>
+                            )}
+                            {withdrawn && (
+                              <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+                                <XCircle className="size-3.5" />
+                                Desistência
                               </span>
                             )}
                           </div>

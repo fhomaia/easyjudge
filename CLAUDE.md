@@ -3,8 +3,25 @@
 Plataforma SaaS para gestão de notas e resultados em tempo real em
 competições de cheerleading. Usada por jurados (atribuem notas) e
 produtores de evento (gerenciam a competição e acompanham o resultado).
-Atletas terão acesso de consulta (própria nota + resultado por categoria),
-mas essa jornada é a última a ser construída.
+Atletas têm acesso de consulta (própria nota + resultado, via vínculo
+com o programa — ver módulo `athletes`) e espectadores podem entrar num
+evento publicado escaneando um QR/digitando um código (ver módulo
+`events`, `EventsService.joinByCode`).
+
+**Nota sobre este arquivo (2026-07-27):** entre 2026-07-19 e 2026-07-26
+foi construída uma quantidade grande de funcionalidade — lançamento de
+notas de verdade (`scoring`, event sourcing em `ScoreEvent`), o painel
+"evento ao vivo" inteiro (Início/Cronograma/Notas/Resultados/
+Notificações do jurado, do produtor e do programa), o módulo
+`notifications`, a jornada do atleta (`athletes`, vínculo
+atleta↔programa) e a feature de impersonation — sem que este arquivo
+fosse atualizado (os commits desse período são grandes e squashed, sem
+o detalhamento de decisão que o resto deste arquivo tem). As seções
+"Jornada do usuário" e "Próximos passos" abaixo foram corrigidas nos
+fatos básicos (o quê já existe), mas **não têm o mesmo nível de detalhe
+de decisão/gotcha que o resto do arquivo** pra esse período específico
+— só a partir da seção "Fluxo de desistência de apresentação" (2026-07-26)
+em diante este arquivo volta a ter o detalhamento de sempre.
 
 **Decisão de escopo (2026-07-12):** nesta fase, jurado (`JUDGE`) tem as
 mesmas permissões de produtor (`ORGANIZATION`) — inclusive criar e
@@ -33,7 +50,17 @@ antes de ela ter conta na plataforma ("convite pendente"), reclamado
 automaticamente no cadastro. Ver seção "Gerenciamento de acessos do
 evento (`event-staff`)" mais abaixo pra detalhes.
 
-Uso inicial: **somente desktop**. Mobile não é prioridade na POC.
+Uso inicial: **somente desktop** pras telas de configuração/gestão do
+evento (Setup, Cronograma-construtor, Painel de jurados, etc.) — mobile
+não é prioridade pra essas. **Atualização:** as telas *operacionais* do
+"evento ao vivo" (jurado lançando nota, atleta/espectador consultando,
+programa acompanhando as próprias equipes) são **mobile-first**, mesmo
+app web, não um projeto nativo separado — decisão tomada quando esse
+painel foi construído, já que quem usa essas telas está literalmente no
+chão da competição com o celular na mão. As telas com `AppSidebar`
+completa (Início/Cronograma/Resultados/Notificações/Notas do painel ao
+vivo) têm layout desktop também, mas o mobile continua sendo o alvo
+principal de design pra elas.
 
 ## Requisitos não-negociáveis
 
@@ -93,12 +120,11 @@ migrarmos para produção — ainda não implementado.
 
 Cada domínio (`auth`, `users`, `events`, `categories`, `programs`,
 `teams`, `judges`, `judging`, `schedule`, `scoring-templates`,
-`regulations`, ...) é uma pasta autocontida em
-`apps/api/src/`, com `controllers/` e `services/` como subpastas
-próprias dentro dele (não pastas globais compartilhadas entre
+`regulations`, `scoring`, `notifications`, `athletes`, ...) é uma pasta
+autocontida em `apps/api/src/`, com `controllers/` e `services/` como
+subpastas próprias dentro dele (não pastas globais compartilhadas entre
 domínios). `dto/`, `entities/`, `*.module.ts` ficam na raiz de cada
-domínio. Mesmo padrão a seguir para os próximos domínios (`Routine`,
-`ScoreEvent`, `Result`, etc).
+domínio. Mesmo padrão a seguir para os próximos domínios.
 
 ```
 easyjudge/
@@ -152,6 +178,19 @@ easyjudge/
 │       │   ├── regulations/    # Regulation + RegulationDocument, 1:1 com Event (por eventId)
 │       │   │   ├── controllers/ services/ dto/ entities/ enums/ constants/
 │       │   │   └── regulations.module.ts
+│       │   ├── scoring/        # ScoreEvent (event sourcing append-only, nunca UPDATE) —
+│       │   │   │                # lançamento de notas de verdade + apuração de resultado;
+│       │   │   │                # inclui WithdrawalController (desistência de apresentação)
+│       │   │   ├── controllers/ services/ dto/ entities/ enums/
+│       │   │   └── scoring.module.ts
+│       │   ├── notifications/  # Notification — avisos in-app (evento iniciado, apresentação
+│       │   │   │                # cancelada, súmulas liberadas, etc.), audiência ALL/STAFF
+│       │   │   ├── controllers/ services/ entities/ enums/
+│       │   │   └── notifications.module.ts
+│       │   ├── athletes/       # AthleteLink — vínculo atleta<->programa (pedido pelo atleta ou
+│       │   │   │                # cadastrado pelo programa; confirmedAt libera conteúdo de notas)
+│       │   │   ├── controllers/ services/ dto/ entities/
+│       │   │   └── athletes.module.ts
 │       │   ├── common/         # enums, validators e config compartilhados (CPF/CNPJ, senha forte, upload de logo/documento)
 │       │   ├── migrations/     # migrations do TypeORM
 │       │   ├── app.module.ts
@@ -162,15 +201,23 @@ easyjudge/
 │       ├── src/
 │       │   ├── api/            # client.ts — fetch wrapper para a API (via proxy /api)
 │       │   ├── store/          # auth.ts — Zustand + persist (JWT no localStorage)
-│       │   ├── pages/          # LoginPage, HomePage, EventSetupPage, EventStaffPage,
+│       │   ├── pages/          # LoginPage, HomePage, JoinEventPage (/join/:code),
+│       │   │   │                # EventSetupPage, EventStaffPage, EventHistoryPage,
 │       │   │   │                # CategoriesPage, ProgramsPage, RegulationPage,
 │       │   │   │                # JudgingPage, SchedulePage,
-│       │   │   │                # ScoringTemplatesListPage/BuilderPage
+│       │   │   │                # ScoringTemplatesListPage/BuilderPage,
+│       │   │   │                # AthletesManagementPage, AthleteProgramsPage,
+│       │   │   │                # EventLiveDashboardPage/SchedulePage/NotesPage/
+│       │   │   │                # ResultsPage/NotificationsPage/ScoringPage/TeamNotesPage
+│       │   │   │                # ("evento ao vivo" — /events/:id/live/...)
 │       │   ├── components/     # RegisterDialog, ProtectedRoute, GuestRoute, FormError,
+│       │   │   │                # AppSidebar (nav completa, usada por toda tela "ao vivo"),
+│       │   │   │                # ShareEventDialog/JoinByCodeDialog (código+QR de evento),
 │       │   │   │                # BrandBackdrop (raio riscando a tela -> clarão -> split azul/amarelo)
 │       │   │   └── ui/         # componentes shadcn/ui (gerados via CLI, editáveis)
 │       │   ├── lib/utils.ts    # helper `cn` (shadcn), scheduleTime.ts, scheduleConflicts.ts,
-│       │   │   │                # dndProjection.ts, useEventSetupGuard.ts, eventMemberRoles.ts
+│       │   │   │                # dndProjection.ts, useEventSetupGuard.ts, useEventLiveGuard.ts,
+│       │   │   │                # eventMemberRoles.ts, eventNavPriority.ts, pendingJoinCode.ts
 │       │   └── App.tsx         # rotas
 │       ├── public/
 │       │   ├── logo.png        # logo (fornecida pelo usuário, ver "Status atual")
@@ -189,16 +236,35 @@ que cada um vê/faz depois de logado (controlado por `role` + guards).
 
 Ordem de construção definida:
 1. **Auth + User** — ✅ feito (ver "Status atual" abaixo)
-2. **Jornada do jurado** — login → ver evento/rotinas atribuídas → atribuir
-   notas em tempo real (a *escala* de arbitragem — quem julga o quê, em
-   qual pista — já existe, ver módulo `judging`; falta a tela do jurado
-   pra efetivamente lançar notas, que ainda não existe)
-3. **Jornada do produtor** — criar evento, cadastrar jurados/rotinas, painel
-   de acompanhamento em tempo real, apuração de resultado (o setup do
-   evento, catálogo de jurados/programas e cronograma já existem; falta o
-   painel de acompanhamento em tempo real e a apuração de resultado)
-4. **Jornada do atleta** — ver própria nota + resultado geral das categorias
-   em que competiu (ainda não iniciado)
+2. **Jornada do jurado** — ✅ feito. Login → painel "evento ao vivo"
+   (`/events/:id/live`, `EventLiveDashboardPage`) → tela de Notas
+   (`/live/notes`, lista as apresentações que o jurado julga, vindas de
+   `CriterionJudgeAssignment`) → lançar nota de verdade
+   (`/live/scoring/:entryId`, `EventLiveScoringPage`), com o event
+   sourcing em `ScoreEvent` (módulo `scoring`, append-only) prometido
+   nos requisitos não-negociáveis.
+3. **Jornada do produtor** — ✅ feito. Setup do evento, painel "evento ao
+   vivo" (Início/Cronograma/Notas administrativas/Resultados/
+   Notificações — mesmas rotas `/live/*` acima, conteúdo varia por
+   papel), liberação de notas/resultado (`Event.scoresReleasedAt` etc.,
+   ver `ReleaseFlagsPanel`) e apuração de resultado
+   (`/live/results`, `ResultsController`). Mecanismo de tempo real
+   ainda não decidido (painel hoje usa polling, não WebSocket/SSE — ver
+   "Próximos passos").
+4. **Jornada do atleta** — ✅ feito, via vínculo com o programa (módulo
+   `athletes`, `AthleteLink`): atleta pede vínculo ou o programa
+   cadastra o atleta; o programa precisa **confirmar**
+   (`AthleteLink.confirmedAt`) pra liberar o conteúdo das próprias
+   notas (`/live/team`-equivalente pro atleta, `AthleteNotesOverview` +
+   `ScoringService.getAthleteOverview`) — o papel `EventMemberRole.
+   ATHLETE` em si já é concedido na criação/resolução do vínculo,
+   independente da confirmação (ver `AthletesService.
+   syncEventAccessForLink`).
+5. **Jornada do espectador genérico** — ✅ feito (2026-07-27, ver seção
+   "Código + QR de evento" mais abaixo): qualquer usuário autenticado
+   pode entrar num evento publicado escaneando o QR ou digitando o
+   código do evento, ganhando `EventMemberRole.SPECTATOR` — sem
+   precisar de convite manual no roster.
 
 Fluxo de cadastro completo (já implementado):
 login → "criar conta" (popup) → escolhe role (judge/athlete/organization)
@@ -1307,24 +1373,193 @@ número, caractere especial) + confirmar senha → conta criada e já loga
     que exige nome e sobrenome separados. Vale unificar se isso virar
     fonte de bug visual no roster.
 
+- **Fluxo de desistência de apresentação (2026-07-26).** Antes não
+  existia forma de marcar que uma equipe desistiu de uma apresentação
+  — a notificação "[apresentação] cancelada" já estava prevista no
+  enum desde antes, mas ficou deliberadamente sem uso até essa
+  funcionalidade existir.
+  - **Modelo**: `ScheduleEntry` ganhou `withdrawnAt: Date | null`
+    (nunca é limpo de volta, mesmo espírito de
+    `contestationRequestedAt`) e `removedFromSchedule: boolean` (só
+    admin/assessor liga; controla só a visão de TIMELINE do
+    cronograma, nunca a das súmulas).
+  - **Autorização** (`ScoringService.withdrawPresentation`): admin/
+    assessor podem desistir de qualquer apresentação e decidir remover
+    do cronograma; programa só das próprias equipes (checado via
+    `assertProgramOwnsTeam`), sempre com `removeFromSchedule = false`
+    forçado (não é decisão dele). Só é possível enquanto a apresentação
+    não tem **nenhum** `ScoreEvent` (cronômetro contado como "já
+    começou").
+  - **Efeito no cronograma**: como o horário nunca é persistido (é
+    sempre `order` × `durationMinutes` computado no cliente, ver
+    `lib/scheduleTime.ts`), uma apresentação com `removedFromSchedule`
+    é filtrada **antes** do cálculo de horário
+    (`lib/scheduleWithdrawal.ts`, chamado no topo de
+    `computeFullSchedule`/`computeEventLiveSchedule`) — as
+    apresentações seguintes da mesma pista já recuam automaticamente
+    pra preencher o vão, sem nenhum recálculo/reconciliação explícita
+    (foi só um efeito colateral do algoritmo de soma sequencial já
+    existente, confirmado com um teste manual: remover uma apresentação
+    de 5min fez as duas seguintes recuarem exatamente 5min).
+  - **Súmulas**: `getAdminOverview`/`buildTeamScopedOverview`
+    (`ScoringService`) normalmente só listam apresentação 100%
+    pontuada — ganharam uma exceção: apresentação desistida entra
+    mesmo incompleta, sempre com `withdrawn: true` e resultado zerado.
+    Badge "Desistência" (mesmo tom vermelho de "Contestação") em
+    `AdminNotesOverviewList`/`EventLiveNotesPage`/
+    `EventLiveNotesDesktopView`, linha desabilitada/dessaturada.
+  - **Bloqueio de nota**: `buildScoreEventRows` rejeita (403) qualquer
+    `ScoreEvent` novo pra uma apresentação com `withdrawnAt` setado.
+  - **Notificação**: `ScheduleService.setWithdrawn` (não
+    `ScoringService`, por já ter acesso a `Event`/`Team` ali) dispara
+    `NotificationType.PRESENTATION_CANCELLED` pra audiência `ALL`.
+  - **UI**: `EventLiveSchedulePage` ganhou menu "⋯" por linha tipo
+    `presentation` ("Sinalizar desistência", condicional a admin/
+    assessor ou programa dono da equipe), `WithdrawPresentationDialog`
+    (checkbox "remover do cronograma" só aparece pra admin/assessor).
+
+- **Bug real achado e corrigido durante o teste manual desta feature**:
+  `ScheduleController.getDays` (rota que `EventLiveSchedulePage`
+  precisa pra carregar o cronograma) nunca liberava acesso pra
+  `UserRole.PROGRAM`/`EventMemberRole.PROGRAM` — só JUDGE/ADMIN/
+  ASSESSOR (o `@Roles` de classe do controller nunca incluiu PROGRAM,
+  só a rota `days` tinha um `@EventRoles` de método que também
+  esquecia PROGRAM). Isso bloqueava silenciosamente a tela de
+  cronograma inteira pra qualquer usuário-programa — nunca tinha sido
+  pego porque não existia nenhum `EventMember` com papel `program` no
+  banco até esta sessão criar um pra testar a própria feature de
+  desistência. Corrigido adicionando PROGRAM aos dois níveis, mesmo
+  padrão já usado ali pra JUDGE.
+
+- **Layout desktop da tela "Notas" do programa + roteamento da aba
+  "Notas" (2026-07-27).** `EventLiveTeamNotesPage` (`/live/team`,
+  visão do programa sobre as notas das próprias equipes) tinha sido
+  construída sem `AppSidebar` de propósito ("tela enxuta"), mas isso
+  deixava o conteúdo espremido num container `max-w-2xl` centralizado
+  em telas largas — diferente de todas as outras telas do evento ao
+  vivo (Cronograma/Resultados/Notificações/Notas do jurado), que já
+  usam a `AppSidebar` completa incondicionalmente pra qualquer papel.
+  Corrigido dando a ela o mesmo split mobile/desktop que
+  `EventLiveNotesPage`/`EventLiveNotesDesktopView` já usa (mobile
+  enxuto preservado, `hidden lg:flex` com `AppSidebar` completa no
+  desktop).
+  - **Bug relacionado, corrigido junto**: a aba "Notas" da navegação,
+    em **todas** as páginas do evento ao vivo, estava com o destino
+    fixo em `/live/notes` (a página do jurado/admin/atleta) —
+    pra um usuário-programa isso sempre caía na mensagem "Você não
+    está escalado como jurado". Criada `resolveNotesHref(eventId,
+    roles)` em `lib/eventNavPriority.ts` (mesma regra de precedência
+    já usada pelo redirect `onlyProgram` de `EventLiveDashboardPage`:
+    só quem é EXCLUSIVAMENTE programa vai pra `/live/team`, todo o
+    resto — mesmo acumulando `program` com outro papel — vai pro hub
+    `/live/notes`), aplicada nos 5 pontos que geravam esse link.
+
+- **Código + QR de evento pra acesso de espectador (2026-07-27).**
+  Ao publicar um evento pela primeira vez, ele ganha um `eventCode`
+  (8 caracteres, alfabeto sem `0/O/1/I/L` pra evitar confusão ao
+  digitar à mão, gerado com `crypto.randomInt` — sem dependência nova,
+  não existia nenhum gerador de código/slug no projeto) — estável
+  através das versões (igual a `aliasId`), carregado adiante em toda
+  republicação (`EventsService.publishEvent`: `eventCode: event.
+  eventCode ?? (await this.generateUniqueEventCode(manager))`).
+  - **Gotcha real, achado e corrigido durante o teste manual**: o
+    índice único do `event_code` **precisa** ser parcial em `active =
+    true` (`CREATE UNIQUE INDEX ... WHERE event_code IS NOT NULL AND
+    active = true`, mesmo padrão de `IDX_events_alias_id_active`) — a
+    primeira versão da migration só filtrava `event_code IS NOT NULL`,
+    e como a versão antiga (desativada) de um evento **mantém** o
+    `event_code` gravado pra sempre (é histórico, nunca é limpo),
+    republicar um evento colidia com o próprio código da versão
+    anterior e estourava 500 (`23505` do Postgres). Pego só porque o
+    fluxo de teste incluiu publicar → despublicar → republicar o mesmo
+    evento — vale lembrar desse padrão ("coluna estável entre versões,
+    mas a versão antiga não é limpa") sempre que uma feature nova
+    precisar de uma coluna única carregada adiante em `publishEvent`.
+  - **Resgate**: `POST /events/join-by-code` (`EventsController`, sem
+    `@Roles`/`EventMemberGuard` — mesmo padrão de `GET /events/:id`,
+    que já é alcançável por qualquer usuário autenticado sem
+    membership prévia) normaliza a entrada
+    (`trim().toUpperCase().replace(/[^A-Z0-9]/g, '')`), acha o evento
+    ativo por `eventCode`, exige status `published`/`started`/
+    `completed` (`VISIBLE_TO_NON_STAFF`, reaproveitado), e chama
+    `EventsService.upsertMemberRole(aliasId, SPECTATOR, ...)` — método
+    já existente (usado pelo sync automático de jurado/programa/
+    atleta), idempotente: se a pessoa já tem qualquer papel, só
+    acrescenta SPECTATOR ao array, nunca duplica linha nem rebaixa
+    quem já é admin/jurado.
+  - **QR renderizado no cliente** (`qrcode.react`, única lib nova,
+    `QRCodeCanvas`) codificando `${origin}/join/${eventCode}` — sem
+    endpoint de imagem no backend, mesmo raciocínio de evitar
+    storage/complexidade desnecessária pra uma POC. "Baixar QR"
+    exporta o canvas via `toDataURL('image/png')` + link `download`
+    sintético; "Copiar código" usa `navigator.clipboard.writeText`
+    (primeiro uso de clipboard no projeto).
+  - **`/join/:code`** (`JoinEventPage`, rota pública — fora de
+    `GuestRoute`/`ProtectedRoute` de propósito, precisa funcionar nos
+    dois estados de auth): já logado, resgata na hora e navega pra
+    `/events/:id/live/results` — não `/live` — porque
+    `useEventLiveGuard` (usado por Início/Cronograma/Notas) não libera
+    `SPECTATOR` por padrão, só `EventLiveResultsPage` passa
+    `allowSpectator: true`; é a única página que um espectador
+    recém-chegado tem garantia de conseguir abrir sem ser
+    redirecionado de volta pra Home. Deslogado, guarda o código em
+    `localStorage` (`lib/pendingJoinCode.ts` — chave própria, uso
+    único, lê e já limpa) e manda pro login; `LoginPage` consome o
+    código pendente (melhor esforço, erro ignorado) tanto no login
+    quanto no `onSuccess` do cadastro, antes do `navigate("/")` de
+    sempre — não existe (e não foi construído) nenhum mecanismo
+    genérico de "volta pra onde eu estava depois do login" no app
+    (`ProtectedRoute`/`GuestRoute` sempre redirecionam pra destino
+    fixo); esse `localStorage` isolado é escopado só pra este fluxo.
+  - **UI**: `ShareEventDialog` (novo) acionável de dois lugares —
+    `PublishEventCard` (branch "já publicado" do Setup) e um item novo
+    "Compartilhar evento" em `EventActionsMenu` (Home, admin-only,
+    `event.status !== "created"`). `JoinByCodeDialog` (novo) + botão
+    "Tenho um código" no cabeçalho da Home, ao lado de "Novo evento".
+  - **`eventCode` não tem endpoint próprio** — vai junto no payload
+    normal de `Event`/`EventWithRole` pra qualquer membro (mesmo nível
+    de exposição que `aliasId`/`createdById` já têm hoje); só a UI é
+    que restringe o botão de compartilhar a admin. Eventos publicados
+    **antes** desta feature ficam com `eventCode: null` até a próxima
+    republicação (sem backfill) — `ShareEventDialog` mostra uma
+    mensagem nesse caso em vez de quebrar.
+
+- **Bug latente corrigido: `ROLE_PRECEDENCE` não incluía `ATHLETE`**
+  (`EventsService`, achado ao responder uma pergunta do usuário sobre
+  o cenário "usuário que entrou via QR como espectador depois vira
+  atleta confirmado de uma equipe do evento"). Como
+  `upsertMemberRole` só ACRESCENTA papel (nunca remove), esse usuário
+  fica com `roles: ['spectator', 'athlete']` — e como `ATHLETE` não
+  estava na lista de prioridade usada por `highestRole()` (que reduz
+  o array pro campo singular `currentUserRole`, pra telas antigas que
+  só entendem um papel), `SPECTATOR` vencia por omissão, não por
+  desenho. Corrigido inserindo `ATHLETE` logo antes de `SPECTATOR` na
+  lista. Era dormente até agora (nenhuma tela do frontend compara
+  `currentUserRole` contra `"athlete"`/`"spectator"` — os guards que
+  importam checam o array `currentUserRoles` inteiro, não o campo
+  reduzido), mas ficaria incorreto no dia que alguma tela passasse a
+  confiar nesse campo pra distinguir os dois papéis.
+
 ## Próximos passos (não iniciados ainda)
 
-1. **Lançamento de notas em si.** Toda a escala de arbitragem já existe
-   (módulo `judging` — quem julga o quê, em qual pista) e o cronograma
-   já existe (módulo `schedule`), mas ninguém ainda lança uma nota de
-   verdade. Falta modelar `ScoreEvent` (event sourcing, append-only,
-   ver "Requisitos não-negociáveis") e `Result` (apuração), e construir
-   a tela do jurado que consome as `CriterionJudgeAssignment` dele pra
-   saber o que julgar, com optimistic UI + buffer local (IndexedDB) +
-   fila de retry.
-2. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
-   Supabase Realtime) para o painel do produtor
-3. Transição de status `completed` ("concluir evento") — `created` ⇄
+**Atualização (2026-07-27):** os itens 1 ("lançamento de notas") e 6
+("jornada do atleta/espectador") desta lista, como estava escrita até
+2026-07-19, **já foram feitos** — ver seção "Nota sobre este arquivo"
+no topo e "Jornada do usuário" logo abaixo dela. Lista renumerada só
+com o que continua de fato pendente:
+
+1. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
+   Supabase Realtime) para o painel do produtor — confirmado que ainda
+   não existe (nenhuma dependência de socket/realtime em nenhum dos
+   dois `package.json`), painel ao vivo hoje se atualiza por
+   polling/refetch manual.
+2. Transição de status `completed` ("concluir evento") — `created` ⇄
    `published` → `started` já existem (`PATCH /events/:id`, `POST
-   /events/:id/publish`, `POST /events/:id/start`); falta decidir a
-   regra de "concluir" (manual pelo admin? automático quando os
-   `competitionDays` terminam?)
-4. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
+   /events/:id/publish`, `POST /events/:id/start`); o enum
+   `EventStatus.COMPLETED` já existe mas não tem nenhuma rota que
+   transicione pra ele. Falta decidir a regra (manual pelo admin?
+   automático quando os `competitionDays` terminam?)
+3. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje
    é por `id` de versão específica — ver gotcha de versionamento
    acima). **Atualização (2026-07-19):** o refactor de endereçar as
    entidades filhas do evento por `aliasId` internamente (não mais por
@@ -1339,17 +1574,21 @@ número, caractere especial) + confirmar senha → conta criada e já loga
    versão específica (`/events/:eventId/...`), não o `aliasId` —
    trocar isso é mudança maior (afeta como o frontend guarda/navega
    links de evento) e continua fora de escopo por enquanto.
-5. Cobertura de testes automatizados: nenhum dos services/guards novos
-   (`schedule`, `judging`, `event-staff`, `EventMemberGuard`) tem
-   `.spec.ts` ainda — todo o backend segue validado só manualmente
+4. Cobertura de testes automatizados: nenhum service/guard do projeto
+   tem `.spec.ts` ainda — todo o backend segue validado só manualmente
    (curl/navegador), o que já escalou mal o suficiente pra virar risco
-   real com esse volume de domínios interdependentes
-6. Jornada do atleta/espectador (consulta de nota e resultado) — o
-   papel `SPECTATOR` já existe no `EventMemberRole` e `JudgingController`/
-   `EventTeamsController` já liberam leitura pra `JUDGE`, mas não há
-   nenhuma tela pra esses papéis ainda; todas as páginas de setup
-   redirecionam quem não é admin/assessor pra Home
-   (`useEventSetupGuard`)
+   real com esse volume de domínios interdependentes (hoje inclui
+   `scoring`/`notifications`/`athletes` também, não só os módulos de
+   setup do evento).
+5. **Backfill de documentação (2026-07-19 → 2026-07-26).** O período
+   que construiu lançamento de notas, o painel "evento ao vivo"
+   inteiro, notificações, jornada do atleta e impersonation não tem o
+   detalhamento de decisão/gotcha que o resto deste arquivo tem (ver
+   nota no topo do arquivo) — só reconstruir isso com precisão exigiria
+   ou as transcrições de sessão daquele período (não disponíveis aqui)
+   ou uma exploração grande de código pra reverse-engineer decisões
+   sem garantia de acertar o "porquê". Fora de escopo até o usuário
+   pedir explicitamente.
 
 ## Gotchas / decisões técnicas já resolvidas (não repetir o troubleshooting)
 

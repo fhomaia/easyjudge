@@ -1,6 +1,3 @@
-// Gatilhos reais implementados (2026-07-26) — "[apresentação]
-// cancelada"/desistência ficou de fora desta rodada por depender de uma
-// funcionalidade que ainda não existe (confirmado com o usuário).
 // Extensível via migration ADD VALUE, mesmo padrão de ScoreEventKind.
 export enum NotificationType {
   PRESENTATION_STARTED = 'presentation_started',
@@ -10,4 +7,7 @@ export enum NotificationType {
   CONTESTATION_RELEASED = 'contestation_released',
   EVALUATION_PENDING = 'evaluation_pending',
   CONTESTATION_REQUESTED = 'contestation_requested',
+  // Disparada por ScoringService.withdrawPresentation (2026-07-26) —
+  // fluxo de desistência.
+  PRESENTATION_CANCELLED = 'presentation_cancelled',
 }

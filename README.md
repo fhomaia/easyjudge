@@ -1,10 +1,12 @@
 # easyJudge
 
 Plataforma SaaS para gestão de notas e resultados em tempo real em
-competições de cheerleading. Jurados atribuem notas, produtores gerenciam
-a competição e acompanham o resultado, e atletas consultam sua própria
-nota (última jornada a ser construída). Nesta fase, jurado tem as mesmas
-permissões de produtor (pode criar e gerenciar eventos também).
+competições de cheerleading. Jurados lançam notas ao vivo, produtores
+gerenciam a competição e acompanham o resultado, atletas consultam a
+própria nota (via vínculo com o programa/equipe), e qualquer pessoa pode
+entrar como espectador de um evento publicado escaneando um QR ou
+digitando um código. Nesta fase, jurado tem as mesmas permissões de
+produtor (pode criar e gerenciar eventos também).
 
 > Nota: para decisões técnicas, gotchas e contexto detalhado voltado a
 > desenvolvimento assistido por IA, veja [`CLAUDE.md`](./CLAUDE.md). Este
@@ -88,9 +90,9 @@ a API (configurado em `apps/web/vite.config.ts`).
 - Telas de "criar evento" completas: evento (com upload de logo),
   categorias (com formato/modalidade/divisão/nível/tempo de
   apresentação) e equipes/programas
-- Setup do evento com checklist de 5 etapas (Regulamento, Categorias,
-  Programas e equipes, Painel de jurados, Cronograma) — as 2 últimas
-  ainda são placeholders "disponível em breve"
+- Setup do evento com checklist de 5 etapas, todas com tela própria:
+  Regulamento, Categorias, Programas e equipes, Cronograma, Painel de
+  jurados
 - **Sistema de pontuação** (`scoring-templates`): biblioteca pessoal de
   templates reutilizáveis entre eventos, com árvore de critérios
   (grupos/itens, drag-and-drop pra reordenar/reparentar), clonagem de
@@ -128,23 +130,47 @@ a API (configurado em `apps/web/vite.config.ts`).
 - **Publicar evento**: fluxo dedicado (card no fim do setup + animação
   de celebração) que só libera quando todas as etapas do checklist
   estão completas
+- **Lançamento de notas** (`scoring`): `ScoreEvent` append-only (event
+  sourcing, nunca `UPDATE`) — jurado lança nota/dedução/cronômetro pela
+  escala de arbitragem que já tinha sido montada; súmula agregada por
+  apresentação, resultado calculado a partir dos eventos
+- **Painel "evento ao vivo"** (`/events/:id/live/...`): Início,
+  Cronograma, Notas (visão do jurado/admin/programa — cada um vê o que
+  pode), Resultados e Notificações, com liberação controlada pelo admin
+  (`Event.scoresReleasedAt`/`resultsReleasedAt`) e navegação própria
+  (`AppSidebar` completa em qualquer papel, mobile com menu inferior)
+- **Fluxo de desistência**: admin/assessor ou o próprio programa podem
+  sinalizar que uma equipe desistiu de uma apresentação ainda não
+  avaliada — bloqueia lançamento de nota, marca a súmula, dispara
+  notificação, e opcionalmente some do cronograma (as apresentações
+  seguintes recuam de horário automaticamente)
+- **Notificações in-app** (`notifications`): avisos por evento
+  (apresentação iniciada/cancelada, súmulas liberadas, contestação
+  solicitada), audiência geral ou só produção
+- **Jornada do atleta** (`athletes`): atleta vincula a própria conta a
+  um programa (ou o programa cadastra o atleta); o programa confirma o
+  vínculo pra liberar a consulta da própria nota
+- **Espectador via código/QR**: ao publicar, o evento ganha um código
+  curto (estável entre republicações) e um QR — qualquer pessoa
+  autenticada que escaneie ou digite o código entra como espectador,
+  sem precisar de convite manual no roster
+- **Impersonation**: uma conta específica pode "entrar como" qualquer
+  outro usuário pra depurar/testar outras jornadas sem precisar de
+  senha de cada um
 
 ### 🚧 Em andamento / próximos passos
 
-1. Lançamento de notas em si: modelar `ScoreEvent` (event sourcing) e
-   `Result`, e construir a tela do jurado (a escala de arbitragem e o
-   cronograma já existem, mas ninguém lança nota de verdade ainda)
-2. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io ou
-   Supabase Realtime) para o painel do produtor
+1. Decidir e implementar mecanismo de tempo real (WebSocket/Socket.io
+   ou Supabase Realtime) para o painel ao vivo — hoje é polling/refetch
+2. Transição de status `completed` ("concluir evento") — falta decidir
+   a regra (manual pelo admin? automático quando os dias terminam?)
 3. Endereçamento estável de evento por `aliasId` nas rotas HTTP (hoje é
-   pelo `id` de uma versão específica)
+   pelo `id` de uma versão específica — as entidades filhas do evento
+   já foram migradas internamente pra `aliasId`, falta só o HTTP)
 4. Cobertura de testes automatizados (hoje é tudo validado manualmente)
 
 ### 📋 Backlog (não iniciado)
 
-- Jornada do atleta/espectador (consulta de nota e resultado — o papel
-  já existe no schema, falta a tela)
-- Painel de acompanhamento em tempo real e apuração de resultado
 - Verificar domínio próprio no Resend (hoje só entrega email pra
   `easyjudgepro@gmail.com`, a conta usada pra criar a API key)
 - Deploy (Neon/Supabase para Postgres em produção)
@@ -160,8 +186,9 @@ a API (configurado em `apps/web/vite.config.ts`).
 
 Cada domínio em `apps/api/src/` (`auth`, `users`, `events`, `categories`,
 `programs`, `teams`, `judges`, `judging`, `schedule`,
-`scoring-templates`, `regulations`, ...) é autocontido, com
-`controllers/` e `services/` como subpastas próprias.
+`scoring-templates`, `regulations`, `scoring`, `notifications`,
+`athletes`, ...) é autocontido, com `controllers/` e `services/` como
+subpastas próprias.
 
 ```
 easyjudge/
@@ -180,6 +207,10 @@ easyjudge/
 │       │   ├── schedule/       # cronograma/timeline de apresentações do evento
 │       │   ├── scoring-templates/  # ScoringTemplate + ScoringCriterion (árvore de pontuação)
 │       │   ├── regulations/    # Regulation + RegulationDocument (1:1 com Event)
+│       │   ├── scoring/        # ScoreEvent (event sourcing) — lançamento de notas +
+│       │   │                    # apuração de resultado + desistência de apresentação
+│       │   ├── notifications/  # Notification — avisos in-app por evento
+│       │   ├── athletes/       # AthleteLink — vínculo atleta↔programa
 │       │   ├── common/         # enums, validators e config compartilhados
 │       │   └── migrations/     # migrations do TypeORM
 │       └── .env.example
@@ -188,10 +219,16 @@ easyjudge/
 │       └── src/
 │           ├── api/            # client.ts — chamadas à API
 │           ├── store/          # auth.ts — sessão (Zustand + persist)
-│           ├── pages/          # LoginPage, HomePage, EventSetupPage, EventStaffPage,
+│           ├── pages/          # LoginPage, HomePage, JoinEventPage (/join/:code),
+│           │                    # EventSetupPage, EventStaffPage, EventHistoryPage,
 │           │                    # CategoriesPage, ProgramsPage, RegulationPage, JudgingPage,
-│           │                    # SchedulePage, ScoringTemplatesListPage/BuilderPage
-│           └── components/     # RegisterDialog, rotas protegidas, BrandBackdrop, ui/ (shadcn)
+│           │                    # SchedulePage, ScoringTemplatesListPage/BuilderPage,
+│           │                    # AthletesManagementPage, AthleteProgramsPage, e o painel
+│           │                    # "evento ao vivo" (EventLiveDashboardPage/SchedulePage/
+│           │                    # NotesPage/ResultsPage/NotificationsPage/ScoringPage/
+│           │                    # TeamNotesPage, rotas /events/:id/live/...)
+│           └── components/     # RegisterDialog, rotas protegidas, AppSidebar,
+│                                # ShareEventDialog/JoinByCodeDialog, BrandBackdrop, ui/ (shadcn)
 ├── packages/                   # vazio por enquanto (shared-types entra quando fizer sentido)
 ├── docker-compose.yml          # Postgres local
 └── package.json                # raiz do workspace

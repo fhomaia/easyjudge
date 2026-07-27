@@ -4,7 +4,7 @@ import { Bell, Building2, CalendarDays, ChevronRight, MapPin } from "lucide-reac
 import { AppSidebar } from "@/components/AppSidebar";
 import { EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
-import { resolveCenterTab } from "@/lib/eventNavPriority";
+import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { NOTIFICATION_ICONS, formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
 import { eventsApi, notificationsApi, usersApi, type Event, type NotificationView, type UserProfile } from "@/api/client";
@@ -54,7 +54,7 @@ export function EventLiveNotificationsPage() {
     current: "notificacoes",
     onNavigateHome: () => navigate(`/events/${event.id}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
     onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
     centerTab: resolveCenterTab(event.currentUserRoles),

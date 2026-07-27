@@ -32,7 +32,7 @@ import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
 import { computeEventLiveSchedule, toIsoDate } from "@/lib/eventLiveSchedule";
-import { resolveCenterTab } from "@/lib/eventNavPriority";
+import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { buildJudgePresentationList } from "@/lib/judgeSchedule";
 import { NOTIFICATION_ICONS, formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
 import { cn } from "@/lib/utils";
@@ -257,7 +257,9 @@ export function EventLiveDashboardPage() {
   const nextJudgePresentationId = useMemo(() => {
     if (!days || !assignment.isJudge) return null;
     const myPresentations = buildJudgePresentationList(days, categoriesById, assignment, submittedSet);
-    return myPresentations.find((item) => !item.submitted)?.entry.id ?? null;
+    return (
+      myPresentations.find((item) => !item.submitted && !item.entry.withdrawnAt)?.entry.id ?? null
+    );
   }, [days, categoriesById, assignment, submittedSet]);
 
   function handleGoToNow() {
@@ -359,7 +361,7 @@ export function EventLiveDashboardPage() {
     current: "inicio",
     onNavigateHome: () => navigate(`/events/${event.id}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.id}/live/schedule`),
-    onNavigateNotes: () => navigate(`/events/${event.id}/live/notes`),
+    onNavigateNotes: () => navigate(resolveNotesHref(event.id, event.currentUserRoles)),
     onNavigateResults: () => navigate(`/events/${event.id}/live/results`),
     onNavigateNotifications: () => navigate(`/events/${event.id}/live/notifications`),
     notificationsUnreadCount: notificationsUnreadCount ?? undefined,

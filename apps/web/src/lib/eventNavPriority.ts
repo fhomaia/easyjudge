@@ -12,3 +12,17 @@ export function resolveCenterTab(roles: EventMemberRole[]): "resultados" | "nota
   if (roles.includes("judge")) return "notas";
   return "resultados";
 }
+
+// Pra onde a aba "Notas" da navegação do evento ao vivo deve levar —
+// admin/assessor/judge (e quem acumula programa com qualquer um
+// desses) sempre vão pro hub "/live/notes" (resolve a visão certa
+// internamente, ver EventLiveNotesPage). Só quem é EXCLUSIVAMENTE
+// programa tem tela própria, "/live/team" (EventLiveTeamNotesPage) —
+// mesma regra de precedência já usada pelo redirect da Início pra
+// programa (ver `onlyProgram` em EventLiveDashboardPage).
+export function resolveNotesHref(eventId: string, roles: EventMemberRole[]): string {
+  const onlyProgram =
+    roles.includes("program") &&
+    !roles.some((r) => r === "admin" || r === "assessor" || r === "judge");
+  return onlyProgram ? `/events/${eventId}/live/team` : `/events/${eventId}/live/notes`;
+}

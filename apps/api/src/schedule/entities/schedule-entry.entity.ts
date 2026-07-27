@@ -106,6 +106,21 @@ export class ScheduleEntry {
   })
   contestationResolvedAt: Date | null;
 
+  // Quando a desistência foi sinalizada (ver ScoringService.
+  // withdrawPresentation) — nunca é limpo de volta pra null (mesmo
+  // espírito de contestationRequestedAt: uma vez desistida, é
+  // permanente). Só apresentation; só permitido enquanto não há nenhum
+  // ScoreEvent pra ela.
+  @Column({ name: 'withdrawn_at', type: 'timestamptz', nullable: true })
+  withdrawnAt: Date | null;
+
+  // Só admin/assessor pode ligar (na confirmação de desistência) — some
+  // da TIMELINE do cronograma (ver lib/scheduleWithdrawal.ts no
+  // frontend), mas a apresentação continua existindo pras súmulas
+  // (sempre mostram desistência, marcada, independente disso).
+  @Column({ name: 'removed_from_schedule', type: 'boolean', default: false })
+  removedFromSchedule: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
