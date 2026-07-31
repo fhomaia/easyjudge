@@ -31,8 +31,20 @@ const SECTIONS: LegalSection[] = [
     ),
   },
   {
+    id: "acesso-a-camera",
+    title: "2. Acesso à câmera (QR code)",
+    content: (
+      <p>
+        Ao escolher escanear o código de um evento, a plataforma pede acesso à sua câmera. Esse
+        acesso é usado só para ler o QR code na hora — o vídeo é processado inteiramente no seu
+        próprio navegador, nunca é enviado para nossos servidores, gravado ou armazenado. Você
+        pode negar essa permissão a qualquer momento e continuar digitando o código manualmente.
+      </p>
+    ),
+  },
+  {
     id: "por-que-coletamos",
-    title: "2. Por que coletamos esses dados",
+    title: "3. Por que coletamos esses dados",
     content: (
       <p>
         Tratamos seus dados pessoais para viabilizar o cadastro e a autenticação na plataforma,
@@ -45,7 +57,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "com-quem-compartilhamos",
-    title: "3. Com quem compartilhamos",
+    title: "4. Com quem compartilhamos",
     content: (
       <p>
         Não vendemos seus dados pessoais. Dados de identificação (nome e papel) são visíveis para
@@ -58,7 +70,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "retencao-dos-dados",
-    title: "4. Retenção dos dados",
+    title: "5. Retenção dos dados",
     content: (
       <p>
         Mantemos seus dados enquanto sua conta estiver ativa e pelo tempo necessário para cumprir
@@ -70,7 +82,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "criancas-e-adolescentes",
-    title: "5. Crianças e adolescentes",
+    title: "6. Crianças e adolescentes",
     content: (
       <p>
         Atletas menores de idade podem ter dados tratados na plataforma (ex.: por vínculo com um
@@ -82,7 +94,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "seus-direitos",
-    title: "6. Seus direitos",
+    title: "7. Seus direitos",
     content: (
       <p>
         Nos termos da LGPD, você pode solicitar a qualquer momento: confirmação do tratamento,
@@ -94,7 +106,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "seguranca",
-    title: "7. Segurança",
+    title: "8. Segurança",
     content: (
       <p>
         Senhas são armazenadas de forma criptografada (nunca em texto plano) e o acesso aos dados
@@ -106,7 +118,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "alteracoes-desta-politica",
-    title: "8. Alterações desta política",
+    title: "9. Alterações desta política",
     content: (
       <p>
         Podemos atualizar esta Política de Privacidade periodicamente. Alterações relevantes serão
@@ -116,7 +128,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "contato",
-    title: "9. Contato",
+    title: "10. Contato",
     content: (
       <p>
         Para exercer seus direitos ou tirar dúvidas sobre esta política, escreva para{" "}
