@@ -89,18 +89,19 @@ export function BrandBackdrop({ className, variant = "split", onDone }: BrandBac
                 esquerda, cobrindo o viewBox inteiro. */}
             <g className="sm:hidden">
               <rect x={0} y={0} width={160} height={100} fill="var(--brand-blue)" />
-              {/* "xMidYMin" (não "YMid"): alinha pelo topo da foto — o
-                  rosto/tronco da atleta fica perto do topo do arquivo
-                  pré-recortado (ver bg-left.webp), então cover
-                  centralizado (YMid) cortava a cabeça e sobrava perna. */}
-              <image
-                href="/bg-left.webp"
-                x={0}
-                y={0}
-                width={160}
-                height={100}
-                preserveAspectRatio="xMidYMin slice"
-              />
+              {/* Recorte próprio pro mobile (não reaproveita o "YMin
+                  cover" antigo): o card de login fica centralizado na
+                  tela, cobrindo bem o meio do viewBox (~y 25-90) — um
+                  cover ingênuo (mostrando o topo ou o centro do arquivo)
+                  sempre jogava o rosto da atleta bem atrás do card,
+                  deixando só o teto escuro do ginásio visível na folga
+                  acima/abaixo. width/height=100/153 é a MESMA escala do
+                  crop do desktop (só desloca x/y) — o rosto (~x 599,
+                  y 440 no arquivo original 1400x2139) foi posicionado em
+                  x=80/y=10 do viewBox de propósito: cai dentro da faixa
+                  central visível (x 56.9-103.1, definida pelo "slice" do
+                  svg pai) e dentro da folga acima do card (y 0-~20). */}
+              <image href="/bg-left.webp" x={37} y={-21} width={100} height={153} />
               <rect
                 x={0}
                 y={0}

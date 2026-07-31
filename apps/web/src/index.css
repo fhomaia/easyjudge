@@ -8,6 +8,12 @@
    altura, não orientação, porque monitor de desktop também é "paisagem"
    e não deve entrar nessa regra. */
 @custom-variant short (@media (max-height: 560px));
+/* Contrário de "short", pro caso onde as duas condições concorreriam
+   (ex. celular em paisagem: largura >= sm E altura curta ao mesmo
+   tempo) — usado quando um componente precisa de um valor "maior" só
+   em telas largas E altas, sem competir por especificidade/ordem
+   contra "short:" (que precisa sempre vencer nesse cenário). */
+@custom-variant sm-tall (@media (min-width: 640px) and (min-height: 561px));
 
 /* Esconde a barra de rolagem mantendo o scroll funcional — usado nos
    carrosséis horizontais do mobile (ex. KPIs da Home). */
