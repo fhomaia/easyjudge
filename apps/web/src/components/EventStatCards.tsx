@@ -56,8 +56,14 @@ export function EventStatCards({ events }: { events: Event[] }) {
     },
   ];
 
+  // scroll-px-4: sem isso, o carrossel nascia com scrollLeft=16 (a
+  // largura do próprio -mx-4/px-4 de respiro) em vez de 0 — o
+  // alinhamento de snap-start não sabia que o px-4 devia contar como
+  // espaço "de descanso" antes do primeiro card, então resolvia a
+  // posição inicial já escondendo esse respiro (1º card colado na
+  // borda). scroll-padding informa isso ao snap.
   return (
-    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
+    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 scroll-px-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 sm:scroll-px-0 lg:grid-cols-4">
       {stats.map(({ key, label, subtitle, icon: Icon, iconClassName, value }) => (
         <Card
           key={key}
