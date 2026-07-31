@@ -1,4 +1,6 @@
+import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsNotEmpty,
@@ -7,8 +9,10 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
+import { ScoreBandDto } from './score-band.dto';
 
 export class CreateScoringCriterionDto {
   @IsOptional()
@@ -45,4 +49,14 @@ export class CreateScoringCriterionDto {
   @IsOptional()
   @IsBoolean()
   isRequired?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  useScoreBands?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ScoreBandDto)
+  scoreBands?: ScoreBandDto[];
 }

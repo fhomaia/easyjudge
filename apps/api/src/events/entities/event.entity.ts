@@ -112,12 +112,17 @@ export class Event {
 
   // Não são colunas — populadas por EventsService (findAllForUser via
   // subquery de COUNT; findOneForUser buscando Category/
-  // ProgramParticipation direto pelo aliasId), só para telas de
-  // listagem/configuração do evento. Category/ProgramParticipation não
-  // têm mais relação TypeORM com Event (endereçadas por aliasId, sem
-  // FK) — ver migration AddAliasIdToEventScopedChildEntities.
+  // ProgramParticipation/JudgeParticipation direto pelo aliasId), só
+  // para telas de listagem/configuração do evento e pro card "Início"
+  // do painel ao vivo (contagem visível pra qualquer papel, diferente
+  // da lista/detalhe — ver ProgramsController/JudgesController, ambos
+  // admin/assessor-only). Category/ProgramParticipation/
+  // JudgeParticipation não têm mais relação TypeORM com Event
+  // (endereçadas por aliasId, sem FK) — ver migration
+  // AddAliasIdToEventScopedChildEntities.
   categoriesCount?: number;
   programsCount?: number;
+  judgesCount?: number;
   categoriesUpdatedAt?: Date | null;
   programsUpdatedAt?: Date | null;
 

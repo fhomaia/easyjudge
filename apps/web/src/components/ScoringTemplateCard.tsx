@@ -1,10 +1,18 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Calculator, Settings, Trash2 } from "lucide-react";
+import { Calculator, Download, FileSpreadsheet, FileText, Lock, Settings, Trash2 } from "lucide-react";
 import { ScoringTemplateStatusBadge } from "@/components/ScoringTemplateStatusBadge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { listItemVariants } from "@/lib/motionVariants";
 import { formatDateTime } from "@/lib/formatDate";
 import { getAvatarColor } from "@/lib/avatarColor";
-import type { ScoringTemplate } from "@/api/client";
+import { exportScoringTemplateToExcel, exportScoringTemplateToPdf } from "@/lib/scoringTemplateExport";
+import { scoringCriteriaApi, type ScoringTemplate } from "@/api/client";
 
 interface ScoringTemplateCardProps {
   template: ScoringTemplate;
@@ -19,6 +27,21 @@ export function ScoringTemplateCard({
   onEdit,
   onDelete,
 }: ScoringTemplateCardProps) {
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload(format: "pdf" | "excel") {
+    setDownloading(true);
+    try {
+      const criteria = await scoringCriteriaApi.list(template.id);
+      if (format === "pdf") exportScoringTemplateToPdf(template, criteria);
+      else exportScoringTemplateToExcel(template, criteria);
+    } catch (err) {
+      console.error("Não foi possível gerar a súmula.", err);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <motion.div
       variants={listItemVariants}
@@ -35,18 +58,54 @@ export function ScoringTemplateCard({
             <Calculator className="size-5" />
           </div>
           <ScoringTemplateStatusBadge isComplete={template.isComplete ?? false} />
+          {template.isLocked && (
+            <span
+              title="Em uso por um evento que já saiu da fase de configuração — não pode ser editado"
+              className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+            >
+              <Lock className="size-3" />
+              Travado
+            </span>
+          )}
         </div>
         {(onEdit || onDelete) && (
           <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={(e) => e.stopPropagation()}
+                    disabled={downloading}
+                    aria-label="Baixar súmula do template"
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  />
+                }
+              >
+                <Download className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onClick={() => handleDownload("pdf")}>
+                  <FileText data-icon="inline-start" />
+                  Baixar como PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload("excel")}>
+                  <FileSpreadsheet data-icon="inline-start" />
+                  Baixar como Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {onEdit && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit(template);
+                  if (!template.isLocked) onEdit(template);
                 }}
+                disabled={template.isLocked}
                 aria-label="Editar dados do template"
-                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={template.isLocked ? "Travado — em uso por um evento em andamento" : undefined}
+                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <Settings className="size-4" />
               </button>

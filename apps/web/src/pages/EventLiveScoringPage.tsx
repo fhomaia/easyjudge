@@ -581,6 +581,7 @@ export function EventLiveScoringPage() {
           onAdjustScore={adjustScore}
           onSetScore={setScoreDirect}
           variant="mobile"
+          showScoreBands
         />
 
         {sheet.isLegalityJudge && (

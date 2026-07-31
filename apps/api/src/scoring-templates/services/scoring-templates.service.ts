@@ -7,12 +7,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ScoringTemplate } from '../entities/scoring-template.entity';
-import { ScoringCriterion } from '../entities/scoring-criterion.entity';
+import { ScoreBand, ScoringCriterion } from '../entities/scoring-criterion.entity';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 import { CreateScoringTemplateDto } from '../dto/create-scoring-template.dto';
 import { UpdateScoringTemplateDto } from '../dto/update-scoring-template.dto';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 import { Category } from '../../categories/entities/category.entity';
+import { Event } from '../../events/entities/event.entity';
+import { EventStatus } from '../../events/enums/event-status.enum';
 
 @Injectable()
 export class ScoringTemplatesService {
@@ -23,6 +25,8 @@ export class ScoringTemplatesService {
     private readonly criteriaRepo: Repository<ScoringCriterion>,
     @InjectRepository(Category)
     private readonly categoriesRepo: Repository<Category>,
+    @InjectRepository(Event)
+    private readonly eventsRepo: Repository<Event>,
   ) {}
 
   async create(
@@ -99,6 +103,7 @@ export class ScoringTemplatesService {
     if (templates.length === 0) return templates;
 
     const templateIds = templates.map((t) => t.id);
+    const lockedTemplateIds = await this.getLockedTemplateIds(templateIds);
     const sums = await this.criteriaRepo
       .createQueryBuilder('criterion')
       .select('criterion.templateId', 'templateId')
@@ -128,13 +133,18 @@ export class ScoringTemplatesService {
       const criteria = criteriaByTemplateId.get(template.id) ?? [];
       template.isComplete =
         distributedScore === template.targetScore &&
-        !this.hasEmptyGroup(criteria);
+        !this.hasEmptyGroup(criteria) &&
+        !this.hasStaleScoreBands(criteria);
+      template.isLocked = lockedTemplateIds.has(template.id);
     }
     return templates;
   }
 
-  findOneForUser(id: string, userId: string): Promise<ScoringTemplate> {
-    return this.findOwnTemplateOrThrow(id, userId);
+  async findOneForUser(id: string, userId: string): Promise<ScoringTemplate> {
+    const template = await this.findOwnTemplateOrThrow(id, userId);
+    const lockedTemplateIds = await this.getLockedTemplateIds([id]);
+    template.isLocked = lockedTemplateIds.has(id);
+    return template;
   }
 
   async update(
@@ -143,6 +153,7 @@ export class ScoringTemplatesService {
     userId: string,
   ): Promise<ScoringTemplate> {
     const template = await this.findOwnTemplateOrThrow(id, userId);
+    await this.assertNotLockedForEditing(id);
     Object.assign(template, stripUndefined(dto));
     return this.templatesRepo.save(template);
   }
@@ -219,7 +230,49 @@ export class ScoringTemplatesService {
         'Este sistema de pontuação está incompleto — todo grupo precisa ter ao menos um item de avaliação vinculado (em qualquer nível).',
       );
     }
+    if (this.hasStaleScoreBands(criteria)) {
+      throw new ConflictException(
+        'Este sistema de pontuação está incompleto — alguma faixa de pontuação não cobre mais a nota máxima do critério (a pontuação máxima mudou depois que as faixas foram salvas).',
+      );
+    }
     return template;
+  }
+
+  // Quais desses templates estão "travados" — em uso por uma categoria
+  // de um evento (versão ativa) cujo status já saiu de "created". Uma
+  // query só pra todos os templates de uma vez (usado por
+  // findAllForUser, evita N+1).
+  private async getLockedTemplateIds(
+    templateIds: string[],
+  ): Promise<Set<string>> {
+    if (templateIds.length === 0) return new Set();
+    const rows = await this.eventsRepo
+      .createQueryBuilder('event')
+      .innerJoin(Category, 'category', 'category.aliasId = event.aliasId')
+      .select('category.scoringTemplateId', 'templateId')
+      .distinct(true)
+      .where('event.active = true')
+      .andWhere('event.status != :created', { created: EventStatus.CREATED })
+      .andWhere('category.scoringTemplateId IN (:...templateIds)', {
+        templateIds,
+      })
+      .getRawMany<{ templateId: string }>();
+    return new Set(rows.map((r) => r.templateId));
+  }
+
+  // Barra editar o template/seus critérios enquanto ele estiver em uso
+  // por um evento que já saiu da fase de configuração (published/
+  // started/completed) — mudar maxScore/critérios/meta de pontos nesse
+  // momento invalidaria notas já lançadas ou a estrutura que jurados já
+  // estão usando ao vivo. Chamado por update() aqui e por
+  // ScoringCriteriaService (create/update/remove/move).
+  async assertNotLockedForEditing(templateId: string): Promise<void> {
+    const locked = await this.getLockedTemplateIds([templateId]);
+    if (locked.has(templateId)) {
+      throw new ConflictException(
+        'Este sistema de pontuação está em uso por um evento que já saiu da fase de configuração e não pode mais ser editado.',
+      );
+    }
   }
 
   // Verdadeiro se algum grupo (em qualquer nível) não tem nenhum item
@@ -244,5 +297,36 @@ export class ScoringTemplatesService {
     return criteria.some(
       (c) => c.type === ScoringCriterionType.GROUP && !hasLeafDescendant(c.id),
     );
+  }
+
+  // Verdadeiro se algum critério com faixas de pontuação ficou
+  // desatualizado — `maxScore` pode mudar depois que as faixas foram
+  // salvas (ScoringCriteriaService só revalida cobertura quando
+  // `scoreBands` de fato faz parte do payload, pra não travar o
+  // autosave por-campo do builder) sem que as faixas sejam revisitadas,
+  // deixando um trecho de [0, maxScore] sem faixa correspondente.
+  private hasStaleScoreBands(criteria: ScoringCriterion[]): boolean {
+    return criteria.some(
+      (c) =>
+        c.useScoreBands &&
+        !!c.scoreBands &&
+        c.scoreBands.length > 0 &&
+        !this.bandsCoverMaxScore(c.scoreBands, c.maxScore),
+    );
+  }
+
+  // Mesmo algoritmo de sweep de ScoringCriteriaService.assertBandsCoverMaxScore,
+  // sem lançar exceção — usado só pra decidir isComplete/assertUsableTemplate,
+  // não pra validar formato no write (isso continua sendo responsabilidade
+  // exclusiva de ScoringCriteriaService).
+  private bandsCoverMaxScore(bands: ScoreBand[], maxScore: number): boolean {
+    const sorted = [...bands].sort((a, b) => a.min - b.min);
+    if (sorted[0].min > 0) return false;
+    let covered = sorted[0].max;
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].min > covered) return false;
+      covered = Math.max(covered, sorted[i].max);
+    }
+    return covered >= maxScore;
   }
 }

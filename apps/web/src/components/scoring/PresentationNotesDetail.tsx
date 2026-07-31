@@ -7,11 +7,14 @@ import { sumMaxScores } from "@/lib/scoringSummary";
 import type { PresentationDetail } from "@/api/client";
 
 // Visão somente-leitura de UMA apresentação — todos os grupos do
-// sistema de pontuação + legalidade JUNTOS, cada critério com o nome
-// do jurado responsável. Reusada pelo admin/assessor (sem restrição) e
-// pelo Programa (só das próprias equipes, já liberado). `actions` é o
-// slot pras ações que variam por quem está olhando (toggles de
-// liberação pro admin, botão de contestar pro Programa).
+// sistema de pontuação + legalidade JUNTOS. Quando um critério tem mais
+// de um jurado atribuído, `criterion.value` já vem como a média das
+// notas (ver ScoringService.computeAverageScoreByCriterion) — esta
+// tela mostra só o valor final, sem listar jurado por jurado. Reusada
+// pelo admin/assessor (sem restrição) e pelo Programa (só das próprias
+// equipes, já liberado). `actions` é o slot pras ações que variam por
+// quem está olhando (toggles de liberação pro admin, botão de
+// contestar pro Programa).
 interface PresentationNotesDetailProps {
   detail: PresentationDetail;
   actions?: ReactNode;
@@ -69,7 +72,6 @@ export function PresentationNotesDetail({ detail, actions }: PresentationNotesDe
               <div key={criterion.id} className="flex items-center gap-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-foreground">{criterion.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{criterion.judgeName}</p>
                 </div>
                 <span className="w-16 shrink-0 rounded-lg bg-muted py-1.5 text-center text-base font-bold tabular-nums text-foreground">
                   {criterion.value !== null ? criterion.value.toFixed(1) : "—"}

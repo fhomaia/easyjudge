@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRightLeft,
@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
+import { REALTIME_FALLBACK_POLL_MS, useEventLiveSocket } from "@/lib/useEventLiveSocket";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
@@ -113,39 +114,57 @@ export function EventLiveSchedulePage() {
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
     scheduleApi.listDays(id).then(setDays).catch(() => setDays([]));
     teamsApi.listForEvent(id).then(setTeams).catch(() => setTeams([]));
-    // Só pro badge da aba "Notificações" (ver EventLiveShared) — busca
-    // avulsa, não precisa de polling nesta tela (o polling de verdade
-    // fica na própria tela de notificações/Início).
+  }, [id]);
+
+  // Badge da aba "Notificações" (ver EventLiveShared) — atualizado via
+  // WebSocket junto com o resto desta tela (ver useEventLiveSocket
+  // abaixo), sem precisar de um polling próprio.
+  const refreshUnreadCount = useCallback(() => {
+    if (!id) return;
     notificationsApi
       .list(id)
       .then((res) => setNotificationsUnreadCount(res.unreadCount))
       .catch(() => setNotificationsUnreadCount(null));
   }, [id]);
 
+  useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount]);
+
   // "Acontecendo agora" — mesmo sinal real (ScoringService.
   // getCompletedPresentationIds) e mesma regra de ordem usada na tela de
   // Início (ver lib/eventLiveSchedule.ts), pra ficar alinhado: aqui só
   // reaproveita pra destacar a linha/gerar o card, não recalcula nada
-  // diferente. Poll de 30s, mesmo padrão da Início.
+  // diferente. Atualizado via WebSocket; o `setInterval` é só rede de
+  // segurança (ver REALTIME_FALLBACK_POLL_MS).
+  const refreshCompletedPresentations = useCallback(() => {
+    if (!id) return;
+    scoringApi.getCompletedPresentations(id).then(setCompletedEntryIds).catch(() => {});
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
-    let cancelled = false;
-    function refresh() {
+    refreshCompletedPresentations();
+    const interval = setInterval(refreshCompletedPresentations, REALTIME_FALLBACK_POLL_MS);
+    return () => clearInterval(interval);
+  }, [id, refreshCompletedPresentations]);
+
+  // Sinal do backend (ver CLAUDE.md "Tempo real") — uma notificação nova
+  // pode significar apresentação movida/concluída/desistência/
+  // contestação, então recarrega o cronograma inteiro (mesma função já
+  // usada depois de uma desistência confirmada, ver refreshDays abaixo)
+  // além do badge e do "acontecendo agora".
+  useEventLiveSocket(id, {
+    onNotification: () => {
+      refreshDays();
+      refreshUnreadCount();
+      refreshCompletedPresentations();
+    },
+    onEventStatusChanged: () => {
       if (!id) return;
-      scoringApi
-        .getCompletedPresentations(id)
-        .then((ids) => {
-          if (!cancelled) setCompletedEntryIds(ids);
-        })
-        .catch(() => {});
-    }
-    refresh();
-    const interval = setInterval(refresh, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [id]);
+      eventsApi.get(id).then(setEvent).catch(() => {});
+    },
+  });
 
   // Mesmo redirect da EventLiveDashboardPage — esta tela só faz sentido
   // pra um evento já publicado/em andamento/concluído.

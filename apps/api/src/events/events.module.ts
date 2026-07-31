@@ -5,6 +5,7 @@ import { EventMember } from './entities/event-member.entity';
 import { EventActivityLog } from './entities/event-activity-log.entity';
 import { Category } from '../categories/entities/category.entity';
 import { ProgramParticipation } from '../programs/entities/program-participation.entity';
+import { JudgeParticipation } from '../judges/entities/judge-participation.entity';
 import { EventsController } from './controllers/events.controller';
 import { EventStaffController } from './controllers/event-staff.controller';
 import { EventMemberCountsController } from './controllers/event-member-counts.controller';
@@ -17,18 +18,19 @@ import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    // Category/ProgramParticipation aqui só pra EventsService ter
-    // acesso aos repositórios (contagem/listagem por aliasId em
-    // findAllForUser/findOneForUser, exclusão em deleteEvent) — não
-    // importa CategoriesModule/ProgramsModule inteiros, evitando
-    // dependência circular (mesmo padrão já usado por
-    // ScoringTemplatesModule para Category).
+    // Category/ProgramParticipation/JudgeParticipation aqui só pra
+    // EventsService ter acesso aos repositórios (contagem/listagem por
+    // aliasId em findAllForUser/findOneForUser, exclusão em
+    // deleteEvent) — não importa CategoriesModule/ProgramsModule/
+    // JudgesModule inteiros, evitando dependência circular (mesmo
+    // padrão já usado por ScoringTemplatesModule para Category).
     TypeOrmModule.forFeature([
       Event,
       EventMember,
       EventActivityLog,
       Category,
       ProgramParticipation,
+      JudgeParticipation,
     ]),
     UsersModule,
     NotificationsModule,

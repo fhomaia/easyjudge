@@ -25,6 +25,21 @@ interface JudgeUserInfo {
   lastName: string;
 }
 
+// `JudgeParticipation.name` é um campo único (nome digitado livre pelo
+// organizador), mas o roster de acessos (`EventMember`) guarda
+// firstName/lastName separados (mesmo formato de CreateEventStaffMemberDto).
+// Split no primeiro espaço — sem sobrenome, `lastName` fica `null` (mesmo
+// campo já é nullable pra convite pendente).
+function splitDisplayName(name: string): { firstName: string; lastName: string | null } {
+  const trimmed = name.trim();
+  const spaceIndex = trimmed.indexOf(' ');
+  if (spaceIndex === -1) return { firstName: trimmed, lastName: null };
+  return {
+    firstName: trimmed.slice(0, spaceIndex),
+    lastName: trimmed.slice(spaceIndex + 1).trim() || null,
+  };
+}
+
 export interface JudgeCatalogEntry {
   source: 'platform' | 'own';
   judgeId?: string;
@@ -99,7 +114,7 @@ export class JudgesService {
     await this.eventsService.upsertMemberRole(
       event.aliasId,
       EventMemberRole.JUDGE,
-      { userId, email: dto.email, firstName: dto.name },
+      { userId, email: dto.email, ...splitDisplayName(dto.name) },
     );
 
     return this.toJudgeView(saved);
@@ -298,7 +313,8 @@ export class JudgesService {
         {
           userId,
           email: user.email,
-          firstName: `${user.firstName} ${user.lastName}`,
+          firstName: user.firstName,
+          lastName: user.lastName,
         },
       );
     }

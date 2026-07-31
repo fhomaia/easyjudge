@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Pencil } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, FileText, Lock, Pencil } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ScoringStatCards } from "@/components/ScoringStatCards";
@@ -9,6 +9,15 @@ import { EditCriterionPanel } from "@/components/EditCriterionPanel";
 import { ScoringValidationBar } from "@/components/ScoringValidationBar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { exportScoringTemplateToExcel, exportScoringTemplateToPdf } from "@/lib/scoringTemplateExport";
+import { hasStaleScoreBands } from "@/lib/scoreBands";
 import {
   ApiError,
   scoringCriteriaApi,
@@ -183,6 +192,8 @@ export function ScoringTemplateBuilderPage() {
     ? (criteria?.some((c) => c.parentId === selectedCriterion.id) ?? false)
     : false;
   const deleteDescendantCount = deleteTarget ? countDescendants(deleteTarget.id) : 0;
+  const isLocked = template?.isLocked ?? false;
+  const staleScoreBands = criteria ? hasStaleScoreBands(criteria) : false;
 
   return (
     <div className="flex h-svh bg-background">
@@ -203,6 +214,28 @@ export function ScoringTemplateBuilderPage() {
               <CheckCircle2 className="size-3.5 text-emerald-600" />
               Salvo automaticamente
             </span>
+            {template && criteria !== null && (
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" />}>
+                  <Download className="size-4" />
+                  Baixar súmula
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => exportScoringTemplateToPdf(template, criteria)}
+                  >
+                    <FileText data-icon="inline-start" />
+                    Baixar como PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => exportScoringTemplateToExcel(template, criteria)}
+                  >
+                    <FileSpreadsheet data-icon="inline-start" />
+                    Baixar como Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <NotificationBell />
           </div>
         </div>
@@ -213,7 +246,7 @@ export function ScoringTemplateBuilderPage() {
           {template && criteria !== null && (
             <div className="mt-4 grid gap-6">
               <div>
-                {editingName ? (
+                {editingName && !isLocked ? (
                   <Input
                     autoFocus
                     value={nameDraft}
@@ -224,17 +257,43 @@ export function ScoringTemplateBuilderPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setEditingName(true)}
-                    className="group flex items-center gap-2 text-2xl font-semibold text-foreground"
+                    onClick={() => !isLocked && setEditingName(true)}
+                    disabled={isLocked}
+                    className="group flex items-center gap-2 text-2xl font-semibold text-foreground disabled:cursor-not-allowed"
                   >
                     {template.name}
-                    <Pencil className="size-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                    {!isLocked && (
+                      <Pencil className="size-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                    )}
                   </button>
                 )}
                 <p className="mt-1 text-sm text-muted-foreground">
                   Crie e organize os critérios que irão compor a pontuação das categorias.
                 </p>
               </div>
+
+              {isLocked && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  <Lock className="mt-0.5 size-4 shrink-0" />
+                  <p>
+                    Este sistema de pontuação está em uso por um evento que já saiu da fase de
+                    configuração e não pode mais ser editado, para não invalidar notas já
+                    lançadas ou a estrutura que os jurados estão usando.
+                  </p>
+                </div>
+              )}
+
+              {!isLocked && staleScoreBands && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <p>
+                    Alguma faixa de pontuação não cobre mais a nota máxima do critério — a
+                    pontuação máxima foi alterada depois que as faixas foram salvas. Revise as
+                    faixas do critério afetado (veja o aviso no painel de edição) antes de usar
+                    este sistema de pontuação numa categoria.
+                  </p>
+                </div>
+              )}
 
               <ScoringStatCards criteria={criteria} targetScore={template.targetScore} />
 
@@ -257,14 +316,17 @@ export function ScoringTemplateBuilderPage() {
                     onAddChild={handleAddChild}
                     onDelete={setDeleteTarget}
                     onMove={handleMove}
+                    readOnly={isLocked}
                   />
                 </div>
                 <EditCriterionPanel
+                  className="min-w-0"
                   templateId={id!}
                   criterion={selectedCriterion}
                   hasChildren={selectedHasChildren}
                   onUpdated={handleCriterionUpdated}
                   onRequestDelete={setDeleteTarget}
+                  readOnly={isLocked}
                 />
               </div>
 

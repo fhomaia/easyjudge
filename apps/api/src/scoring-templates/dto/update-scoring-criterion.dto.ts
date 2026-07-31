@@ -1,4 +1,6 @@
+import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsNotEmpty,
@@ -6,8 +8,10 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
+import { ScoreBandDto } from './score-band.dto';
 
 // parentId de propósito não entra aqui — reparenting só acontece via
 // o endpoint /move, pra manter a renumeração de order num único lugar.
@@ -45,4 +49,14 @@ export class UpdateScoringCriterionDto {
   @IsOptional()
   @IsBoolean()
   isRequired?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  useScoreBands?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ScoreBandDto)
+  scoreBands?: ScoreBandDto[];
 }

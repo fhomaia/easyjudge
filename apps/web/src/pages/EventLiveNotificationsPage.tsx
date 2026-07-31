@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Bell, Building2, CalendarDays, ChevronRight, MapPin } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
+import { useEventLiveSocket } from "@/lib/useEventLiveSocket";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { NOTIFICATION_ICONS, formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
@@ -28,14 +29,28 @@ export function EventLiveNotificationsPage() {
   useEffect(() => {
     if (!id) return;
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
-    notificationsApi
-      .list(id)
-      .then((res) => setNotifications(res.notifications))
-      .catch(() => setNotifications([]));
     // Visitar a tela inteira conta como "visto" — mesmo raciocínio de
     // abrir o sino/popup, só que aqui é a própria tela.
     notificationsApi.markSeen(id).catch(() => {});
   }, [id]);
+
+  const refreshNotifications = useCallback(() => {
+    if (!id) return;
+    notificationsApi
+      .list(id)
+      .then((res) => setNotifications(res.notifications))
+      .catch(() => setNotifications([]));
+  }, [id]);
+
+  useEffect(() => {
+    refreshNotifications();
+  }, [refreshNotifications]);
+
+  // Sinal do backend (ver CLAUDE.md "Tempo real") — refaz a mesma
+  // busca que hoje só rodava uma vez no mount.
+  useEventLiveSocket(id, {
+    onNotification: refreshNotifications,
+  });
 
   function handleLogout() {
     logout();

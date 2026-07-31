@@ -30,6 +30,7 @@ interface ScoringCriterionRowProps {
   dragHandleProps?: HTMLAttributes<HTMLElement>;
   isDragging?: boolean;
   isOverlay?: boolean;
+  readOnly?: boolean;
 }
 
 export function ScoringCriterionRow({
@@ -49,6 +50,7 @@ export function ScoringCriterionRow({
   dragHandleProps,
   isDragging,
   isOverlay,
+  readOnly,
 }: ScoringCriterionRowProps) {
   const valid = isNodeValid(criterion, criteria);
 
@@ -66,8 +68,11 @@ export function ScoringCriterionRow({
     >
       <span
         aria-hidden
-        {...dragHandleProps}
-        className="cursor-grab touch-none text-muted-foreground/40 hover:text-muted-foreground"
+        {...(readOnly ? {} : dragHandleProps)}
+        className={cn(
+          "text-muted-foreground/40",
+          readOnly ? "cursor-default" : "cursor-grab touch-none hover:text-muted-foreground",
+        )}
       >
         <GripVertical className="size-4" />
       </span>
@@ -115,30 +120,32 @@ export function ScoringCriterionRow({
         {criterion.maxScore.toFixed(2)} pts
       </span>
 
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddChild();
-          }}
-          aria-label="Adicionar filho"
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          aria-label="Excluir critério"
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddChild();
+            }}
+            aria-label="Adicionar filho"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Plus className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            aria-label="Excluir critério"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

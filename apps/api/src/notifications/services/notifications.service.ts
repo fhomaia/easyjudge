@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Notification } from '../entities/notification.entity';
 import { NotificationType } from '../enums/notification-type.enum';
 import { NotificationAudience } from '../enums/notification-audience.enum';
@@ -36,12 +37,23 @@ export class NotificationsService {
     private readonly eventsRepo: Repository<Event>,
     @InjectRepository(EventMember)
     private readonly membersRepo: Repository<EventMember>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // Chamado pelos outros services (EventsService/ScheduleService/
   // ScoringService) no exato momento em que o gatilho acontece — `title`
   // já vem formatado de quem chama (ver Notification, é um registro
   // histórico, não um template resolvido depois).
+  //
+  // Ponto único de emissão pro painel "evento ao vivo" em tempo real
+  // (`RealtimeModule`/`EventsGateway`, ver CLAUDE.md) — como toda
+  // notificação do sistema passa por aqui (apresentação movida/
+  // concluída/desistência, contestação, liberação de súmulas/resultado),
+  // um `emit` só neste método cobre todos esses gatilhos de uma vez, sem
+  // precisar tocar nos ~6 call sites espalhados por
+  // schedule/scoring/events. O Gateway (se existir) escuta via
+  // `@OnEvent` — `NotificationsService` não sabe (nem precisa saber) que
+  // WebSocket existe.
   async create(
     aliasId: string,
     type: NotificationType,
@@ -49,7 +61,7 @@ export class NotificationsService {
     title: string,
     scheduleEntryId?: string,
   ): Promise<void> {
-    await this.notificationsRepo.save(
+    const saved = await this.notificationsRepo.save(
       this.notificationsRepo.create({
         aliasId,
         type,
@@ -58,6 +70,14 @@ export class NotificationsService {
         scheduleEntryId: scheduleEntryId ?? null,
       }),
     );
+    this.eventEmitter.emit('notification.created', {
+      aliasId,
+      id: saved.id,
+      type,
+      audience,
+      title,
+      scheduleEntryId: saved.scheduleEntryId,
+    });
   }
 
   // Dedup — evita duplicar a mesma notificação se o gatilho rodar de

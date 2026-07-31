@@ -186,6 +186,7 @@ export interface Event {
   currentUserRoles: EventMemberRole[];
   categoriesCount?: number;
   programsCount?: number;
+  judgesCount?: number;
   categoriesUpdatedAt?: string | null;
   programsUpdatedAt?: string | null;
 }
@@ -644,6 +645,15 @@ export interface ScoringTemplate {
   criteriaCount?: number;
   distributedScore?: number;
   isComplete?: boolean;
+  isLocked?: boolean;
+}
+
+export interface ScoreBand {
+  name: string;
+  description: string | null;
+  color: string;
+  min: number;
+  max: number;
 }
 
 export interface ScoringCriterion {
@@ -659,6 +669,8 @@ export interface ScoringCriterion {
   showInJudgingSheet: boolean;
   allowDecimalScoring: boolean;
   isRequired: boolean;
+  useScoreBands: boolean;
+  scoreBands: ScoreBand[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -682,6 +694,8 @@ export interface CreateScoringCriterionPayload {
   showInJudgingSheet?: boolean;
   allowDecimalScoring?: boolean;
   isRequired?: boolean;
+  useScoreBands?: boolean;
+  scoreBands?: ScoreBand[];
 }
 
 // parentId de propósito não entra aqui — reparenting só acontece via
@@ -1134,11 +1148,19 @@ export interface ScoringCriterionView {
   maxScore: number;
   allowDecimalScoring: boolean;
   order: number;
+  useScoreBands: boolean;
+  scoreBands: ScoreBand[] | null;
+  // Subgrupos intermediários (entre o item e o grupo-raiz, ex:
+  // "Stunt"/"Pyramids" dentro de "Building") que têm descrição própria
+  // — buildGroups achata a árvore em 2 níveis, então isso é o único
+  // jeito de recuperar essa descrição pra exibir junto do item.
+  subgroupDescriptions: { name: string; description: string }[];
 }
 
 export interface ScoringGroupView {
   id: string;
   name: string;
+  description: string | null;
   criteria: ScoringCriterionView[];
 }
 
@@ -1223,9 +1245,11 @@ export interface ReleaseFlags {
   resultsReleased: boolean;
 }
 
+// `value` já é a média quando mais de um jurado pontua o mesmo
+// critério (ver backend ScoringService.computeAverageScoreByCriterion)
+// — por decisão do usuário, esta view não expõe jurado por jurado.
 export interface PresentationDetailCriterion extends ScoringCriterionView {
   value: number | null;
-  judgeName: string;
 }
 
 export interface PresentationDetailGroup {

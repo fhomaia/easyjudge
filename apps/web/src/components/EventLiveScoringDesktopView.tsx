@@ -334,6 +334,7 @@ export function EventLiveScoringDesktopView({
                   onAdjustScore={onAdjustScore}
                   onSetScore={onSetScore}
                   variant="desktop"
+                  showScoreBands
                 />
               </div>
 

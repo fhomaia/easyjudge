@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock,
   Eye,
+  FileText,
   Flame,
   Hourglass,
   MapPin,
@@ -42,9 +43,8 @@ import { cn } from "@/lib/utils";
 import type {
   Event,
   EventMemberRole,
-  Judge,
   NotificationView,
-  Program,
+  Regulation,
   ScheduleDay,
   UserProfile,
 } from "@/api/client";
@@ -69,13 +69,7 @@ interface EventLiveDesktopViewProps {
   starting: boolean;
   canComplete: boolean;
   onOpenComplete: () => void;
-  // Contagens que vêm do próprio catálogo (JudgeParticipation/
-  // ProgramParticipation), não do roster de acessos (EventMember) —
-  // mais confiável (um programa/jurado pode existir sem o papel
-  // correspondente ter sido sincronizado pro roster, ver
-  // EventLiveDashboardPage) e sempre bate com o que o popup mostra.
-  judges: Judge[] | null;
-  programs: Program[] | null;
+  regulation: Regulation | null;
   // Espectadores/atletas não têm catálogo próprio — só existem como
   // papel no roster mesmo, daí ainda vir de memberCounts.
   memberCounts: Partial<Record<EventMemberRole, number>>;
@@ -114,8 +108,7 @@ export function EventLiveDesktopView({
   starting,
   canComplete,
   onOpenComplete,
-  judges,
-  programs,
+  regulation,
   memberCounts,
   isAdminOrAssessor,
   canViewJudges,
@@ -205,6 +198,37 @@ export function EventLiveDesktopView({
                 Ir para agora
               </button>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    disabled={!regulation || regulation.documents.length === 0}
+                    title={
+                      !regulation || regulation.documents.length === 0
+                        ? "Nenhum documento enviado ainda"
+                        : undefined
+                    }
+                    aria-label="Documentos do regulamento"
+                    className="flex size-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  />
+                }
+              >
+                <FileText className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                {regulation?.documents.map((doc) => (
+                  <DropdownMenuItem
+                    key={doc.id}
+                    onClick={() => window.open(doc.fileUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    <FileText data-icon="inline-start" />
+                    <span className="truncate">{doc.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {canRevert ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -560,7 +584,7 @@ export function EventLiveDesktopView({
                 <StatTile
                   icon={Users}
                   iconClassName="bg-emerald-500/10 text-emerald-600"
-                  value={judges === null ? "—" : String(judges.length)}
+                  value={String(event.judgesCount ?? 0)}
                   label="Jurados cadastrados"
                   onClick={canViewJudges ? onOpenJudges : undefined}
                 />
@@ -575,7 +599,7 @@ export function EventLiveDesktopView({
                 <StatTile
                   icon={Building2}
                   iconClassName="bg-blue-500/10 text-blue-600"
-                  value={programs === null ? "—" : String(programs.length)}
+                  value={String(event.programsCount ?? 0)}
                   label="Programas cadastrados"
                   onClick={isAdminOrAssessor ? onOpenPrograms : undefined}
                 />

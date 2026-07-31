@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Building2, CalendarDays, ChevronDown, MapPin, Medal, Star, Trophy, Users } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
+import { useEventLiveSocket } from "@/lib/useEventLiveSocket";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatPercent, formatPoints } from "@/lib/formatNumber";
@@ -151,6 +152,10 @@ export function EventLiveResultsPage() {
   useEffect(() => {
     if (!id) return;
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
+  }, [id]);
+
+  const refreshUnreadCount = useCallback(() => {
+    if (!id) return;
     notificationsApi
       .list(id)
       .then((res) => setNotificationsUnreadCount(res.unreadCount))
@@ -158,9 +163,27 @@ export function EventLiveResultsPage() {
   }, [id]);
 
   useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount]);
+
+  const refreshResults = useCallback(() => {
     if (!id) return;
     resultsApi.get(id).then(setResultsResponse);
   }, [id]);
+
+  useEffect(() => {
+    refreshResults();
+  }, [refreshResults]);
+
+  // Sinal do backend (ver CLAUDE.md "Tempo real") — uma notificação nova
+  // pode significar súmulas/resultado liberados (ou uma apresentação
+  // concluída, mudando o ranking), então recarrega os dois de uma vez.
+  useEventLiveSocket(id, {
+    onNotification: () => {
+      refreshResults();
+      refreshUnreadCount();
+    },
+  });
 
   const results = resultsResponse?.results ?? null;
 

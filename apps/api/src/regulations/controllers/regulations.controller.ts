@@ -35,7 +35,22 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 export class RegulationsController {
   constructor(private readonly regulationsService: RegulationsService) {}
 
+  // Override do @Roles/@EventRoles de classe (ADMIN/ASSESSOR) só pra
+  // esta rota — a tela "Início" do evento ao vivo (EventLiveDashboardPage/
+  // EventLiveDesktopView) mostra os documentos do regulamento pra
+  // qualquer papel que enxerga aquela tela (mesma audiência de
+  // useEventLiveGuard: admin/assessor/jurado/programa/atleta, não
+  // espectador). Continua sem poder editar nada aqui (as outras rotas
+  // deste controller continuam admin/assessor only).
   @Get()
+  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+    EventMemberRole.PROGRAM,
+    EventMemberRole.ATHLETE,
+  )
   get(@Param('eventId') eventId: string) {
     return this.regulationsService.getForEvent(eventId);
   }

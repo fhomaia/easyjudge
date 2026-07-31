@@ -34,6 +34,7 @@ interface ScoringTreePanelProps {
   onAddChild: (parentId: string) => void;
   onDelete: (criterion: ScoringCriterion) => void;
   onMove: (criterionId: string, newParentId: string | null, newIndex: number) => void;
+  readOnly?: boolean;
 }
 
 interface SortableRowProps {
@@ -48,6 +49,7 @@ interface SortableRowProps {
   onSelect: () => void;
   onAddChild: () => void;
   onDelete: () => void;
+  readOnly?: boolean;
 }
 
 function SortableRow({
@@ -62,9 +64,11 @@ function SortableRow({
   onSelect,
   onAddChild,
   onDelete,
+  readOnly,
 }: SortableRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: criterion.id,
+    disabled: readOnly,
   });
 
   return (
@@ -84,6 +88,7 @@ function SortableRow({
       rootStyle={{ transform: CSS.Translate.toString(transform), transition: transition ?? undefined }}
       dragHandleProps={{ ...attributes, ...listeners }}
       isDragging={isDragging}
+      readOnly={readOnly}
     />
   );
 }
@@ -96,6 +101,7 @@ export function ScoringTreePanel({
   onAddChild,
   onDelete,
   onMove,
+  readOnly,
 }: ScoringTreePanelProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -159,7 +165,7 @@ export function ScoringTreePanel({
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id || !projected) {
+    if (readOnly || !over || active.id === over.id || !projected) {
       resetDragState();
       return;
     }
@@ -186,10 +192,12 @@ export function ScoringTreePanel({
       <div className="flex items-center justify-between gap-4 border-b border-border/60 p-4">
         <h2 className="font-semibold text-foreground">Estrutura do template</h2>
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={onAddRoot}>
-            <Plus data-icon="inline-start" />
-            Adicionar critério raiz
-          </Button>
+          {!readOnly && (
+            <Button size="sm" onClick={onAddRoot}>
+              <Plus data-icon="inline-start" />
+              Adicionar critério raiz
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={allCollapsed ? expandAll : collapseAll}>
             <ChevronsDownUp data-icon="inline-start" />
             {allCollapsed ? "Expandir tudo" : "Recolher tudo"}
@@ -232,6 +240,7 @@ export function ScoringTreePanel({
                   onSelect={() => onSelect(criterion.id)}
                   onAddChild={() => onAddChild(criterion.id)}
                   onDelete={() => onDelete(criterion)}
+                  readOnly={readOnly}
                 />
               ))}
             </div>
@@ -239,12 +248,14 @@ export function ScoringTreePanel({
         </DndContext>
       )}
 
-      <div className="border-t border-border/60 p-4">
-        <Button variant="outline" className="w-full" onClick={onAddRoot}>
-          <Plus data-icon="inline-start" />
-          Adicionar critério raiz
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="border-t border-border/60 p-4">
+          <Button variant="outline" className="w-full" onClick={onAddRoot}>
+            <Plus data-icon="inline-start" />
+            Adicionar critério raiz
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

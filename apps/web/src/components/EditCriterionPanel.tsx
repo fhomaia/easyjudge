@@ -10,8 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScoreBandsEditor } from "@/components/ScoreBandsEditor";
+import { validateScoreBands } from "@/lib/scoreBands";
+import { cn } from "@/lib/utils";
 import {
   scoringCriteriaApi,
+  type ScoreBand,
   type ScoringCriterion,
   type ScoringCriterionType,
   type UpdateScoringCriterionPayload,
@@ -30,6 +34,8 @@ interface EditCriterionPanelProps {
   hasChildren: boolean;
   onUpdated: (criterion: ScoringCriterion) => void;
   onRequestDelete: (criterion: ScoringCriterion) => void;
+  readOnly?: boolean;
+  className?: string;
 }
 
 export function EditCriterionPanel({
@@ -38,12 +44,16 @@ export function EditCriterionPanel({
   hasChildren,
   onUpdated,
   onRequestDelete,
+  readOnly,
+  className,
 }: EditCriterionPanelProps) {
   const [name, setName] = useState("");
   const [maxScore, setMaxScore] = useState("");
   const [description, setDescription] = useState("");
   const [weight, setWeight] = useState("");
+  const [bandsDraft, setBandsDraft] = useState<ScoreBand[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bandsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Acumula mudanças pendentes de vários campos — sem isso, editar
   // "nome" e depois "pontuação máxima" dentro da janela de debounce
   // cancelaria o timer do nome e só salvaria o último campo tocado.
@@ -55,6 +65,7 @@ export function EditCriterionPanel({
     setMaxScore(String(criterion.maxScore));
     setDescription(criterion.description ?? "");
     setWeight(String(criterion.weight));
+    setBandsDraft(criterion.scoreBands ?? []);
   }, [criterion]);
 
   async function persist(payload: UpdateScoringCriterionPayload) {
@@ -73,22 +84,48 @@ export function EditCriterionPanel({
     }, DEBOUNCE_MS);
   }
 
+  // As faixas só são enviadas ao servidor quando o desenho local já é
+  // válido (cobre [0, maxScore] sem vão — sobreposição é permitida) —
+  // evita mandar um
+  // payload que o backend vai rejeitar (409) no meio de uma edição
+  // (ex: acabou de clicar "Adicionar faixa" e ainda não preencheu o
+  // fim). Enquanto inválido, o rascunho fica só local, com a mensagem
+  // de `ScoreBandsEditor` guiando o usuário — nada é perdido, só não é
+  // salvo ainda.
+  function handleBandsChange(next: ScoreBand[]) {
+    setBandsDraft(next);
+    if (bandsDebounceRef.current) clearTimeout(bandsDebounceRef.current);
+    bandsDebounceRef.current = setTimeout(() => {
+      if (validateScoreBands(next, Number(maxScore)) === null) {
+        persist({ scoreBands: next });
+      }
+    }, DEBOUNCE_MS);
+  }
+
   if (!criterion) {
     return (
-      <div className="flex h-full min-h-[20rem] items-center justify-center rounded-lg border border-border/60 bg-card p-8 text-center text-sm text-muted-foreground">
+      <div
+        className={cn(
+          "flex h-full min-h-[20rem] items-center justify-center rounded-lg border border-border/60 bg-card p-8 text-center text-sm text-muted-foreground",
+          className,
+        )}
+      >
         Selecione um critério na árvore para editar.
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-5 rounded-lg border border-border/60 bg-card p-5">
+    <div className={cn("flex flex-col gap-5 rounded-lg border border-border/60 bg-card p-5", className)}>
+
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-foreground">Editar critério</h2>
-        <Button variant="destructive" size="sm" onClick={() => onRequestDelete(criterion)}>
-          <Trash2 data-icon="inline-start" />
-          Excluir
-        </Button>
+        {!readOnly && (
+          <Button variant="destructive" size="sm" onClick={() => onRequestDelete(criterion)}>
+            <Trash2 data-icon="inline-start" />
+            Excluir
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-2">
@@ -96,6 +133,7 @@ export function EditCriterionPanel({
         <Input
           id="criterion-name"
           value={name}
+          disabled={readOnly}
           onChange={(e) => {
             setName(e.target.value);
             scheduleDebouncedSave({ name: e.target.value });
@@ -108,7 +146,7 @@ export function EditCriterionPanel({
         <Select
           value={criterion.type}
           onValueChange={(value) => persist({ type: value as ScoringCriterionType })}
-          disabled={hasChildren}
+          disabled={readOnly || hasChildren}
         >
           <SelectTrigger className="w-full">
             <SelectValue>{(value: ScoringCriterionType) => TYPE_LABELS[value]}</SelectValue>
@@ -135,6 +173,7 @@ export function EditCriterionPanel({
           type="number"
           step={0.01}
           value={maxScore}
+          disabled={readOnly}
           onChange={(e) => {
             setMaxScore(e.target.value);
             const parsed = Number(e.target.value);
@@ -157,11 +196,12 @@ export function EditCriterionPanel({
           id="criterion-description"
           rows={3}
           value={description}
+          disabled={readOnly}
           onChange={(e) => {
             setDescription(e.target.value);
             scheduleDebouncedSave({ description: e.target.value });
           }}
-          className="w-full rounded-lg border border-transparent bg-muted px-4 py-2.5 text-sm text-foreground transition-colors outline-none placeholder:text-muted-foreground hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-primary/[0.06]"
+          className="w-full rounded-lg border border-transparent bg-muted px-4 py-2.5 text-sm text-foreground transition-colors outline-none placeholder:text-muted-foreground hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
         />
       </div>
 
@@ -174,6 +214,7 @@ export function EditCriterionPanel({
           type="number"
           step={0.01}
           value={weight}
+          disabled={readOnly}
           onChange={(e) => {
             setWeight(e.target.value);
             const parsed = Number(e.target.value);
@@ -193,6 +234,7 @@ export function EditCriterionPanel({
           <input
             type="checkbox"
             checked={criterion.showInJudgingSheet}
+            disabled={readOnly}
             onChange={(e) => persist({ showInJudgingSheet: e.target.checked })}
             className="size-4 accent-primary"
           />
@@ -202,6 +244,7 @@ export function EditCriterionPanel({
           <input
             type="checkbox"
             checked={criterion.allowDecimalScoring}
+            disabled={readOnly}
             onChange={(e) => persist({ allowDecimalScoring: e.target.checked })}
             className="size-4 accent-primary"
           />
@@ -211,12 +254,37 @@ export function EditCriterionPanel({
           <input
             type="checkbox"
             checked={criterion.isRequired}
+            disabled={readOnly}
             onChange={(e) => persist({ isRequired: e.target.checked })}
             className="size-4 accent-primary"
           />
           Este critério é obrigatório
         </label>
+        {criterion.type === "score_item" && (
+          <label className="flex items-center gap-2.5 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={criterion.useScoreBands}
+              disabled={readOnly}
+              onChange={(e) => persist({ useScoreBands: e.target.checked })}
+              className="size-4 accent-primary"
+            />
+            Dividir pontuação em faixas
+          </label>
+        )}
       </div>
+
+      {criterion.type === "score_item" && criterion.useScoreBands && (
+        <div className="grid min-w-0 gap-2">
+          <Label>Faixas de pontuação</Label>
+          <ScoreBandsEditor
+            bands={bandsDraft}
+            maxScore={Number(maxScore) || 0}
+            onChange={handleBandsChange}
+            disabled={readOnly}
+          />
+        </div>
+      )}
     </div>
   );
 }

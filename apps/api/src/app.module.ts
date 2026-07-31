@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -17,6 +18,7 @@ import { ScheduleModule } from './schedule/schedule.module';
 import { ScoringModule } from './scoring/scoring.module';
 import { AthletesModule } from './athletes/athletes.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -29,6 +31,11 @@ import { NotificationsModule } from './notifications/notifications.module';
       autoLoadEntities: true,
       synchronize: false,
     }),
+    // Global (sem precisar importar em cada módulo) — desacopla quem
+    // dispara um efeito (NotificationsService/EventsService) de quem
+    // reage a ele (RealtimeModule/EventsGateway), evitando import
+    // circular (ver comentário em realtime.module.ts).
+    EventEmitterModule.forRoot(),
     AuthModule,
     UsersModule,
     EventsModule,
@@ -43,6 +50,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ScoringModule,
     AthletesModule,
     NotificationsModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

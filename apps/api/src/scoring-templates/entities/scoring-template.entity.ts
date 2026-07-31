@@ -58,6 +58,15 @@ export class ScoringTemplate {
   // cada tela (CategoriesPage, EventSetupPage, ScoringTemplateCard).
   isComplete?: boolean;
 
+  // Não é coluna — verdadeiro quando o template está em uso por uma
+  // categoria de um evento (versão ativa) cujo status já saiu de
+  // "created". Preenchida em ScoringTemplatesService.findAllForUser/
+  // findOneForUser; enquanto travado, o template/seus critérios não
+  // podem ser editados (ver ScoringTemplatesService.
+  // assertNotLockedForEditing) — evita invalidar notas já lançadas ou
+  // a estrutura que jurados já estão usando ao vivo.
+  isLocked?: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

@@ -13,7 +13,10 @@ import { WithdrawPresentationDto } from '../dto/withdraw-presentation.dto';
 import { Category } from '../../categories/entities/category.entity';
 import { CategoryFormat } from '../../categories/enums/category-format.enum';
 import { Team } from '../../teams/entities/team.entity';
-import { ScoringCriterion } from '../../scoring-templates/entities/scoring-criterion.entity';
+import {
+  ScoreBand,
+  ScoringCriterion,
+} from '../../scoring-templates/entities/scoring-criterion.entity';
 import { ScoringCriterionType } from '../../scoring-templates/enums/scoring-criterion-type.enum';
 import { ScheduleEntryType } from '../../schedule/enums/schedule-entry-type.enum';
 import { JudgesService } from '../../judges/services/judges.service';
@@ -43,11 +46,26 @@ export interface ScoringCriterionView {
   maxScore: number;
   allowDecimalScoring: boolean;
   order: number;
+  // Faixas de pontuação (efeito visual na tela do jurado — ver
+  // ScoringCriteriaGroups.tsx) — só têm sentido pra `type: SCORE_ITEM`,
+  // que é a única coisa que chega aqui (buildGroups só monta folhas).
+  useScoreBands: boolean;
+  scoreBands: ScoreBand[] | null;
+  // Descrição dos subgrupos intermediários no caminho até o grupo-raiz
+  // (ex: "Stunt"/"Pyramids" dentro de "Building"), do mais próximo do
+  // item até o mais próximo da raiz — buildGroups achata a hierarquia
+  // em 2 níveis (grupo-raiz -> item) de propósito, então esses
+  // subgrupos nunca viram uma seção própria; isso só recupera a
+  // descrição deles (quando existe) pra exibir junto do item. A
+  // descrição do próprio grupo-raiz continua em ScoringGroupView.description,
+  // não repetida aqui.
+  subgroupDescriptions: { name: string; description: string }[];
 }
 
 export interface ScoringGroupView {
   id: string;
   name: string;
+  description: string | null;
   criteria: ScoringCriterionView[];
 }
 
@@ -145,9 +163,11 @@ export interface ReleaseFlagsView {
   resultsReleased: boolean;
 }
 
+// `value` já é a MÉDIA quando mais de um jurado pontua o mesmo
+// critério (ver computeAverageScoreByCriterion) — por decisão do
+// usuário, esta view não expõe jurado por jurado, só o valor final.
 export interface PresentationDetailCriterionView extends ScoringCriterionView {
   value: number | null;
-  judgeName: string;
 }
 
 export interface PresentationDetailGroupView {
@@ -632,6 +652,41 @@ export class ScoringService {
     return results;
   }
 
+  // Última nota de CADA jurado por critério (dentro de uma lista de
+  // ScoreEvent já carregada) — quando mais de um jurado pontua o mesmo
+  // critério (ex.: um jurado de legalidade que também julga um item, ou
+  // dois jurados escalados no mesmo item por engano/redundância de
+  // propósito), a nota do critério vira a MÉDIA das notas de cada
+  // jurado. Substitui o comportamento antigo de "o último ScoreEvent
+  // grava por cima, não importa de qual jurado" — que descartava
+  // silenciosamente a nota de um dos jurados do resultado final, só por
+  // ordem de chegada (ver CLAUDE.md). Usado tanto pelo total oficial
+  // (computePresentationResult) quanto pelo detalhe por critério
+  // (buildPresentationDetail).
+  private computeAverageScoreByCriterion(
+    scoreEvents: ScoreEvent[],
+  ): Map<string, number> {
+    const latestByCriterionJudge = new Map<string, Map<string, number>>();
+    for (const event of scoreEvents) {
+      if (event.kind !== ScoreEventKind.SCORE_SET) continue;
+      if (!event.criterionId || event.value === null) continue;
+      let byJudge = latestByCriterionJudge.get(event.criterionId);
+      if (!byJudge) {
+        byJudge = new Map();
+        latestByCriterionJudge.set(event.criterionId, byJudge);
+      }
+      byJudge.set(event.judgeParticipationId, event.value);
+    }
+
+    const averageByCriterion = new Map<string, number>();
+    for (const [criterionId, byJudge] of latestByCriterionJudge) {
+      const values = Array.from(byJudge.values());
+      const average = values.reduce((sum, v) => sum + v, 0) / values.length;
+      averageByCriterion.set(criterionId, average);
+    }
+    return averageByCriterion;
+  }
+
   // Nota final (soma dos critérios + deduções, sempre negativas) e
   // percentual (sobre a meta de pontos do template) de UMA
   // apresentação — extraído da Página de Resultados pra ser reusado
@@ -655,21 +710,17 @@ export class ScoringService {
       where: { scheduleEntryId },
       order: { clientCreatedAt: 'ASC' },
     });
-    const latestScoreByCriterion = new Map<string, number>();
+    const scoreByCriterion = this.computeAverageScoreByCriterion(scoreEvents);
     const deductionAdds = new Map<string, ScoreEvent>();
     const undoneDeductionIds = new Set<string>();
     for (const event of scoreEvents) {
-      if (event.kind === ScoreEventKind.SCORE_SET) {
-        if (event.criterionId && event.value !== null) {
-          latestScoreByCriterion.set(event.criterionId, event.value);
-        }
-      } else if (event.kind === ScoreEventKind.DEDUCTION_ADD) {
+      if (event.kind === ScoreEventKind.DEDUCTION_ADD) {
         deductionAdds.set(event.id, event);
       } else if (event.kind === ScoreEventKind.DEDUCTION_REMOVE) {
         if (event.undoesEventId) undoneDeductionIds.add(event.undoesEventId);
       }
     }
-    const totalScore = Array.from(latestScoreByCriterion.values()).reduce(
+    const totalScore = Array.from(scoreByCriterion.values()).reduce(
       (sum, value) => sum + value,
       0,
     );
@@ -1761,14 +1812,16 @@ export class ScoringService {
   }
 
   // Monta a visão combinada de UMA apresentação — todos os grupos do
-  // sistema de pontuação + legalidade JUNTOS, cada critério marcado
-  // com o nome do jurado responsável, mais o comentário/esboço de
-  // cada jurado que deixou algo. Reusado por `getAdminPresentationDetail`
-  // (sem restrição) e `getTeamPresentationDetail` (já validado antes
-  // de chamar). Simplificação consciente: se um critério-folha tiver
-  // MAIS de um jurado atribuído (o modelo permite, mas na prática é
-  // sempre um só), só o primeiro é usado pra resolver o valor/nome —
-  // caso de dois jurados no mesmo critério não é um cenário real hoje.
+  // sistema de pontuação + legalidade JUNTOS, mais o comentário/esboço
+  // de cada jurado que deixou algo. Reusado por
+  // `getAdminPresentationDetail` (sem restrição) e
+  // `getTeamPresentationDetail` (já validado antes de chamar). Quando
+  // um critério-folha tem mais de um jurado atribuído (o modelo
+  // permite — ver CriterionJudgeAssignment), o valor mostrado é a
+  // MÉDIA das notas de cada jurado (ver computeAverageScoreByCriterion)
+  // — a pedido do usuário, essa tela mostra só a média, sem listar
+  // jurado por jurado (diferente de `legality`/`notes` abaixo, que
+  // continuam por jurado — lá um nome só faz sentido).
   private async buildPresentationDetail(
     eventId: string,
     scheduleEntryId: string,
@@ -1797,25 +1850,20 @@ export class ScoringService {
 
     const judgeNameById = new Map(allJudges.map((j) => [j.id, j.name]));
 
-    const judgeIdByLeaf = new Map<string, string>();
+    const assignedLeafIds = new Set<string>();
     for (const assignment of assignmentsState.criterionAssignments) {
       if (assignment.resourceId !== entry.resourceId) continue;
       if (assignment.judgeIds.length === 0) continue;
-      judgeIdByLeaf.set(assignment.criterionId, assignment.judgeIds[0]);
+      assignedLeafIds.add(assignment.criterionId);
     }
 
-    const latestScoreByCriterion = new Map<string, number>();
+    const scoreByCriterion = this.computeAverageScoreByCriterion(events);
     const deductionAdds = new Map<string, ScoreEvent>();
     const undoneDeductionIds = new Set<string>();
     const lastCommentByJudge = new Map<string, string>();
 
     for (const event of events) {
       switch (event.kind) {
-        case ScoreEventKind.SCORE_SET:
-          if (event.criterionId && event.value !== null) {
-            latestScoreByCriterion.set(event.criterionId, event.value);
-          }
-          break;
         case ScoreEventKind.DEDUCTION_ADD:
           deductionAdds.set(event.id, event);
           break;
@@ -1834,8 +1882,7 @@ export class ScoringService {
     const groups = new Map<string, PresentationDetailGroupView>();
     for (const criterion of allCriteria) {
       if (criterion.type !== ScoringCriterionType.SCORE_ITEM) continue;
-      const judgeId = judgeIdByLeaf.get(criterion.id);
-      if (!judgeId) continue;
+      if (!assignedLeafIds.has(criterion.id)) continue;
 
       let root = criterion;
       while (root.parentId) {
@@ -1849,6 +1896,20 @@ export class ScoringService {
         group = { id: root.id, name: root.name, criteria: [] };
         groups.set(root.id, group);
       }
+
+      const subgroupDescriptions: { name: string; description: string }[] =
+        [];
+      let ancestor = criterion.parentId ? byId.get(criterion.parentId) : undefined;
+      while (ancestor && ancestor.id !== root.id) {
+        if (ancestor.description) {
+          subgroupDescriptions.push({
+            name: ancestor.name,
+            description: ancestor.description,
+          });
+        }
+        ancestor = ancestor.parentId ? byId.get(ancestor.parentId) : undefined;
+      }
+
       group.criteria.push({
         id: criterion.id,
         name: criterion.name,
@@ -1856,8 +1917,10 @@ export class ScoringService {
         maxScore: criterion.maxScore,
         allowDecimalScoring: criterion.allowDecimalScoring,
         order: criterion.order,
-        value: latestScoreByCriterion.get(criterion.id) ?? null,
-        judgeName: judgeNameById.get(judgeId) ?? 'Jurado',
+        useScoreBands: criterion.useScoreBands,
+        scoreBands: criterion.scoreBands,
+        subgroupDescriptions,
+        value: scoreByCriterion.get(criterion.id) ?? null,
       });
     }
     for (const group of groups.values()) {
@@ -2138,9 +2201,27 @@ export class ScoringService {
 
       let group = groups.get(root.id);
       if (!group) {
-        group = { id: root.id, name: root.name, criteria: [] };
+        group = {
+          id: root.id,
+          name: root.name,
+          description: root.description,
+          criteria: [],
+        };
         groups.set(root.id, group);
       }
+      const subgroupDescriptions: { name: string; description: string }[] =
+        [];
+      let ancestor = leaf.parentId ? byId.get(leaf.parentId) : undefined;
+      while (ancestor && ancestor.id !== root.id) {
+        if (ancestor.description) {
+          subgroupDescriptions.push({
+            name: ancestor.name,
+            description: ancestor.description,
+          });
+        }
+        ancestor = ancestor.parentId ? byId.get(ancestor.parentId) : undefined;
+      }
+
       group.criteria.push({
         id: leaf.id,
         name: leaf.name,
@@ -2148,6 +2229,9 @@ export class ScoringService {
         maxScore: leaf.maxScore,
         allowDecimalScoring: leaf.allowDecimalScoring,
         order: leaf.order,
+        useScoreBands: leaf.useScoreBands,
+        scoreBands: leaf.scoreBands,
+        subgroupDescriptions,
       });
     }
 

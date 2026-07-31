@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, EntityManager, Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'crypto';
 import { generateEventCode } from '../../common/utils/generate-event-code';
 import { Event } from '../entities/event.entity';
@@ -113,11 +114,14 @@ export class EventsService {
     private readonly categoriesRepo: Repository<Category>,
     @InjectRepository(ProgramParticipation)
     private readonly programsRepo: Repository<ProgramParticipation>,
+    @InjectRepository(JudgeParticipation)
+    private readonly judgesRepo: Repository<JudgeParticipation>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly usersService: UsersService,
     private readonly activityLogService: EventActivityLogService,
     private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // Cria a v1 do evento (aliasId = id, já que é a primeira versão) e o
@@ -185,6 +189,15 @@ export class EventsService {
             .where('p.aliasId = event.aliasId'),
         'programs_count',
       )
+      .addSelect(
+        (qb) =>
+          qb
+            .subQuery()
+            .select('COUNT(*)', 'count')
+            .from(JudgeParticipation, 'j')
+            .where('j.aliasId = event.aliasId'),
+        'judges_count',
+      )
       .innerJoin(
         EventMember,
         'member',
@@ -214,6 +227,7 @@ export class EventsService {
         currentUserRoles: roles,
         categoriesCount: Number(raw[i].categories_count),
         programsCount: Number(raw[i].programs_count),
+        judgesCount: Number(raw[i].judges_count),
       };
     });
   }
@@ -233,9 +247,10 @@ export class EventsService {
       throw new ForbiddenException('Você não tem acesso a este evento');
     }
 
-    const [categories, programs] = await Promise.all([
+    const [categories, programs, judgesCount] = await Promise.all([
       this.categoriesRepo.find({ where: { aliasId: event.aliasId } }),
       this.programsRepo.find({ where: { aliasId: event.aliasId } }),
+      this.judgesRepo.count({ where: { aliasId: event.aliasId } }),
     ]);
 
     return {
@@ -244,6 +259,7 @@ export class EventsService {
       currentUserRoles: member.roles,
       categoriesCount: categories.length,
       programsCount: programs.length,
+      judgesCount,
       categoriesUpdatedAt: latestUpdatedAt(categories),
       programsUpdatedAt: latestUpdatedAt(programs),
     };
@@ -341,6 +357,10 @@ export class EventsService {
       userId,
       EventActivityAction.PUBLISHED,
     );
+    this.eventEmitter.emit('event.status_changed', {
+      aliasId: newVersion.aliasId,
+      status: newVersion.status,
+    });
     return this.attachRole(newVersion, userId);
   }
 
@@ -361,6 +381,10 @@ export class EventsService {
       userId,
       EventActivityAction.STARTED,
     );
+    this.eventEmitter.emit('event.status_changed', {
+      aliasId: saved.aliasId,
+      status: saved.status,
+    });
     return this.attachRole(saved, userId);
   }
 
@@ -392,6 +416,10 @@ export class EventsService {
       userId,
       EventActivityAction.COMPLETED,
     );
+    this.eventEmitter.emit('event.status_changed', {
+      aliasId: saved.aliasId,
+      status: saved.status,
+    });
     return this.attachRole(saved, userId);
   }
 
@@ -437,6 +465,10 @@ export class EventsService {
       userId,
       EventActivityAction.UNPUBLISHED,
     );
+    this.eventEmitter.emit('event.status_changed', {
+      aliasId: saved.aliasId,
+      status: saved.status,
+    });
     return this.attachRole(saved, userId);
   }
 

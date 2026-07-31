@@ -17,6 +17,11 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        // Encaminha o upgrade de conexão do Socket.io (cliente conecta
+        // em `/api/socket.io`, o rewrite acima já strippa `/api` antes
+        // de chegar na API, batendo com o path default `/socket.io` do
+        // engine.io) — sem isso o handshake WebSocket não sobe em dev.
+        ws: true,
       },
       // arquivos enviados (logos de evento/equipe) são servidos direto
       // pela API em /uploads, fora do prefixo /api — mesmo raciocínio

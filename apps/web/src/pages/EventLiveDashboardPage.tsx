@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Bell,
@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   Eye,
+  FileText,
   MapPin,
   Menu,
   Trophy,
@@ -16,6 +17,12 @@ import {
 import { BlinkingDot } from "@/components/BlinkingDot";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EventStatusBadge } from "@/components/EventStatusBadge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MobileNavSheet } from "@/components/MobileNavSheet";
 import { EventLiveDesktopView } from "@/components/EventLiveDesktopView";
 import { JudgesSummaryDialog } from "@/components/JudgesSummaryDialog";
@@ -29,6 +36,7 @@ import {
   scheduleItemTitleParts,
 } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
+import { REALTIME_FALLBACK_POLL_MS, useEventLiveSocket } from "@/lib/useEventLiveSocket";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
@@ -45,6 +53,7 @@ import {
   judgingApi,
   notificationsApi,
   programsApi,
+  regulationApi,
   scheduleApi,
   scoringApi,
   teamsApi,
@@ -56,6 +65,7 @@ import {
   type JudgeAssignmentsSummary,
   type NotificationView,
   type Program,
+  type Regulation,
   type ScheduleDay,
   type TeamWithProgram,
   type UserProfile,
@@ -90,6 +100,7 @@ export function EventLiveDashboardPage() {
     Array<{ scheduleEntryId: string; startedAt: string }>
   >([]);
   const [completedEntryIds, setCompletedEntryIds] = useState<string[]>([]);
+  const [regulation, setRegulation] = useState<Regulation | null>(null);
   const [notifications, setNotifications] = useState<NotificationView[] | null>(null);
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
   const [memberCounts, setMemberCounts] = useState<Partial<Record<EventMemberRole, number>>>({});
@@ -109,6 +120,7 @@ export function EventLiveDashboardPage() {
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
     scheduleApi.listDays(id).then(setDays).catch(() => setDays([]));
     categoriesApi.list(id).then(setCategories).catch(() => setCategories([]));
+    regulationApi.get(id).then(setRegulation).catch(() => setRegulation(null));
     judgingApi.me(id).then(setAssignment).catch(() => setAssignment(EMPTY_ASSIGNMENT));
     scoringApi.getMySubmissions(id).then(setSubmittedIds).catch(() => setSubmittedIds([]));
     judgesApi
@@ -133,81 +145,81 @@ export function EventLiveDashboardPage() {
       .catch(() => setTeams(null));
   }, [id]);
 
-  // Card "Atraso atual" — sem WebSocket ainda, então recarrega junto
-  // com o tick de `now` abaixo (30s) pra refletir apresentações
-  // iniciadas por outros jurados nesse meio-tempo.
-  useEffect(() => {
+  // Card "Atraso atual" — atualizado via WebSocket (ver
+  // useEventLiveSocket abaixo) a cada notificação relevante; o
+  // `setInterval` (bem mais espaçado que antes) é só uma rede de
+  // segurança pra reconexão de socket falhando silenciosamente, não o
+  // mecanismo principal.
+  const refreshStartedPresentations = useCallback(() => {
     if (!id) return;
-    let cancelled = false;
-    function refresh() {
-      if (!id) return;
-      scoringApi
-        .getStartedPresentations(id)
-        .then((rows) => {
-          if (!cancelled) setStartedPresentations(rows);
-        })
-        .catch(() => {});
-    }
-    refresh();
-    const interval = setInterval(refresh, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    scoringApi.getStartedPresentations(id).then(setStartedPresentations).catch(() => {});
   }, [id]);
 
-  // "Próxima apresentação"/"Próximo em cada pista" — mesmo raciocínio
-  // do polling acima: sem isso, uma apresentação julgada mais rápido
-  // que a duração planejada continuava aparecendo como "próxima" até o
-  // relógio alcançar o horário agendado (ver lib/eventLiveSchedule.ts).
   useEffect(() => {
     if (!id) return;
-    let cancelled = false;
-    function refresh() {
-      if (!id) return;
-      scoringApi
-        .getCompletedPresentations(id)
-        .then((ids) => {
-          if (!cancelled) setCompletedEntryIds(ids);
-        })
-        .catch(() => {});
-    }
-    refresh();
-    const interval = setInterval(refresh, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    refreshStartedPresentations();
+    const interval = setInterval(refreshStartedPresentations, REALTIME_FALLBACK_POLL_MS);
+    return () => clearInterval(interval);
+  }, [id, refreshStartedPresentations]);
+
+  // "Próxima apresentação"/"Próximo em cada pista" — mesmo raciocínio
+  // acima: sem isso, uma apresentação julgada mais rápido que a duração
+  // planejada continuava aparecendo como "próxima" até o relógio
+  // alcançar o horário agendado (ver lib/eventLiveSchedule.ts).
+  const refreshCompletedPresentations = useCallback(() => {
+    if (!id) return;
+    scoringApi.getCompletedPresentations(id).then(setCompletedEntryIds).catch(() => {});
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    refreshCompletedPresentations();
+    const interval = setInterval(refreshCompletedPresentations, REALTIME_FALLBACK_POLL_MS);
+    return () => clearInterval(interval);
+  }, [id, refreshCompletedPresentations]);
 
   useEffect(() => {
     if (!id) return;
     eventsApi.getMemberCounts(id).then(setMemberCounts).catch(() => {});
   }, [id]);
 
-  // Card/sino "Notificações" — mesmo padrão de polling de 30s já usado
-  // pra started/completed presentations acima (sem WebSocket ainda).
+  // Card/sino "Notificações" — mesmo padrão de started/completed acima.
+  const refreshNotifications = useCallback(() => {
+    if (!id) return;
+    notificationsApi
+      .list(id)
+      .then((res) => {
+        setNotifications(res.notifications);
+        setNotificationsUnreadCount(res.unreadCount);
+      })
+      .catch(() => {});
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
-    let cancelled = false;
-    function refresh() {
+    refreshNotifications();
+    const interval = setInterval(refreshNotifications, REALTIME_FALLBACK_POLL_MS);
+    return () => clearInterval(interval);
+  }, [id, refreshNotifications]);
+
+  // Sinal do backend (EventsGateway, ver CLAUDE.md "Tempo real") — só
+  // avisa "algo mudou", quem recebe decide o que refazer. Uma
+  // notificação nova pode significar apresentação iniciada/concluída,
+  // movida, contestação, desistência etc.; mais simples (e barato o
+  // bastante numa POC) reatualizar os 3 de uma vez do que filtrar por
+  // tipo. `event.status_changed` recarrega o evento (badge de status/
+  // "Ao vivo" some/aparece sem precisar de reload).
+  useEventLiveSocket(id, {
+    onNotification: () => {
+      refreshNotifications();
+      refreshStartedPresentations();
+      refreshCompletedPresentations();
+    },
+    onEventStatusChanged: () => {
       if (!id) return;
-      notificationsApi
-        .list(id)
-        .then((res) => {
-          if (cancelled) return;
-          setNotifications(res.notifications);
-          setNotificationsUnreadCount(res.unreadCount);
-        })
-        .catch(() => {});
-    }
-    refresh();
-    const interval = setInterval(refresh, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [id]);
+      eventsApi.get(id).then(setEvent).catch(() => {});
+    },
+  });
 
   // Essa tela é só pra evento publicado/em andamento — "created" volta
   // pro setup, "completed" ainda não tem uma tela própria de resumo
@@ -455,6 +467,37 @@ export function EventLiveDashboardPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      disabled={!regulation || regulation.documents.length === 0}
+                      title={
+                        !regulation || regulation.documents.length === 0
+                          ? "Nenhum documento enviado ainda"
+                          : undefined
+                      }
+                      aria-label="Documentos do regulamento"
+                      className="flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                    />
+                  }
+                >
+                  <FileText className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {regulation?.documents.map((doc) => (
+                    <DropdownMenuItem
+                      key={doc.id}
+                      onClick={() => window.open(doc.fileUrl, "_blank", "noopener,noreferrer")}
+                    >
+                      <FileText data-icon="inline-start" />
+                      <span className="truncate">{doc.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               {canComplete && (
                 <button
                   type="button"
@@ -647,7 +690,7 @@ export function EventLiveDashboardPage() {
             <StatTile
               icon={Users}
               iconClassName="bg-emerald-500/10 text-emerald-600"
-              value={judges === null ? "—" : String(judges.length)}
+              value={String(event.judgesCount ?? 0)}
               label="Jurados cadastrados"
               onClick={canViewJudges ? () => setJudgesDialogOpen(true) : undefined}
             />
@@ -662,7 +705,7 @@ export function EventLiveDashboardPage() {
             <StatTile
               icon={Building2}
               iconClassName="bg-blue-500/10 text-blue-600"
-              value={programs === null ? "—" : String(programs.length)}
+              value={String(event.programsCount ?? 0)}
               label="Programas cadastrados"
               onClick={isAdminOrAssessor ? () => setProgramsDialogOpen(true) : undefined}
             />
@@ -695,8 +738,7 @@ export function EventLiveDashboardPage() {
       starting={starting}
       canComplete={canComplete}
       onOpenComplete={() => setCompleteDialogOpen(true)}
-      judges={judges}
-      programs={programs}
+      regulation={regulation}
       memberCounts={memberCounts}
       isAdminOrAssessor={isAdminOrAssessor}
       canViewJudges={canViewJudges}

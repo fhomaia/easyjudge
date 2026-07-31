@@ -12,6 +12,20 @@ import {
 import { ScoringTemplate } from './scoring-template.entity';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 
+// Faixa de pontuação opcional dentro de um item de avaliação (ex.:
+// "Excelente" 18-20, "Bom" 14-18, ...) — só efeito visual na tela do
+// jurado (ainda não implementado, ver CLAUDE.md), por isso não é uma
+// entidade própria: é uma lista pequena e contida, editada junto com o
+// resto do critério, sem necessidade de reordenar/mover como os
+// próprios critérios têm.
+export interface ScoreBand {
+  name: string;
+  description: string | null;
+  color: string;
+  min: number;
+  max: number;
+}
+
 // Nó da árvore de critérios de um template — pode ser um Grupo (tem
 // filhos) ou um Item de avaliação (nota, folha). Auto-referenciado via
 // parentId (lista de adjacência); null = nó raiz. Todo nó (grupo ou
@@ -73,6 +87,17 @@ export class ScoringCriterion {
 
   @Column({ name: 'is_required', default: true })
   isRequired: boolean;
+
+  // Só faz sentido pra type = SCORE_ITEM — grupo não recebe nota,
+  // então não tem faixa. `scoreBands` fica null enquanto desligado; o
+  // service (ScoringCriteriaService) garante que as faixas, quando
+  // presentes, sempre cobrem [0, maxScore] sem sobreposição nem vão —
+  // ver assertBandsCoverMaxScore.
+  @Column({ name: 'use_score_bands', default: false })
+  useScoreBands: boolean;
+
+  @Column({ name: 'score_bands', type: 'jsonb', nullable: true })
+  scoreBands: ScoreBand[] | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

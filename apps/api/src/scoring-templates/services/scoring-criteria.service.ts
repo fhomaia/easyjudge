@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
-import { ScoringCriterion } from '../entities/scoring-criterion.entity';
+import { ScoreBand, ScoringCriterion } from '../entities/scoring-criterion.entity';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 import { CreateScoringCriterionDto } from '../dto/create-scoring-criterion.dto';
 import { UpdateScoringCriterionDto } from '../dto/update-scoring-criterion.dto';
@@ -29,6 +29,7 @@ export class ScoringCriteriaService {
     userId: string,
   ): Promise<ScoringCriterion> {
     await this.templatesService.findOwnTemplateOrThrow(templateId, userId);
+    await this.templatesService.assertNotLockedForEditing(templateId);
 
     const parentId = dto.parentId ?? null;
     if (parentId) {
@@ -36,13 +37,81 @@ export class ScoringCriteriaService {
     }
 
     const order = await this.nextOrder(templateId, parentId);
+    const payload: Omit<CreateScoringCriterionDto, 'scoreBands'> & {
+      scoreBands?: ScoreBand[];
+    } = { ...dto, scoreBands: this.normalizeBands(dto.scoreBands) };
+    if (payload.type === ScoringCriterionType.GROUP) {
+      // Grupo não recebe nota — não faz sentido ter faixas.
+      payload.useScoreBands = false;
+      payload.scoreBands = undefined;
+    } else if (payload.scoreBands) {
+      this.assertBandsCoverMaxScore(payload.scoreBands, payload.maxScore);
+    }
+
     const criterion = this.criteriaRepo.create({
-      ...dto,
+      ...payload,
       parentId,
       templateId,
       order,
     });
     return this.criteriaRepo.save(criterion);
+  }
+
+  // DTO permite `description` opcional (undefined quando não enviado);
+  // a entidade guarda `string | null` (mesmo padrão de
+  // ScoringCriterion.description) — normaliza antes de persistir.
+  private normalizeBands(
+    bands: { name: string; description?: string; color: string; min: number; max: number }[] | undefined,
+  ): ScoreBand[] | undefined {
+    if (!bands) return undefined;
+    return bands.map((band) => ({ ...band, description: band.description ?? null }));
+  }
+
+  // As faixas, quando presentes, precisam cobrir [0, maxScore] inteiro
+  // — senão um jurado poderia lançar uma nota que não cai em faixa
+  // nenhuma. Sobreposição entre faixas é permitida de propósito (pedido
+  // explícito do usuário) — só falta de cobertura (vão) é erro. Só roda
+  // quando `scoreBands` de fato faz parte do payload (ver create/
+  // update) — mudar só o maxScore sem tocar nas faixas não dispara essa
+  // checagem (evitaria travar o autosave por campo já usado no
+  // builder); cabe ao frontend avisar visualmente se as faixas ficarem
+  // desatualizadas nesse caso.
+  private assertBandsCoverMaxScore(bands: ScoreBand[], maxScore: number): void {
+    if (!bands || bands.length === 0) {
+      throw new ConflictException('Defina ao menos uma faixa de pontuação.');
+    }
+    for (const band of bands) {
+      if (!band.name?.trim()) {
+        throw new ConflictException('Toda faixa de pontuação precisa de um nome.');
+      }
+      if (band.min >= band.max) {
+        throw new ConflictException(
+          'Em toda faixa de pontuação, o valor de início precisa ser menor que o de fim.',
+        );
+      }
+    }
+    // Sweep pelas faixas ordenadas por início, acumulando até onde a
+    // cobertura já chega — sobreposição não atrapalha (só estende ou
+    // mantém `covered`), só um vão (próxima faixa começando depois de
+    // `covered`) é rejeitado.
+    const sorted = [...bands].sort((a, b) => a.min - b.min);
+    if (sorted[0].min > 0) {
+      throw new ConflictException('As faixas de pontuação precisam cobrir a partir de 0.');
+    }
+    let covered = sorted[0].max;
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].min > covered) {
+        throw new ConflictException(
+          'Existe um intervalo de pontuação sem nenhuma faixa correspondente.',
+        );
+      }
+      covered = Math.max(covered, sorted[i].max);
+    }
+    if (covered < maxScore) {
+      throw new ConflictException(
+        'As faixas de pontuação precisam cobrir até a pontuação máxima do critério.',
+      );
+    }
   }
 
   async findAllForTemplate(
@@ -77,6 +146,7 @@ export class ScoringCriteriaService {
     userId: string,
   ): Promise<ScoringCriterion> {
     await this.templatesService.findOwnTemplateOrThrow(templateId, userId);
+    await this.templatesService.assertNotLockedForEditing(templateId);
     const criterion = await this.findCriterionOrThrow(templateId, id);
 
     if (
@@ -91,12 +161,43 @@ export class ScoringCriteriaService {
       }
     }
 
-    Object.assign(criterion, stripUndefined(dto));
+    const { scoreBands: rawScoreBands, ...rawPatch } = stripUndefined(dto);
+    // `scoreBands` só entra no patch quando o payload de fato o inclui —
+    // `patch.scoreBands = this.normalizeBands(undefined)` (que dá
+    // `undefined`) seria uma CHAVE presente com valor `undefined` no
+    // objeto; `Object.assign` abaixo apagaria `criterion.scoreBands` em
+    // memória mesmo sem intenção (ex: um PATCH só de `maxScore`) — o
+    // TypeORM `save()` ignora a coluna nesse caso (não perde o dado no
+    // banco), mas a entidade RETORNADA na resposta HTTP ficava com
+    // `scoreBands: undefined`, que o `JSON.stringify` omite — o builder
+    // interpretava a ausência da chave como "sem faixas" e mostrava a
+    // lista vazia até um reload, mesmo com o banco intacto.
+    const patch: Omit<Partial<UpdateScoringCriterionDto>, 'scoreBands'> & {
+      scoreBands?: ScoreBand[] | null;
+    } = { ...rawPatch };
+    if (rawScoreBands !== undefined) {
+      patch.scoreBands = this.normalizeBands(rawScoreBands);
+    }
+    if (patch.type === ScoringCriterionType.GROUP) {
+      // Grupo não recebe nota — não faz sentido ter faixas.
+      patch.useScoreBands = false;
+      patch.scoreBands = null;
+    } else if (patch.useScoreBands === false) {
+      patch.scoreBands = null;
+    }
+
+    Object.assign(criterion, patch);
+
+    if (criterion.type === ScoringCriterionType.SCORE_ITEM && dto.scoreBands !== undefined) {
+      this.assertBandsCoverMaxScore(criterion.scoreBands ?? [], criterion.maxScore);
+    }
+
     return this.criteriaRepo.save(criterion);
   }
 
   async remove(templateId: string, id: string, userId: string): Promise<void> {
     await this.templatesService.findOwnTemplateOrThrow(templateId, userId);
+    await this.templatesService.assertNotLockedForEditing(templateId);
     const criterion = await this.findCriterionOrThrow(templateId, id);
     await this.criteriaRepo.remove(criterion);
   }
@@ -111,6 +212,7 @@ export class ScoringCriteriaService {
     userId: string,
   ): Promise<ScoringCriterion[]> {
     await this.templatesService.findOwnTemplateOrThrow(templateId, userId);
+    await this.templatesService.assertNotLockedForEditing(templateId);
     const criterion = await this.findCriterionOrThrow(templateId, id);
 
     const newParentId = dto.newParentId ?? null;
