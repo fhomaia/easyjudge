@@ -1,7 +1,7 @@
 import type { UserProfile, UserRole } from "@/api/client";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  organization: "Produtor esportivo",
+  organization: "Produtor de eventos",
   judge: "Jurado",
   program: "Programa/Ginásio",
   athlete: "Atleta",
