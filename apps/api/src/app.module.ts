@@ -20,6 +20,7 @@ import { AthletesModule } from './athletes/athletes.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { CommonModule } from './common/common.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { CommonModule } from './common/common.module';
     AthletesModule,
     NotificationsModule,
     RealtimeModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -68,6 +68,45 @@ export class MailService {
         : `Código de verificação enviado para ${recipient}`,
     );
   }
+
+  // Caixa de suporte fixa (não env var, mesmo raciocínio de LOGO_URL
+  // abaixo): quem recebe é sempre a mesma, independente de ambiente —
+  // hoje encaminhada via Cloudflare Email Routing pra uma caixa real,
+  // não uma conta de email própria.
+  private readonly supportRecipient = 'suporte@cheercup.com.br';
+
+  async sendSupportMessage(
+    user: { name: string; email: string; role: string },
+    message: string,
+  ): Promise<void> {
+    if (!this.resend) {
+      this.logger.log(
+        `[STUB] Mensagem de suporte de ${user.email}: ${message}`,
+      );
+      return;
+    }
+
+    const { error } = await this.resend.emails.send({
+      from: this.fromAddress,
+      to: this.supportRecipient,
+      // Responder o email já cai direto na caixa de quem pediu ajuda,
+      // sem precisar copiar o email manualmente pro corpo da resposta.
+      replyTo: user.email,
+      subject: `[Preciso de ajuda] ${user.name}`,
+      html: buildSupportEmailHtml(user, message),
+    });
+
+    if (error) {
+      this.logger.error(
+        `Falha ao enviar mensagem de suporte de ${user.email}: ${error.message}`,
+      );
+      throw new Error(
+        'Não foi possível enviar sua mensagem. Tente novamente.',
+      );
+    }
+
+    this.logger.log(`Mensagem de suporte enviada por ${user.email}`);
+  }
 }
 
 // Domínio de produção fixo (não config de ambiente): o logo precisa ser
@@ -148,6 +187,53 @@ function buildVerificationEmailHtml(
             <tr>
               <td style="padding:20px 40px;background:#f4f6f8;border-top:1px solid #e7ebee;text-align:center;">
                 <span style="font-size:12px;color:#8a97a6;">Cheer Cup</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+// Template do email de "Preciso de ajuda" — mais simples que o de
+// verificação de propósito (caixa interna de suporte, não algo visto
+// pelo usuário final): só precisa deixar claro quem mandou e o que foi
+// escrito. `message` pode ter quebra de linha (textarea livre no
+// frontend) — convertida pra `<br>` depois de escapar o HTML.
+function buildSupportEmailHtml(
+  user: { name: string; email: string; role: string },
+  message: string,
+): string {
+  const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
+  return `<!doctype html>
+<html lang="pt-BR">
+  <body style="margin:0;padding:0;background:#f4f6f8;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:40px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="width:480px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <tr>
+              <td style="padding:24px 32px;background:#14293d;">
+                <span style="font-size:16px;font-weight:700;color:#ffffff;">Preciso de ajuda</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 8px;font-size:14px;color:#14293d;">
+                <p style="margin:0 0 4px;"><strong>${escapeHtml(user.name)}</strong> (${escapeHtml(user.role)})</p>
+                <p style="margin:0;color:#3d6485;">${escapeHtml(user.email)}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 32px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;border-radius:8px;">
+                  <tr>
+                    <td style="padding:16px;font-size:14px;line-height:1.6;color:#14293d;">
+                      ${safeMessage}
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
           </table>

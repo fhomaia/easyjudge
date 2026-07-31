@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Eye, LogOut, Menu, UserCog } from "lucide-react";
+import { CircleHelp, Eye, LogOut, Menu, UserCog } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getAccountLabel } from "@/lib/roleLabels";
 import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
 import { BrandMark, MobileNavSheet, NAV_ITEMS, type EventNavItem } from "@/components/MobileNavSheet";
 import { ImpersonateDialog } from "@/components/ImpersonateDialog";
+import { HelpDialog } from "@/components/HelpDialog";
 import { useAuthStore } from "@/store/auth";
 import type { UserProfile } from "@/api/client";
 
@@ -103,6 +104,7 @@ function ProfileFooter({
   onLogout: () => void;
 }) {
   const [impersonateOpen, setImpersonateOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const canImpersonate = profile?.email.toLowerCase() === IMPERSONATOR_EMAIL;
   const impersonatorToken = useAuthStore((s) => s.impersonatorToken);
   const impersonatingLabel = useAuthStore((s) => s.impersonatingLabel);
@@ -156,6 +158,16 @@ function ProfileFooter({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          aria-label="Preciso de ajuda"
+          title="Preciso de ajuda"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <CircleHelp className="size-4" />
+        </button>
+        <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
         {canImpersonate && (
           <>
             <button

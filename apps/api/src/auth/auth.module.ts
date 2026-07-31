@@ -35,6 +35,9 @@ import { AthletesModule } from '../athletes/athletes.module';
   ],
   controllers: [AuthController],
   providers: [AuthService, MailService, JwtStrategy],
-  exports: [AuthService],
+  // MailService exportado além de AuthService: SupportModule reusa a
+  // mesma instância (config do Resend já resolvida) pro botão "Preciso
+  // de ajuda", em vez de duplicar a configuração.
+  exports: [AuthService, MailService],
 })
 export class AuthModule {}

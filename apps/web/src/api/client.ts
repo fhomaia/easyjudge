@@ -1543,3 +1543,11 @@ export const notificationsApi = {
   markSeen: (eventId: string) =>
     authRequest<void>(`/events/${eventId}/notifications/seen`, { method: "POST" }),
 };
+
+export const supportApi = {
+  contact: (message: string) =>
+    authRequest<void>("/support/contact", {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+};
