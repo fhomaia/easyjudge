@@ -149,6 +149,7 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
   email: string;
+  hasConfirmedAthleteLink: boolean;
 }
 
 export const usersApi = {

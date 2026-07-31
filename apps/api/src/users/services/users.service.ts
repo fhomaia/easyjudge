@@ -1,7 +1,8 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, IsNull, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
+import { AthleteLink } from '../../athletes/entities/athlete-link.entity';
 import { RegisterDto } from '../../auth/dto/register.dto';
 import { UserRole } from '../../common/enums/user-role.enum';
 
@@ -10,6 +11,12 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    // Repositório direto (não importa AthletesModule) — AthletesModule já
+    // importa UsersModule, então o caminho inverso criaria import
+    // cíclico. Mesmo padrão já usado em NotificationsService/
+    // ScoringTemplatesModule pra evitar isso.
+    @InjectRepository(AthleteLink)
+    private readonly athleteLinksRepository: Repository<AthleteLink>,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -114,5 +121,17 @@ export class UsersService {
 
   async setPasswordHash(userId: string, passwordHash: string): Promise<void> {
     await this.usersRepository.update(userId, { passwordHash });
+  }
+
+  // Usado pra decidir, na sidebar, se um usuário ATHLETE aparece como
+  // "Atleta" ou "Espectador" (rótulo de conta "Espectador" existe só na
+  // UI — no cadastro, quem escolhe essa opção também vira role=athlete,
+  // ver RegisterDialog). Exige confirmação (não basta o vínculo existir)
+  // pra ficar consistente com "só conta depois que o programa confirma".
+  async hasConfirmedAthleteLink(userId: string): Promise<boolean> {
+    const count = await this.athleteLinksRepository.count({
+      where: { athleteUserId: userId, confirmedAt: Not(IsNull()) },
+    });
+    return count > 0;
   }
 }

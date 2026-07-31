@@ -21,7 +21,16 @@ import {
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import { formatCpf, formatCnpj } from "@/lib/masks";
-import { ROLE_LABELS } from "@/lib/roleLabels";
+import { ROLE_LABELS, SIGNUP_ROLE_LABELS, type SignupRole } from "@/lib/roleLabels";
+
+// "Espectador" some do enum de verdade: no fundo é role=athlete sem
+// vínculo (ver roleLabels.ts) — só pula as etapas "team"/"programEmail"
+// abaixo. Mantém a mesma ordem que já existia (Object.keys(ROLE_LABELS)),
+// só acrescenta a opção nova no fim.
+const SIGNUP_ROLE_ORDER: SignupRole[] = [
+  ...(Object.keys(ROLE_LABELS) as UserRole[]),
+  "spectator",
+];
 
 // Cada item é uma "pergunta" da conversa. `summary` fecha a coleta de
 // dados e dispara o /auth/register (que envia o email de confirmação);
@@ -42,9 +51,12 @@ const STEPS = [
 type StepKey = (typeof STEPS)[number];
 
 // "programEmail" só faz sentido pra role=athlete — pulado nos dois
-// sentidos (goNext/goBack) pra quem não é atleta.
-function isStepApplicable(key: StepKey, role: UserRole): boolean {
+// sentidos (goNext/goBack) pra quem não é atleta (nem espectador, que
+// por definição não tem vínculo). "team" também não faz sentido pra
+// espectador, que declara de propósito não ter equipe.
+function isStepApplicable(key: StepKey, role: SignupRole): boolean {
   if (key === "programEmail") return role === "athlete";
+  if (key === "team") return role !== "spectator";
   return true;
 }
 
@@ -107,7 +119,7 @@ function OptionCard({
 }
 
 const INITIAL_STATE = {
-  role: "judge" as UserRole,
+  role: "judge" as SignupRole,
   documentType: "cpf" as DocumentType,
   firstName: "",
   lastName: "",
@@ -210,7 +222,9 @@ export function RegisterDialog({
     setLoading(true);
     try {
       const { userId } = await authApi.register({
-        role: form.role,
+        // Espectador não existe pro backend — vira athlete comum, sem
+        // equipe/vínculo (ver comentário de SIGNUP_ROLE_ORDER acima).
+        role: form.role === "spectator" ? "athlete" : form.role,
         firstName: form.firstName,
         lastName: form.lastName,
         documentType: form.documentType,
@@ -318,19 +332,43 @@ export function RegisterDialog({
 
         <FormError message={error} />
 
-        {/* short: em telas baixas, alguns passos (ex. "role", com 4
-            opções) ficam mais altos que cabe na viewport mesmo já
-            compactos — como os passos são posicionados via `absolute`
-            (evita "pulo" de layout na troca de passo, ver comentário do
-            AnimatePresence abaixo), a altura deste wrapper nunca é
-            dirigida pelo conteúdo. Com overflow-hidden, isso cortava o
-            passo mais alto sem barra de rolagem nenhuma. Em vez de um
-            min-h "mágico" recalibrado a cada mudança de conteúdo (mesma
-            armadilha documentada no CLAUDE.md pro min-h-[340px] do
-            desktop), deixamos o overflow visível no modo short — o
-            excesso vira scroll do <Dialog> (que já tem
-            overflow-y-auto), sem depender de nenhum número fixo. */}
-        <div className="relative min-h-[340px] overflow-hidden short:min-h-[200px] short:overflow-visible">
+        {/* short: em telas baixas, alguns passos (ex. "role", com 5
+            opções desde que "Espectador" foi acrescentado) ficam mais
+            altos que cabe na viewport mesmo já compactos — como os
+            passos são posicionados via `absolute` (evita "pulo" de
+            layout na troca de passo, ver comentário do AnimatePresence
+            abaixo), a altura deste wrapper nunca é dirigida pelo
+            conteúdo. Com overflow-hidden, isso cortava o passo mais alto
+            sem barra de rolagem nenhuma. Em vez de um min-h "mágico"
+            recalibrado a cada mudança de conteúdo (mesma armadilha
+            documentada no CLAUDE.md pro min-h-[340px] do desktop),
+            deixamos o overflow visível no modo short — o excesso vira
+            scroll do <Dialog> (que já tem overflow-y-auto), sem depender
+            de nenhum número fixo.
+            min-h-[400px]: fora do modo short, o passo "role" com as 5
+            opções mede ~376px de conteúdo real (h3 + 5 OptionCard de
+            56px + gaps) — 400px dá uma folga confortável. Se um 6º
+            papel for acrescentado no futuro, recalibrar este número
+            (mesma armadilha do comentário acima).
+            short + passo "role": o <DialogPrimitive.Popup> (dialog.tsx)
+            é `display: grid` + `overflow-y-auto` — um comportamento
+            conhecido do CSS faz o padding-bottom do PRÓPRIO container de
+            scroll não ser respeitado no fim do scroll (grid/flex
+            "esquecem" o end-padding do scroll container, ver
+            github.com/w3c/csswg-drafts/issues/129), então o último item
+            ficava exatamente rente à borda arredondada do popup ao rolar
+            até o fim. Um spacer como IRMÃO deste wrapper (depois dele,
+            ainda dentro do Popup) NÃO funciona: a posição desse irmão no
+            fluxo normal segue a altura PRÓPRIA deste wrapper
+            (min-h-[200px]), não o conteúdo absolutamente posicionado que
+            transborda por cima dele — o spacer acaba "enterrado" dentro
+            da zona de overflow, não depois dela. O fix de verdade
+            precisa ficar DENTRO do passo "role" (função do próprio
+            motion.div absoluto), como último filho REAL do RadioGroup —
+            só assim ele conta pra altura intrínseca do passo, que é o
+            que de fato transborda e chega no scrollHeight do Popup. Ver
+            `short:h-4` no fim do RadioGroup abaixo. */}
+        <div className="relative min-h-[400px] overflow-hidden short:min-h-[200px] short:overflow-visible">
           <AnimatePresence mode="wait" custom={direction} initial={false}>
             <motion.div
               key={step}
@@ -348,20 +386,25 @@ export function RegisterDialog({
                   <RadioGroup
                     value={form.role}
                     onValueChange={(v) => {
-                      update("role", v as UserRole);
+                      update("role", v as SignupRole);
                       goNext();
                     }}
                     className="grid gap-3"
                   >
-                    {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
+                    {SIGNUP_ROLE_ORDER.map((r) => (
                       <OptionCard
                         key={r}
                         value={r}
-                        label={ROLE_LABELS[r]}
+                        label={SIGNUP_ROLE_LABELS[r]}
                         onSelect={r === form.role ? goNext : undefined}
                       />
                     ))}
                   </RadioGroup>
+                  {/* Spacer só existe (via `short:block`) em paisagem —
+                      ver comentário do wrapper acima. Precisa estar AQUI
+                      (filho real do próprio passo, depois do
+                      RadioGroup), não como irmão do wrapper lá fora. */}
+                  <div aria-hidden className="hidden short:block short:h-4" />
                 </div>
               )}
 
@@ -508,7 +551,7 @@ export function RegisterDialog({
                 <div className="grid gap-5 short:gap-3">
                   <h3 className="text-xl font-medium short:text-lg">Confere se está tudo certo:</h3>
                   <dl className="grid gap-2 rounded-lg border p-3 text-sm">
-                    <SummaryRow label="Papel" value={ROLE_LABELS[form.role]} />
+                    <SummaryRow label="Papel" value={SIGNUP_ROLE_LABELS[form.role]} />
                     <SummaryRow
                       label="Nome"
                       value={`${form.firstName} ${form.lastName}`}
@@ -518,10 +561,12 @@ export function RegisterDialog({
                       value={form.documentNumber}
                     />
                     <SummaryRow label="Email" value={form.email} />
-                    <SummaryRow
-                      label="Equipe/instituição"
-                      value={form.teamOrInstitutionName || "Não informado"}
-                    />
+                    {form.role !== "spectator" && (
+                      <SummaryRow
+                        label="Equipe/instituição"
+                        value={form.teamOrInstitutionName || "Não informado"}
+                      />
+                    )}
                     {form.role === "athlete" && (
                       <SummaryRow
                         label="Email do programa"

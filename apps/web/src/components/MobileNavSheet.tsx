@@ -1,7 +1,7 @@
 import { Building2, Calculator, CalendarDays, LogOut, Users, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { ROLE_LABELS } from "@/lib/roleLabels";
+import { getAccountLabel } from "@/lib/roleLabels";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { UserProfile, UserRole } from "@/api/client";
 
@@ -184,7 +184,7 @@ export function MobileNavSheet({
                 {profile ? `${profile.firstName} ${profile.lastName}` : "Carregando..."}
               </p>
               <p className="truncate text-xs text-white/50">
-                {profile ? ROLE_LABELS[profile.role] : ""}
+                {profile ? getAccountLabel(profile) : ""}
               </p>
             </div>
           </div>

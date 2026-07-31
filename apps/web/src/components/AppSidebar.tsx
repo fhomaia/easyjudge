@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Eye, LogOut, Menu, UserCog } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { ROLE_LABELS } from "@/lib/roleLabels";
+import { getAccountLabel } from "@/lib/roleLabels";
 import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
 import { BrandMark, MobileNavSheet, NAV_ITEMS, type EventNavItem } from "@/components/MobileNavSheet";
 import { ImpersonateDialog } from "@/components/ImpersonateDialog";
@@ -149,7 +149,7 @@ function ProfileFooter({
             {profile ? `${profile.firstName} ${profile.lastName}` : "Carregando..."}
           </p>
           <p className="truncate text-xs text-white/50">
-            {profile ? ROLE_LABELS[profile.role] : ""}
+            {profile ? getAccountLabel(profile) : ""}
           </p>
         </div>
       </div>
