@@ -220,7 +220,7 @@ export function HomePage() {
             {events !== null && (
               <motion.div key="events" initial="hidden" animate="show" exit={{ opacity: 0 }}>
                 <div className="grid gap-6">
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <h1 className="text-2xl font-semibold text-foreground">Meus eventos</h1>
                       <p className="mt-1 text-sm text-muted-foreground">
@@ -232,10 +232,17 @@ export function HomePage() {
                         <Ticket data-icon="inline-start" />
                         Tenho um código
                       </Button>
-                      <Button onClick={() => setCreateOpen(true)}>
-                        <Plus data-icon="inline-start" />
-                        Novo evento
-                      </Button>
+                      {/* Criar evento é uma tela de gestão — decisão de
+                          escopo do projeto é desktop-only (ver
+                          CLAUDE.md, "Uso inicial"). No mobile pedimos
+                          pra usar o computador em vez de simplesmente
+                          esconder sem explicação. */}
+                      {!isMobile && (
+                        <Button onClick={() => setCreateOpen(true)}>
+                          <Plus data-icon="inline-start" />
+                          Novo evento
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -313,10 +320,17 @@ export function HomePage() {
                     </>
                   ) : (
                     <div className="flex min-h-[50vh] items-center justify-center">
-                      <Button size="lg" onClick={() => setCreateOpen(true)}>
-                        <Plus data-icon="inline-start" />
-                        Criar evento
-                      </Button>
+                      {isMobile ? (
+                        <p className="max-w-xs text-center text-sm text-muted-foreground">
+                          Para criar um novo evento, acesse cheercup.com.br em um
+                          computador.
+                        </p>
+                      ) : (
+                        <Button size="lg" onClick={() => setCreateOpen(true)}>
+                          <Plus data-icon="inline-start" />
+                          Criar evento
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
