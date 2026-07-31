@@ -1,6 +1,12 @@
 import { useAuthStore } from "@/store/auth";
 
-const API_BASE = "/api";
+// Em dev, sem VITE_API_URL definida, cai pro proxy do Vite (`/api`,
+// ver vite.config.ts) — same-origin, sem CORS. Em produção (build
+// estático, sem proxy de servidor), VITE_API_URL aponta direto pro
+// backend (ex: https://cheercup-api.onrender.com, sem sufixo/rota
+// própria — os endpoints da API são montados na raiz, não sob /api).
+export const API_URL = import.meta.env.VITE_API_URL as string | undefined;
+const API_BASE = API_URL ?? "/api";
 
 export class ApiError extends Error {
   status: number;
