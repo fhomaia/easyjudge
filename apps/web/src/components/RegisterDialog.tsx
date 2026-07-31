@@ -332,43 +332,49 @@ export function RegisterDialog({
 
         <FormError message={error} />
 
-        {/* short: em telas baixas, alguns passos (ex. "role", com 5
-            opções desde que "Espectador" foi acrescentado) ficam mais
-            altos que cabe na viewport mesmo já compactos — como os
-            passos são posicionados via `absolute` (evita "pulo" de
-            layout na troca de passo, ver comentário do AnimatePresence
-            abaixo), a altura deste wrapper nunca é dirigida pelo
-            conteúdo. Com overflow-hidden, isso cortava o passo mais alto
-            sem barra de rolagem nenhuma. Em vez de um min-h "mágico"
-            recalibrado a cada mudança de conteúdo (mesma armadilha
-            documentada no CLAUDE.md pro min-h-[340px] do desktop),
-            deixamos o overflow visível no modo short — o excesso vira
-            scroll do <Dialog> (que já tem overflow-y-auto), sem depender
-            de nenhum número fixo.
-            min-h-[400px]: fora do modo short, o passo "role" com as 5
-            opções mede ~376px de conteúdo real (h3 + 5 OptionCard de
-            56px + gaps) — 400px dá uma folga confortável. Se um 6º
-            papel for acrescentado no futuro, recalibrar este número
-            (mesma armadilha do comentário acima).
-            short + passo "role": o <DialogPrimitive.Popup> (dialog.tsx)
-            é `display: grid` + `overflow-y-auto` — um comportamento
-            conhecido do CSS faz o padding-bottom do PRÓPRIO container de
-            scroll não ser respeitado no fim do scroll (grid/flex
-            "esquecem" o end-padding do scroll container, ver
-            github.com/w3c/csswg-drafts/issues/129), então o último item
-            ficava exatamente rente à borda arredondada do popup ao rolar
-            até o fim. Um spacer como IRMÃO deste wrapper (depois dele,
-            ainda dentro do Popup) NÃO funciona: a posição desse irmão no
-            fluxo normal segue a altura PRÓPRIA deste wrapper
-            (min-h-[200px]), não o conteúdo absolutamente posicionado que
-            transborda por cima dele — o spacer acaba "enterrado" dentro
-            da zona de overflow, não depois dela. O fix de verdade
-            precisa ficar DENTRO do passo "role" (função do próprio
-            motion.div absoluto), como último filho REAL do RadioGroup —
-            só assim ele conta pra altura intrínseca do passo, que é o
-            que de fato transborda e chega no scrollHeight do Popup. Ver
-            `short:h-4` no fim do RadioGroup abaixo. */}
-        <div className="relative min-h-[400px] overflow-hidden short:min-h-[200px] short:overflow-visible">
+        {/* Alguns passos (ex. "role", com 5 opções desde que "Espectador"
+            foi acrescentado) ficam mais altos que um min-h fixo
+            calibrado à mão — como os passos são posicionados via
+            `absolute` (evita "pulo" de layout na troca de passo, ver
+            comentário do AnimatePresence abaixo), a altura deste wrapper
+            nunca é dirigida pelo conteúdo, então um passo mais alto que
+            o min-h simplesmente transbordava.
+            Overflow SEMPRE visível (não só em telas baixas): tentamos
+            manter overflow-hidden fora do modo "short" com um min-h
+            recalibrado à mão pro passo "role" (primeiro 340px, depois
+            400px) — quebrou de novo em produção porque a métrica de
+            fonte real do Android rende cada OptionCard um pouco mais
+            alto que no Chrome desktop usado pra medir o número (a
+            última opção aparecia com o padding inferior cortado,
+            mesmo com margem de sobra no teste local). Em vez de caçar
+            um número mágico pra sempre certo em qualquer fonte/
+            plataforma, deixamos o overflow visível em QUALQUER altura
+            — o excesso, se houver, vira scroll do <Dialog> (que já tem
+            overflow-y-auto), sem depender de nenhum número exato. min-h
+            aqui (400px fora do modo short, 200px dentro) continua só
+            como tamanho BASE de referência pros passos mais simples —
+            não precisa mais ser exato, overflow-visible cobre qualquer
+            diferença.
+            <DialogPrimitive.Popup> (dialog.tsx) é `display: grid` +
+            `overflow-y-auto` — um comportamento conhecido do CSS faz o
+            padding-bottom do PRÓPRIO container de scroll não ser
+            respeitado no fim do scroll (grid/flex "esquecem" o
+            end-padding do scroll container, ver
+            github.com/w3c/csswg-drafts/issues/129) — sem um spacer
+            próprio, o último item de um passo que precisa rolar fica
+            exatamente rente à borda arredondada do popup. Um spacer como
+            IRMÃO deste wrapper (depois dele, ainda dentro do Popup) NÃO
+            funciona: a posição desse irmão no fluxo normal segue a
+            altura PRÓPRIA deste wrapper (min-h), não o conteúdo
+            absolutamente posicionado que transborda por cima dele — o
+            spacer acaba "enterrado" dentro da zona de overflow, não
+            depois dela. O fix de verdade precisa ficar DENTRO do passo
+            (filho real do próprio conteúdo do passo, depois do último
+            elemento de verdade) — só assim ele conta pra altura
+            intrínseca do passo, que é o que de fato transborda e chega
+            no scrollHeight do Popup. Ver o spacer no fim do "role"
+            abaixo (o único passo alto o bastante pra precisar). */}
+        <div className="relative min-h-[400px] overflow-visible short:min-h-[200px]">
           <AnimatePresence mode="wait" custom={direction} initial={false}>
             <motion.div
               key={step}
@@ -400,11 +406,11 @@ export function RegisterDialog({
                       />
                     ))}
                   </RadioGroup>
-                  {/* Spacer só existe (via `short:block`) em paisagem —
-                      ver comentário do wrapper acima. Precisa estar AQUI
-                      (filho real do próprio passo, depois do
-                      RadioGroup), não como irmão do wrapper lá fora. */}
-                  <div aria-hidden className="hidden short:block short:h-4" />
+                  {/* Sempre presente (não só em paisagem) — ver comentário
+                      do wrapper acima. Precisa estar AQUI (filho real do
+                      próprio passo, depois do RadioGroup), não como
+                      irmão do wrapper lá fora. */}
+                  <div aria-hidden className="h-4" />
                 </div>
               )}
 
