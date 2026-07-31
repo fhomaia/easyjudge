@@ -90,9 +90,15 @@ export class UsersService {
       await this.usersRepository.delete(existingEmail.id);
     }
 
-    const existingDocument = await this.usersRepository.findOne({
-      where: { documentNumber: dto.documentNumber },
-    });
+    // Documento agora é opcional pra role=athlete (ver RegisterDto) — só
+    // confere duplicidade quando um número de verdade foi informado,
+    // senão `documentNumber: undefined` faria a query bater em qualquer
+    // linha sem documento.
+    const existingDocument = dto.documentNumber
+      ? await this.usersRepository.findOne({
+          where: { documentNumber: dto.documentNumber },
+        })
+      : null;
     if (existingDocument) {
       throw new ConflictException('Este documento já está cadastrado.');
     }
@@ -100,14 +106,20 @@ export class UsersService {
     const user = this.usersRepository.create({
       role: dto.role,
       firstName: dto.firstName,
-      lastName: dto.lastName,
-      documentType: dto.documentType,
-      documentNumber: dto.documentNumber,
+      // role=program não coleta sobrenome (ver RegisterDto) — cai pra
+      // string vazia em vez de undefined, satisfazendo a coluna NOT NULL.
+      lastName: dto.lastName ?? '',
+      documentType: dto.documentType ?? null,
+      documentNumber: dto.documentNumber ?? null,
+      birthDate: dto.birthDate ?? null,
       email: dto.email,
       teamOrInstitutionName: dto.teamOrInstitutionName,
       programEmail: dto.programEmail,
       passwordHash: null,
       emailVerifiedAt: null,
+      // dto.acceptedTerms já é obrigatoriamente `true` aqui (@Equals(true)
+      // no DTO barra qualquer outro valor antes de chegar neste método).
+      termsAcceptedAt: new Date(),
     });
 
     return this.usersRepository.save(user);

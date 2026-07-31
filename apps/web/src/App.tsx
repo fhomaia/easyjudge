@@ -21,6 +21,8 @@ import { ScoringTemplateBuilderPage } from "@/pages/ScoringTemplateBuilderPage";
 import { AthletesManagementPage } from "@/pages/AthletesManagementPage";
 import { AthleteProgramsPage } from "@/pages/AthleteProgramsPage";
 import { JoinEventPage } from "@/pages/JoinEventPage";
+import { TermsOfUsePage } from "@/pages/TermsOfUsePage";
+import { PrivacyPolicyPage } from "@/pages/PrivacyPolicyPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { GuestRoute } from "@/components/GuestRoute";
 
@@ -28,8 +30,13 @@ function App() {
   return (
     <Routes>
       {/* Fora de GuestRoute/ProtectedRoute de propósito — precisa
-          funcionar logado ou deslogado (ver JoinEventPage). */}
+          funcionar logado ou deslogado (ver JoinEventPage). Mesmo
+          raciocínio pra /terms e /privacy: linkadas de dentro do popup
+          de cadastro (deslogado), mas devem continuar acessíveis por
+          quem já tem conta. */}
       <Route path="/join/:code" element={<JoinEventPage />} />
+      <Route path="/terms" element={<TermsOfUsePage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route element={<GuestRoute />}>
         <Route path="/login" element={<LoginPage />} />
       </Route>

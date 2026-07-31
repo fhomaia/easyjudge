@@ -23,12 +23,27 @@ export class User {
   @Column({ name: 'last_name' })
   lastName: string;
 
-  @Column({ name: 'document_type', type: 'enum', enum: DocumentType })
-  documentType: DocumentType;
+  // Nulo pra role=athlete que optou por não informar documento no
+  // cadastro (opcional pra esse papel — ver RegisterDto). Demais papéis
+  // continuam com documento obrigatório na validação de entrada, mesmo
+  // com a coluna aceitando null.
+  @Column({
+    name: 'document_type',
+    type: 'enum',
+    enum: DocumentType,
+    nullable: true,
+  })
+  documentType: DocumentType | null;
 
   @Index({ unique: true })
-  @Column({ name: 'document_number' })
-  documentNumber: string;
+  @Column({ name: 'document_number', type: 'varchar', nullable: true })
+  documentNumber: string | null;
+
+  // Só coletada de quem usa CPF (pedido de LGPD, 2026-07-31) — uma
+  // instituição com CNPJ não tem data de nascimento. Nula pra quem
+  // usa CNPJ ou pulou o documento (athlete/spectator).
+  @Column({ name: 'birth_date', type: 'date', nullable: true })
+  birthDate: string | null;
 
   @Index({ unique: true })
   @Column()
@@ -56,6 +71,13 @@ export class User {
 
   @Column({ name: 'email_verified_at', type: 'timestamptz', nullable: true })
   emailVerifiedAt: Date | null;
+
+  // Registro de aceite dos Termos de Uso/Política de Privacidade
+  // (RegisterDto.acceptedTerms, checkbox obrigatório no cadastro desde
+  // 2026-07-31) — nulo só pra contas criadas antes dessa data (sem
+  // backfill: não temos como saber retroativamente se aceitaram).
+  @Column({ name: 'terms_accepted_at', type: 'timestamptz', nullable: true })
+  termsAcceptedAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

@@ -73,7 +73,8 @@ principal de design pra elas.
   usar optimistic UI (nota aparece na tela antes da confirmação do
   servidor) em vez de spinners bloqueantes.
 - **Minimizar custo, é uma POC.** Preferir serviços com free tier
-  generoso (Neon ou Supabase para Postgres em produção; localmente
+  generoso (Neon para Postgres em produção, decidido e em uso desde
+  2026-07-30 — ver seção "Deploy de produção" mais abaixo; localmente
   usamos Docker).
 
 ## Stack decidida
@@ -91,19 +92,18 @@ migrarmos para produção — ainda não implementado.
 - React foi escolhido sobre vanilla TS/HTML/CSS puro: a diferença de
   performance não é relevante no volume de updates de uma tela de scoring;
   optimistic UI + boas animações resolvem a "sensação de velocidade".
-- Postgres via Docker local agora, migração para Neon/Supabase só na hora
-  de deploy real (evita custo de POC).
+- Postgres via Docker local em dev, **Neon em produção** (migrado
+  2026-07-30 — evitou custo de POC até ter domínio/deploy real).
 - Monorepo com npm workspaces (`apps/*`, `packages/*`) em vez de repos
   separados para front/back: tipos compartilhados, menos overhead de
   gerenciamento para time pequeno/solo nesta fase.
 - Event sourcing nas notas (tabela `score_events` append-only, nunca
   UPDATE) em vez de armazenar só o valor atual: garante auditoria e
   elimina risco de sobrescrever/perder uma nota.
-- Logos de evento/equipe: armazenamento local em disco (`uploads/`) por
-  enquanto, mesmo raciocínio do Postgres — evita custo/complexidade de um
-  provider de storage (S3, Cloudinary, Supabase Storage) antes de ter
-  deploy real. Migrar para storage em nuvem junto com a migração do
-  Postgres para produção.
+- Logos de evento/equipe e documentos de regulamento: armazenamento
+  local em disco (`uploads/`) em dev, **Cloudflare R2 em produção**
+  (migrado 2026-07-30, junto com a migração do Postgres — mesmo
+  raciocínio de custo, ver "Deploy de produção" mais abaixo).
 - shadcn/ui em vez de construir os componentes do zero: acelera telas de
   formulário/popup/modal (boa parte do fluxo de auth e de criar evento),
   acessível por padrão, e o código do componente fica copiado no repo
@@ -1667,6 +1667,350 @@ cuidado pra não poluir a tela").
   DOM: exatamente 1 ícone `Trophy` renderizado (só no bloco desktop,
   `showSlider` já é `!isMobile`), posicionado em `left: 60%` (12/20),
   tooltip com o nome da equipe líder.
+
+## Rebrand pra "Cheer Cup" (2026-07-30)
+
+Decisão do usuário: a marca visível pro usuário final virou **"Cheer
+Cup"** — o produto cresceu além do escopo "julgamento" (programa,
+atleta e espectador são papéis reais hoje, não só jurado/produtor).
+Pasta do projeto, nome do repositório/pacotes npm (`easyjudge`) e o
+evento de teste descartável ("Easy Judge Cup") continuam com o nome
+antigo **de propósito** — só a marca voltada pro usuário mudou.
+
+- **O que mudou**: `apps/web/public/logo.png`/`favicon.png` (arte nova
+  fornecida pelo usuário), `<title>` (`index.html`), `alt` do logo
+  (`LoginPage.tsx`), nome do remetente + assunto do email de
+  verificação (`mail.service.ts`), e o texto da sidebar/menu mobile
+  (`MobileNavSheet.tsx`, componente `BrandMark`) — esse último não
+  apareceu num primeiro grep por `"easyJudge"` porque estava partido em
+  JSX (`easy<span>Judge</span>`), vale lembrar desse padrão se sobrar
+  algum texto de marca esquecido.
+- **O que ficou de propósito com o nome antigo**: pasta/repo/
+  `package.json` (`easyjudge`), o evento de teste "Easy Judge Cup", e
+  identificadores internos sem exposição nenhuma ao usuário — chaves de
+  `localStorage` (`easyjudge-auth`, `easyjudge-pending-join-code`) e o
+  nome do banco `IndexedDB` (`easyjudge-score-events`); trocar essas
+  quebraria sessão/buffer de nota já em cache de quem já usa o app, sem
+  ganho nenhum visível. Este próprio arquivo (`CLAUDE.md`) também
+  continua chamando o projeto de "easyJudge" — é identidade interna de
+  projeto, não a marca do cliente.
+- **Logo da tela de login** ganhou `rounded-full` + tamanho reduzido
+  (`max-w-[150px]`, `short:max-w-[100px]`, era `220px`/`130px`) — a arte
+  nova é um selo quadrado, não um wordmark horizontal como a anterior.
+- A conta do Resend também mudou de dono no meio da sessão (de
+  `easyjudgepro@gmail.com` pra `cheercupapp@gmail.com`) —
+  `EMAIL_OVERRIDE_TO` no `.env` acompanhou até ser removido de vez (ver
+  seção de deploy abaixo).
+
+## Deploy de produção — domínio, banco, storage, backend, frontend (2026-07-30/31)
+
+Primeira vez que o projeto sai do ambiente local pra produção de
+verdade. Domínio `cheercup.com.br` registrado no Registro.br, DNS
+movido pra **Cloudflare** (plano Free) no mesmo dia — decisão do
+usuário de usar o ecossistema Cloudflare como base (DNS, R2 pro
+storage, Workers pro frontend). Guiado etapa por etapa, com o usuário
+confirmando cada ação em conta externa (criação de conta/pagamento não
+é algo que dá pra fazer sozinho).
+
+1. **Email (Resend) com domínio verificado.** DNS: MX+SPF em
+   `send.cheercup.com.br`, DKIM em `resend._domainkey.cheercup.com.br`,
+   e um "null MX" (`MX .`) + SPF restritivo (`v=spf1 -all`) + DMARC
+   (`p=reject`) no domínio raiz — esse trio é hardening recomendado
+   pelo próprio Resend (impede spoofing do domínio raiz, já que o envio
+   de verdade passa pelo subdomínio `send.`), não é obrigatório pra
+   verificação em si mas o painel já sugere. Todos os registros como
+   "DNS only" (nuvem cinza) no Cloudflare — o proxy atrapalharia a
+   verificação. Resultado: `EMAIL_FROM=Cheer Cup <no-reply@cheercup.com.br>`
+   e **`EMAIL_OVERRIDE_TO` removido** do `.env` — cada cadastro volta a
+   receber o próprio email de verificação (antes, o sandbox
+   `onboarding@resend.dev` forçava tudo pra uma caixa só).
+2. **Postgres de produção (Neon).** Projeto criado pelo usuário, as 57
+   migrations do TypeORM rodadas contra ele com sucesso (schema só,
+   banco vazio — é lançamento novo, não migração de dado do local). **A
+   `DATABASE_URL` do Neon nunca foi persistida em arquivo nenhum** (nem
+   `.env`, nem memória) — usada só via variável de ambiente inline na
+   hora das migrations, de propósito: o `.env` local continua apontando
+   pro Postgres do Docker, pra nenhum teste local acidentalmente bater
+   no banco de produção.
+3. **Storage (Cloudflare R2)**, substituindo o disco local (`uploads/`)
+   que só funcionaria com host de backend com disco persistente. Bucket
+   `cheercup-uploads`, domínio público `cdn.cheercup.com.br`. Novo
+   `StorageService` (`apps/api/src/common/services/storage.service.ts`,
+   via `CommonModule` global novo) — usa `@aws-sdk/client-s3` (R2 é
+   S3-compatible) quando as credenciais `R2_*` estão no `.env`, **cai
+   pro disco local senão** — mesmo padrão configured-service-or-stub já
+   usado pelo `MailService` com o Resend, então dev local sem
+   credencial R2 continua funcionando normalmente. Os 3 pontos de
+   upload (`EventsService.setEventLogo`, `ProgramsService.setLogo`,
+   `RegulationsService.uploadDocument`) passaram a chamar
+   `storageService.upload(file, folder)`; os multer configs
+   (`logo-upload.config.ts`/`document-upload.config.ts`) trocaram
+   `diskStorage` por `memoryStorage` pra popular `file.buffer`.
+   Diferente da `DATABASE_URL` do Neon, as credenciais R2 **foram**
+   persistidas no `.env` local (mesmo raciocínio do `RESEND_API_KEY`:
+   dev local já fala com o serviço de verdade, não um stand-in). Sem
+   mudança nenhuma no frontend — `logoUrl`/`fileUrl` já eram usados
+   como valor opaco de `<img src>`/`window.open`, funcionam igual sendo
+   relativos ou absolutos.
+   - **Gotcha**: o formulário "Add Custom Domain" do R2 recusou
+     `cdn.cheercup.com.br` na primeira tentativa ("Domain format is
+     invalid" — suspeita de bug de validação com TLD composto tipo
+     `.com.br`); redigitar o domínio (sem colar) numa segunda tentativa
+     resolveu. Vale tentar de novo antes de assumir que travou, se
+     outro domínio dessa zona der o mesmo erro.
+4. **Backend (Render, plano Free)**, publicado em
+   `https://cheercup-api.onrender.com` — decisão consciente do usuário
+   de aceitar o cold-start do plano grátis (~50s depois de 15min
+   parado) por enquanto. **Precisa migrar pro plano pago (Starter,
+   ~$7/mês) ou outro host sempre-ligado antes de qualquer competição
+   real rodar em cima disso** — não deixar escapar.
+   - **Bug real achado e corrigido**: `apps/api/package.json` tinha
+     `"start:prod": "node dist/main"`, mas o build (`nest build`) na
+     verdade gera `dist/src/main.js`, não `dist/main.js` — o
+     `tsconfig.json` inclui `data-source.ts` (fora de `src/`) junto dos
+     arquivos de `src/`, então o TypeScript infere a raiz comum como
+     `apps/api/` inteiro, replicando a subpasta `src/` dentro do
+     `dist/`. Esse script nunca tinha sido exercitado antes (produção
+     nunca tinha existido). Corrigido no `package.json` — **mas o campo
+     "Start Command" do Render é um valor próprio, gravado na criação
+     do serviço, que não se atualiza sozinho a partir do
+     `package.json`** mesmo depois de commitar a correção — precisou
+     editar manualmente no painel também. Vale lembrar desse padrão
+     ("campo de dashboard seedado de um script, mas não sincronizado
+     com ele depois") em qualquer outro host que já tenha sido
+     configurado uma vez.
+5. **Frontend (Cloudflare Workers com "static assets")** — não é o
+   Pages clássico (Git integration antiga); essa conta cai no fluxo
+   novo unificado de Workers, publica via Wrangler. Publicado em
+   `https://cheercup-web.fhomaia.workers.dev`. Novo `wrangler.jsonc` na
+   raiz do repo: `{ name: "cheercup-web", assets: { directory:
+   "./apps/web/dist", not_found_handling: "single-page-application" } }`
+   — esse `not_found_handling` é quem resolve o fallback de SPA (rota
+   client-side do React Router) nativamente nesse modelo.
+   - **Gotcha**: um arquivo `apps/web/public/_redirects`
+     (`/* /index.html 200`, criado antes por engano assumindo o fluxo
+     clássico do Pages) **conflita** com o `not_found_handling` acima —
+     o validador do Cloudflare recusou o deploy por "loop de
+     redirecionamento infinito". Removido; se o projeto algum dia
+     voltar pro Pages clássico via Git integration, o `_redirects`
+     precisaria voltar (e o `wrangler.jsonc` não se aplicaria mais).
+   - **Mudança de código necessária**: `apps/web/src/api/client.ts` e
+     `apps/web/src/lib/socket.ts` tinham `/api` relativo fixo, que só
+     funciona via proxy do Vite em dev (same-origin) — não existe proxy
+     de servidor num build estático. Os dois agora leem
+     `import.meta.env.VITE_API_URL` (`client.ts` exporta `API_URL` pra
+     `socket.ts` reusar a mesma decisão), caindo pro comportamento
+     antigo quando a variável não está definida — dev local não
+     precisou de nenhum `.env` novo. Variável de build no Cloudflare:
+     `VITE_API_URL=https://api.cheercup.com.br` — **de propósito
+     deixada sem criptografar** (botão "Encrypt" do painel), já que o
+     Vite grava o valor dentro do JS baixado pelo navegador de qualquer
+     jeito; criptografar só dificultaria editar depois, sem ganho de
+     segurança nenhum.
+6. **Domínio próprio nos dois lados**: `cheercup.com.br` (raiz, sem
+   subdomínio) → Worker; `api.cheercup.com.br` → Render via CNAME.
+   **Gotcha**: o registro CNAME do backend precisou ficar "DNS only"
+   (nuvem cinza) no Cloudflare — com "Proxied" (nuvem laranja) o
+   certificado TLS do próprio Render nunca saía de "Pending", porque o
+   Cloudflare intercepta a validação antes de chegar no Render.
+7. **CORS restrito**: `app.enableCors()` (liberava qualquer origem)
+   virou `app.enableCors({ origin: ['https://cheercup.com.br',
+   'https://cheercup-web.fhomaia.workers.dev'] })` em `main.ts` —
+   testado via `curl` com header `Origin` de um domínio não autorizado
+   (sem `access-control-allow-origin` na resposta, bloqueado) e do
+   domínio de produção (header presente, liberado).
+
+**Testado ponta a ponta pelo navegador nos domínios finais** (não só
+cada peça isolada): formulário de login em `cheercup.com.br`, envio de
+credencial errada disparou `POST https://api.cheercup.com.br/auth/login`
+cross-origin sem erro de CORS, mensagem de erro certa na tela —
+confirma a cadeia inteira (Workers → Render → Neon) funcionando junta.
+
+**Pontas soltas conscientes**: Render Free em cold-start (ver item 4
+acima), sem `www.cheercup.com.br` configurado (só o domínio raiz), e o
+bundle do frontend passou de 2MB/500KB recomendado (aviso do próprio
+Vite no build, `apps/web/dist/assets/index-*.js` ~636KB gzipped —
+corrigir exigiria code-splitting por rota com `React.lazy`/`Suspense`,
+não tentado). Nenhuma das três bloqueia uso, registradas como
+pendência.
+
+## Ajustes no cadastro por papel + identidade visual do email de verificação (2026-07-31)
+
+Rodada de ajustes pedidos direto na tela de cadastro (`RegisterDialog.tsx`)
+e no email de código de verificação, um de cada vez, mesma sessão.
+
+- **Atleta não pede mais "equipe/instituição"** — `isStepApplicable`
+  (`RegisterDialog.tsx`) passou a pular a etapa `"team"` também pra
+  `role === "athlete"` (antes só pulava pra `"spectator"`, que por trás
+  já é `athlete` — ver `SIGNUP_ROLE_ORDER`). Justificativa do usuário: o
+  email do programa (etapa `"programEmail"`, que continua existindo só
+  pra atleta) já é suficiente pra iniciar o vínculo — perguntar as duas
+  coisas era redundante.
+- **Documento de atleta/espectador virou CPF-only e opcional** — antes
+  era CPF/CNPJ obrigatório pra todo papel, sem exceção. Agora, só pra
+  `role === "athlete"` (inclui espectador): a UI esconde o seletor
+  CPF/CNPJ (só mostra campo de CPF) e o passo vira pulável ("Pular",
+  mesmo padrão do passo de equipe). Documento continua obrigatório
+  (CPF ou CNPJ) pra todo o resto.
+  - **Backend, 4 camadas**: `RegisterDto.documentType`/`documentNumber`
+    viraram opcionais com `@ValidateIf` condicionado a
+    `role !== ATHLETE || <campo irmão presente>` (mesmo campo continua
+    obrigatório demais papéis). `AuthService.register` reforça "só CPF"
+    pra atleta (`400` se `documentType === CNPJ` com `role === ATHLETE`)
+    — defesa em profundidade, já que a UI só oferece CPF pra esse papel,
+    mas a API pode ser chamada direto. `User.documentType`/
+    `documentNumber` viraram `nullable: true` (índice único do
+    `document_number` continua funcionando — Postgres trata cada `NULL`
+    como distinto). `UsersService.createPendingUser` só roda a checagem
+    de documento duplicado quando `documentNumber` de fato veio
+    preenchido (senão a query bateria em qualquer linha sem documento).
+  - **Gotcha reencontrado** (já documentado antes neste arquivo, seção
+    "Gotchas"): `documentNumber: string | null` sem `type: 'varchar'`
+    explícito no `@Column()` quebrou a migration com
+    `DataTypeNotSupportedError` — TypeORM não infere o tipo via
+    reflection quando a coluna é `union | null`. Corrigido adicionando
+    `type: 'varchar'`.
+  - Migration `MakeUserDocumentOptional` (`ALTER COLUMN ... DROP NOT
+    NULL` nas duas colunas) rodada com sucesso no Postgres local.
+- **Rótulo "Programa" virou "Programa/Ginásio"** — só cosmético,
+  `ROLE_LABELS.program` em `apps/web/src/lib/roleLabels.ts` (usado tanto
+  no seletor de papel do cadastro quanto em qualquer lugar que exiba o
+  nome do papel).
+- **Cadastro de programa/ginásio simplificado**: além de "equipe/
+  instituição" (redundante — o nome do próprio programa já é
+  perguntado), a etapa "sobrenome" também não faz sentido pra uma
+  instituição. `isStepApplicable` pula `"lastName"` (além de `"team"`)
+  pra `role === "program"`; a etapa `"firstName"` muda de pergunta pra
+  esse papel ("Qual o nome do seu programa/ginásio?" em vez de "Qual é o
+  seu nome?"). Backend: `RegisterDto.lastName` ganhou o mesmo padrão de
+  `@ValidateIf` (obrigatório pra todo papel, exceto `PROGRAM`);
+  `UsersService.createPendingUser` grava `dto.lastName ?? ''` (nunca
+  `undefined`, já que a coluna `last_name` continua `NOT NULL` — não
+  precisou de migration, string vazia já satisfaz).
+  - **Efeito colateral corrigido**: com `lastName` virando `""` de
+    verdade pra programa (não só em teoria), toda concatenação direta
+    `${firstName} ${lastName}` (sem `.trim()`) passou a deixar um espaço
+    sobrando visível. Backend: `ProgramsService` ganhou
+    `buildUserDisplayName(user)` (usa só `firstName` quando `lastName`
+    é vazio), substituindo as 5 ocorrências que serviam de fallback pro
+    nome de exibição do programa quando `teamOrInstitutionName` não
+    está preenchido — o que agora é o caso de TODO programa novo, já
+    que a etapa "team" também foi removida pra esse papel (antes era só
+    um fallback de borda). Frontend: `.trim()` acrescentado nos 4 pontos
+    que já concatenavam `firstName`/`lastName` pra exibição
+    (`AppSidebar.tsx`, `MobileNavSheet.tsx`, `ImpersonateDialog.tsx`,
+    resumo do próprio `RegisterDialog.tsx`) — sem esse ajuste, um
+    programa cadastrado depois desta mudança apareceria como "Escola
+    XYZ " (espaço sobrando) na sidebar/impersonation.
+  - **Testado via curl direto** (servidor local, depois revertido — as
+    3 linhas de teste, incluindo um CPF válido gerado com
+    `cpf.generate()`, foram apagadas do Postgres local ao final):
+    atleta sem documento → criado com `document_type`/`document_number`
+    `NULL`; atleta com `documentType: cnpj` → `400` "Atletas só podem
+    informar CPF."; programa sem `lastName` no payload → criado com
+    `last_name` `''`; jurado sem documento → `400` de validação (regra
+    antiga intacta pros demais papéis).
+- **Email de verificação ganhou identidade visual** — antes era HTML
+  solto (`<p>` sem estilo nenhum), sem logo/cor. `MailService` ganhou
+  `buildVerificationEmailHtml(code, testRecipientEmail)`: layout em
+  tabela (não `<style>` em `<head>` — Outlook desktop ignora CSS fora de
+  atributo `style` inline, então todo estilo é inline de propósito),
+  logo circular no topo sobre faixa navy (`#14293d`, mesma paleta de
+  `apps/web/src/index.css`), código em destaque grande/monoespaçado
+  dentro de uma caixa amarelo-clara com borda `#f7a828`. Logo referenciado
+  por URL pública fixa (`https://cheercup.com.br/logo.png`, não uma env
+  var) — o cliente de email de quem recebe busca a imagem de fora, nunca
+  resolveria `localhost`, então não faz sentido essa URL variar por
+  ambiente como o resto do app faz. O banner de "cadastro de teste"
+  (usado só se `EMAIL_OVERRIDE_TO` estiver setado — hoje não está, ver
+  seção de deploy) ganhou o mesmo tratamento visual, dentro do mesmo
+  template.
+  - **Testado enviando um email de verdade** (servidor local, Resend de
+    produção — `RESEND_API_KEY` do `.env` local já aponta pro domínio
+    verificado) pra um alias `+` do próprio email do usuário (não uma
+    conta nova real — evita qualquer risco de mexer em cadastro
+    existente), confirmado visualmente por ele que o layout ficou bom;
+    o registro de teste foi apagado do Postgres local depois.
+
+## Data de nascimento, consentimento de Termos/Privacidade e bloqueio de menores no cadastro (2026-07-31)
+
+Rodada final de ajustes de cadastro desta sessão, encadeada com a de cima
+— fechada depois de eu ter recomendado (só em conversa, não implementado
+ainda) considerar um checkbox de aceite por LGPD.
+
+- **Campo "data de nascimento"**: novo passo `"birthDate"` no
+  `RegisterDialog`, só perguntado pra quem usa CPF (uma instituição com
+  CNPJ não tem data de nascimento) — `DatePicker.tsx` ganhou
+  `captionLayout`/`startMonth`/`endMonth`/`maxDate` (repassados pro
+  `Calendar` do shadcn/react-day-picker) especificamente pra viabilizar
+  esse caso (navegar até ~100 anos atrás mês a mês seria inviável; com
+  `captionLayout="dropdown"` dá pra pular direto pro ano). Pra
+  atleta/espectador (só aceitam CPF) o passo **sempre** aparece, mesmo
+  que o CPF em si tenha sido pulado (documento é opcional pra esse
+  papel, mas quando informado é sempre CPF — não fazia sentido
+  condicionar um ao outro). `User.birthDate` (`type: 'date'`, nullable)
+  + migration `AddBirthDateToUsers`; `RegisterDto.birthDate` obrigatório
+  via `@ValidateIf` quando `documentType === CPF` OU `role ===
+  ATHLETE`; validação de "não pode ser no futuro" em
+  `AuthService.register` (`IsDateString` só confere formato).
+- **Restrição temporária: só maiores de 18 anos** (pedido do usuário,
+  depois de eu ter perguntado sobre consentimento de responsável legal
+  pra menores — LGPD art. 14 — como parte da recomendação de checkbox
+  de Termos/Privacidade). Decisão consciente do usuário de simplificar
+  por enquanto, mesmo sabendo que atletas de cheerleading são
+  frequentemente menores de idade — **isso bloqueia esse público de
+  criar a PRÓPRIA conta** (mas não impede um programa de cadastrar um
+  atleta menor no roster via `AthleteLink`, sem conta própria — só
+  quem quer logar e ver a própria nota precisa de conta, e essa conta
+  hoje exige 18+). `DatePicker` do passo `"birthDate"` usa
+  `getMaxBirthDate()` (hoje − 18 anos) como `endMonth`/`maxDate` — o
+  calendário fisicamente não deixa selecionar uma data mais recente, é
+  a defesa principal (não precisa de mensagem de erro, a UI já
+  impede). Reforçado em `AuthService.register` com a mesma conta de
+  data (`BadRequestException` dedicado, mensagem "É necessário ter 18
+  anos ou mais para se cadastrar."). **Ponta solta consciente**: essa é
+  uma decisão de produto bem restritiva pro público real da
+  plataforma — o próprio nome do arquivo já registra "por enquanto";
+  não remover essa trava sem decisão explícita do usuário, e ela vai
+  precisar ser revisitada (com o fluxo de consentimento de responsável
+  legal implementado de verdade) antes da plataforma ser considerada
+  pronta pra atletas menores se autocadastrarem.
+- **Checkbox de aceite de Termos de Uso/Política de Privacidade**,
+  implementado depois que o usuário pediu explicitamente (eu tinha só
+  recomendado em conversa antes, sem implementar). Novo passo final:
+  checkbox obrigatório no passo `"summary"` (não um passo próprio —
+  fica junto da revisão final, antes do botão "Confirmar e criar
+  conta", que fica desabilitado até marcar). Duas páginas novas,
+  públicas (fora de `GuestRoute`/`ProtectedRoute`, mesmo raciocínio de
+  `/join/:code` — precisam abrir de dentro do popup de cadastro
+  deslogado, mas continuam acessíveis logado): `/terms`
+  (`TermsOfUsePage.tsx`) e `/privacy` (`PrivacyPolicyPage.tsx`), linkadas
+  com `target="_blank"` (não perde o progresso do cadastro no popup).
+  Conteúdo é um rascunho razoável escrito com base no que a plataforma
+  de fato coleta/trata (não é texto genérico de template) — **não é
+  revisão jurídica**, só a implementação técnica do consentimento;
+  avisei o usuário em conversa (não no texto da página) que vale
+  revisão de advogado antes de operar com dado real de menores/maiores
+  em produção de verdade.
+  - **Backend**: `RegisterDto.acceptedTerms: boolean` com `@Equals(true)`
+    (não `@IsBoolean`, de propósito — `false` explícito também precisa
+    ser rejeitado, não só ausência do campo) — `409`/`400` desde a
+    validação do DTO, nunca chega no service com valor errado.
+    `User.termsAcceptedAt` (timestamptz, nullable — nulo só pra contas
+    criadas antes desta mudança, sem backfill possível) gravado com
+    `new Date()` em `UsersService.createPendingUser`, registro de
+    auditoria do aceite. Migration `AddTermsAcceptedAtToUsers`.
+  - **`RegisterPayload.acceptedTerms`** (frontend, `client.ts`) é
+    obrigatório (não opcional) — sinaliza no tipo que o backend sempre
+    espera o campo, mesmo que o valor só possa ser `true` na prática
+    (o botão já trava disso no popup).
+- **Testado via curl + Postgres direto** (todos os registros de teste
+  apagados ao final, nenhum em cima de dado real): sem `acceptedTerms`
+  → `400`; `acceptedTerms: false` explícito → `400` (confirma que o
+  `@Equals(true)` pega os dois casos, não só ausência); `birthDate` de
+  17 anos atrás → `400` "É necessário ter 18 anos..."; maior de idade +
+  termos aceitos → `200`, com `terms_accepted_at` gravado com timestamp
+  real no banco.
 
 ## Próximos passos (não iniciados ainda)
 

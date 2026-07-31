@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { cpf, cnpj } from "cpf-cnpj-validator";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -10,9 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Progress } from "@/components/ui/progress";
 import { FormError } from "@/components/FormError";
+import { DatePicker } from "@/components/DatePicker";
 import {
   authApi,
   ApiError,
@@ -41,6 +45,7 @@ const STEPS = [
   "firstName",
   "lastName",
   "document",
+  "birthDate",
   "email",
   "team",
   "programEmail",
@@ -53,11 +58,50 @@ type StepKey = (typeof STEPS)[number];
 // "programEmail" só faz sentido pra role=athlete — pulado nos dois
 // sentidos (goNext/goBack) pra quem não é atleta (nem espectador, que
 // por definição não tem vínculo). "team" também não faz sentido pra
-// espectador, que declara de propósito não ter equipe.
-function isStepApplicable(key: StepKey, role: SignupRole): boolean {
+// espectador (que declara de propósito não ter equipe), pra atleta (o
+// email do programa, coletado em "programEmail", já é suficiente — não
+// faz sentido pedir os dois) nem pra programa (a etapa "firstName" já
+// pede o nome do próprio programa/ginásio, perguntar de novo seria
+// redundante). "lastName" também não faz sentido pra programa — é uma
+// instituição, não uma pessoa com nome+sobrenome. "birthDate" só faz
+// sentido pra quem usa CPF (pedido de LGPD) — nunca pra CNPJ. Pra
+// atleta/espectador (só aceitam CPF, ver isOptionalCpfOnlyRole) sempre
+// pergunta, mesmo que o documento em si tenha sido pulado — não faz
+// sentido condicionar à presença do CPF quando o tipo já é sempre CPF
+// pra esse grupo.
+function isStepApplicable(
+  key: StepKey,
+  form: Pick<typeof INITIAL_STATE, "role" | "documentType">,
+): boolean {
+  const role = form.role;
   if (key === "programEmail") return role === "athlete";
-  if (key === "team") return role !== "spectator";
+  if (key === "team") {
+    return role !== "spectator" && role !== "athlete" && role !== "program";
+  }
+  if (key === "lastName") return role !== "program";
+  if (key === "birthDate") {
+    if (isOptionalCpfOnlyRole(role)) return true;
+    return form.documentType === "cpf";
+  }
   return true;
+}
+
+// Atleta e espectador (que no fundo também é role=athlete, ver
+// SIGNUP_ROLE_ORDER acima) só podem informar CPF, e de forma opcional —
+// diferente dos demais papéis, que continuam com CPF/CNPJ obrigatório.
+function isOptionalCpfOnlyRole(role: SignupRole): boolean {
+  return role === "athlete" || role === "spectator";
+}
+
+// Restrição temporária (2026-07-31): a plataforma não aceita menores de
+// idade por enquanto — evita lidar com consentimento de responsável
+// legal (LGPD art. 14) nesta fase. Usado como limite do calendário
+// (não dá pra nem selecionar uma data mais recente), reforçado também
+// no backend (AuthService.register).
+function getMaxBirthDate(): Date {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 18);
+  return d;
 }
 
 const LOCKED_STEPS: StepKey[] = ["verify", "password"];
@@ -124,9 +168,11 @@ const INITIAL_STATE = {
   firstName: "",
   lastName: "",
   documentNumber: "",
+  birthDate: "",
   email: "",
   teamOrInstitutionName: "",
   programEmail: "",
+  acceptedTerms: false,
   code: "",
   password: "",
   confirmPassword: "",
@@ -185,7 +231,7 @@ export function RegisterDialog({
     setDirection(1);
     setStepIndex((i) => {
       let next = Math.min(i + 1, STEPS.length - 1);
-      while (next < STEPS.length - 1 && !isStepApplicable(STEPS[next], form.role)) next++;
+      while (next < STEPS.length - 1 && !isStepApplicable(STEPS[next], form)) next++;
       return next;
     });
   }
@@ -195,7 +241,7 @@ export function RegisterDialog({
     setDirection(-1);
     setStepIndex((i) => {
       let prev = Math.max(i - 1, 0);
-      while (prev > 0 && !isStepApplicable(STEPS[prev], form.role)) prev--;
+      while (prev > 0 && !isStepApplicable(STEPS[prev], form)) prev--;
       return prev;
     });
   }
@@ -208,10 +254,14 @@ export function RegisterDialog({
   function submitDocument(e: FormEvent) {
     e.preventDefault();
     const digits = form.documentNumber.replace(/\D/g, "");
-    const valid =
-      form.documentType === "cpf" ? cpf.isValid(digits) : cnpj.isValid(digits);
+    if (isOptionalCpfOnlyRole(form.role) && digits === "") {
+      goNext();
+      return;
+    }
+    const type = isOptionalCpfOnlyRole(form.role) ? "cpf" : form.documentType;
+    const valid = type === "cpf" ? cpf.isValid(digits) : cnpj.isValid(digits);
     if (!valid) {
-      setError(form.documentType === "cpf" ? "CPF inválido." : "CNPJ inválido.");
+      setError(type === "cpf" ? "CPF inválido." : "CNPJ inválido.");
       return;
     }
     goNext();
@@ -221,17 +271,26 @@ export function RegisterDialog({
     setError(null);
     setLoading(true);
     try {
+      const documentDigits = form.documentNumber.replace(/\D/g, "");
       const { userId } = await authApi.register({
         // Espectador não existe pro backend — vira athlete comum, sem
         // equipe/vínculo (ver comentário de SIGNUP_ROLE_ORDER acima).
         role: form.role === "spectator" ? "athlete" : form.role,
         firstName: form.firstName,
         lastName: form.lastName,
-        documentType: form.documentType,
-        documentNumber: form.documentNumber.replace(/\D/g, ""),
+        // Atleta/espectador podem ter pulado o documento (opcional, ver
+        // isOptionalCpfOnlyRole) — nesse caso os dois campos vão undefined,
+        // nunca um documentType solto sem número.
+        documentType: documentDigits ? form.documentType : undefined,
+        documentNumber: documentDigits || undefined,
+        // Só coletado quando o passo "birthDate" foi de fato mostrado
+        // (documentType === cpf, ver isStepApplicable) — para CNPJ ou
+        // documento pulado, form.birthDate nunca chega a ser preenchido.
+        birthDate: form.birthDate || undefined,
         email: form.email,
         teamOrInstitutionName: form.teamOrInstitutionName || undefined,
         programEmail: form.role === "athlete" ? form.programEmail || undefined : undefined,
+        acceptedTerms: form.acceptedTerms,
       });
       setUserId(userId);
       goNext();
@@ -392,7 +451,14 @@ export function RegisterDialog({
                   <RadioGroup
                     value={form.role}
                     onValueChange={(v) => {
-                      update("role", v as SignupRole);
+                      const role = v as SignupRole;
+                      update("role", role);
+                      // Se o usuário já tinha escolhido CNPJ (ex.: veio de
+                      // "Programa") e volta pra trocar pra atleta/espectador,
+                      // força de volta pra CPF — os únicos aceitos aqui.
+                      if (isOptionalCpfOnlyRole(role)) {
+                        update("documentType", "cpf");
+                      }
                       goNext();
                     }}
                     className="grid gap-3"
@@ -416,10 +482,14 @@ export function RegisterDialog({
 
               {step === "firstName" && (
                 <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">Qual é o seu nome?</h3>
+                  <h3 className="text-xl font-medium short:text-lg">
+                    {form.role === "program"
+                      ? "Qual o nome do seu programa/ginásio?"
+                      : "Qual é o seu nome?"}
+                  </h3>
                   <Input
                     autoFocus
-                    aria-label="Nome"
+                    aria-label={form.role === "program" ? "Nome do programa/ginásio" : "Nome"}
                     value={form.firstName}
                     onChange={(e) => update("firstName", e.target.value)}
                     required
@@ -448,24 +518,37 @@ export function RegisterDialog({
 
               {step === "document" && (
                 <form onSubmit={submitDocument} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">Qual é o seu documento?</h3>
-                  <RadioGroup
-                    value={form.documentType}
-                    onValueChange={(v) => {
-                      const type = v as DocumentType;
-                      update("documentType", type);
-                      update(
-                        "documentNumber",
-                        type === "cpf"
-                          ? formatCpf(form.documentNumber)
-                          : formatCnpj(form.documentNumber),
-                      );
-                    }}
-                    className="grid grid-cols-2 gap-3"
-                  >
-                    <OptionCard value="cpf" label="CPF" />
-                    <OptionCard value="cnpj" label="CNPJ" />
-                  </RadioGroup>
+                  <h3 className="text-xl font-medium short:text-lg">
+                    {isOptionalCpfOnlyRole(form.role) ? (
+                      <>
+                        Qual é o seu CPF?{" "}
+                        <span className="text-sm font-normal text-muted-foreground">
+                          (opcional)
+                        </span>
+                      </>
+                    ) : (
+                      "Qual é o seu documento?"
+                    )}
+                  </h3>
+                  {!isOptionalCpfOnlyRole(form.role) && (
+                    <RadioGroup
+                      value={form.documentType}
+                      onValueChange={(v) => {
+                        const type = v as DocumentType;
+                        update("documentType", type);
+                        update(
+                          "documentNumber",
+                          type === "cpf"
+                            ? formatCpf(form.documentNumber)
+                            : formatCnpj(form.documentNumber),
+                        );
+                      }}
+                      className="grid grid-cols-2 gap-3"
+                    >
+                      <OptionCard value="cpf" label="CPF" />
+                      <OptionCard value="cnpj" label="CNPJ" />
+                    </RadioGroup>
+                  )}
                   <Input
                     autoFocus
                     aria-label={form.documentType === "cpf" ? "CPF" : "CNPJ"}
@@ -483,9 +566,35 @@ export function RegisterDialog({
                           : formatCnpj(e.target.value),
                       )
                     }
-                    required
+                    required={!isOptionalCpfOnlyRole(form.role)}
                   />
                   <Button type="submit" className="w-full">
+                    {isOptionalCpfOnlyRole(form.role) && form.documentNumber === ""
+                      ? "Pular"
+                      : "Continuar"}
+                  </Button>
+                </form>
+              )}
+
+              {step === "birthDate" && (
+                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
+                  <h3 className="text-xl font-medium short:text-lg">
+                    Qual é a sua data de nascimento?
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    A Cheer Cup ainda não aceita cadastro de menores de 18 anos.
+                  </p>
+                  <DatePicker
+                    id="birthDate"
+                    value={form.birthDate}
+                    onChange={(v) => update("birthDate", v)}
+                    placeholder="Selecione a data de nascimento"
+                    captionLayout="dropdown"
+                    startMonth={new Date(new Date().getFullYear() - 100, 0, 1)}
+                    endMonth={getMaxBirthDate()}
+                    maxDate={getMaxBirthDate()}
+                  />
+                  <Button type="submit" className="w-full" disabled={!form.birthDate}>
                     Continuar
                   </Button>
                 </form>
@@ -560,14 +669,20 @@ export function RegisterDialog({
                     <SummaryRow label="Papel" value={SIGNUP_ROLE_LABELS[form.role]} />
                     <SummaryRow
                       label="Nome"
-                      value={`${form.firstName} ${form.lastName}`}
+                      value={`${form.firstName} ${form.lastName}`.trim()}
                     />
                     <SummaryRow
                       label={form.documentType === "cpf" ? "CPF" : "CNPJ"}
-                      value={form.documentNumber}
+                      value={form.documentNumber || "Não informado"}
                     />
+                    {form.birthDate && (
+                      <SummaryRow
+                        label="Data de nascimento"
+                        value={format(parseISO(form.birthDate), "dd/MM/yyyy", { locale: ptBR })}
+                      />
+                    )}
                     <SummaryRow label="Email" value={form.email} />
-                    {form.role !== "spectator" && (
+                    {form.role !== "spectator" && form.role !== "athlete" && (
                       <SummaryRow
                         label="Equipe/instituição"
                         value={form.teamOrInstitutionName || "Não informado"}
@@ -580,9 +695,39 @@ export function RegisterDialog({
                       />
                     )}
                   </dl>
+                  <label className="flex items-start gap-2 text-sm text-foreground">
+                    <Checkbox
+                      checked={form.acceptedTerms}
+                      onCheckedChange={(value) => update("acceptedTerms", value === true)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Li e concordo com os{" "}
+                      <a
+                        href="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-brand-blue underline underline-offset-2 hover:text-brand-yellow"
+                      >
+                        Termos de Uso
+                      </a>{" "}
+                      e a{" "}
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-brand-blue underline underline-offset-2 hover:text-brand-yellow"
+                      >
+                        Política de Privacidade
+                      </a>
+                      .
+                    </span>
+                  </label>
                   <Button
                     type="button"
-                    disabled={loading}
+                    disabled={loading || !form.acceptedTerms}
                     className="w-full"
                     onClick={submitSummary}
                   >

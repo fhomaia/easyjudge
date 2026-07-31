@@ -30,6 +30,17 @@ interface ProgramUserInfo {
   teamOrInstitutionName?: string | null;
 }
 
+// Conta role=program não coleta sobrenome no cadastro (o "nome" já É o
+// nome do programa/ginásio — ver RegisterDialog, etapa "lastName" pulada
+// pra esse papel), então `lastName` chega "" pra essas contas. Concatenar
+// direto deixaria um espaço sobrando ("Escola XYZ ") em todo fallback de
+// nome que ainda depende de firstName/lastName do User.
+function buildUserDisplayName(
+  user: Pick<ProgramUserInfo, 'firstName' | 'lastName'>,
+): string {
+  return user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName;
+}
+
 export interface ProgramCatalogEntry {
   source: 'platform' | 'own';
   programId?: string;
@@ -89,7 +100,7 @@ export class ProgramsService {
           ? {
               name:
                 eligibleUser.teamOrInstitutionName ||
-                `${eligibleUser.firstName} ${eligibleUser.lastName}`,
+                buildUserDisplayName(eligibleUser),
               contactEmail: eligibleUser.email,
               city: dto.city,
               state: dto.state,
@@ -314,8 +325,7 @@ export class ProgramsService {
 
     if (unclaimed.length === 0) return 0;
 
-    const name =
-      user.teamOrInstitutionName || `${user.firstName} ${user.lastName}`;
+    const name = user.teamOrInstitutionName || buildUserDisplayName(user);
     const seed = unclaimed.find((p) => p.city && p.state);
     await this.getOrCreateProfile(userId, {
       name,
@@ -342,7 +352,7 @@ export class ProgramsService {
         {
           userId,
           email: user.email,
-          firstName: `${user.firstName} ${user.lastName}`,
+          firstName: buildUserDisplayName(user),
         },
       );
       // Mesmo raciocínio do create() — replica pros atletas já
@@ -449,7 +459,7 @@ export class ProgramsService {
         name:
           profile?.name ??
           user.teamOrInstitutionName ??
-          `${user.firstName} ${user.lastName}`,
+          buildUserDisplayName(user),
         email: profile?.contactEmail ?? user.email,
         city: profile?.city ?? null,
         state: profile?.state ?? null,
@@ -491,8 +501,7 @@ export class ProgramsService {
       const user = await this.usersService.findById(userId);
       if (!user) throw new NotFoundException('Usuário não encontrado');
       initial = {
-        name:
-          user.teamOrInstitutionName || `${user.firstName} ${user.lastName}`,
+        name: user.teamOrInstitutionName || buildUserDisplayName(user),
         contactEmail: user.email,
         city: null,
         state: null,

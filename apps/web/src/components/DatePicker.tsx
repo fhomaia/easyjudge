@@ -12,6 +12,19 @@ interface DatePickerProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  // Repassados pro Calendar (react-day-picker) — usados pra datas em
+  // range distante do presente (ex. data de nascimento), onde navegar
+  // mês a mês pelas setas não é viável. Sem esses props, o comportamento
+  // (usado hoje só por datas de evento, sempre perto do presente)
+  // continua idêntico ao de antes.
+  captionLayout?: "label" | "dropdown";
+  startMonth?: Date;
+  endMonth?: Date;
+  // Bloqueia seleção de datas depois desta (ex. data de nascimento não
+  // pode ser no futuro). Nome deliberadamente diferente do `disabled`
+  // acima (que desliga o campo inteiro) pra não colidir com o matcher
+  // `disabled` do próprio Calendar.
+  maxDate?: Date;
 }
 
 export function DatePicker({
@@ -20,6 +33,10 @@ export function DatePicker({
   onChange,
   placeholder = "Selecione uma data",
   disabled = false,
+  captionLayout = "label",
+  startMonth,
+  endMonth,
+  maxDate,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : undefined;
@@ -42,8 +59,17 @@ export function DatePicker({
         <Calendar
           mode="single"
           locale={ptBR}
+          captionLayout={captionLayout}
+          startMonth={startMonth}
+          endMonth={endMonth}
+          disabled={maxDate ? { after: maxDate } : undefined}
           selected={selected}
-          defaultMonth={selected}
+          // Sem valor selecionado ainda, abre perto do limite (maxDate)
+          // em vez do mês atual — sem isso, um `maxDate` muito no
+          // passado (ex. 18 anos atrás) abriria o calendário fora do
+          // range navegável, exigindo cliques manuais até dar de cara
+          // com uma data selecionável.
+          defaultMonth={selected ?? maxDate}
           onSelect={(date) => {
             if (!date) return;
             onChange(format(date, "yyyy-MM-dd"));

@@ -82,13 +82,23 @@ export interface RegisterPayload {
   role: UserRole;
   firstName: string;
   lastName: string;
-  documentType: DocumentType;
-  documentNumber: string;
+  // Opcional só pra role="athlete" (inclui "espectador" da tela de
+  // cadastro, que vira athlete — ver RegisterDialog): só CPF é aceito,
+  // e informar é opcional. Demais papéis continuam com CPF/CNPJ
+  // obrigatório.
+  documentType?: DocumentType;
+  documentNumber?: string;
+  // Só relevante (e enviado) quando documentType === "cpf" (pedido de
+  // LGPD — quem usa CNPJ, uma instituição, não tem data de nascimento).
+  birthDate?: string;
   email: string;
   teamOrInstitutionName?: string;
   // Só relevante pra role="athlete" — email do programa a que o atleta
   // quer se vincular (fica pendente de confirmação do programa).
   programEmail?: string;
+  // Precisa ser true — RegisterDialog trava o botão de confirmar até o
+  // checkbox de Termos de Uso/Política de Privacidade ser marcado.
+  acceptedTerms: boolean;
 }
 
 export const authApi = {

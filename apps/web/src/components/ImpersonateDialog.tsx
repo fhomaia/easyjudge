@@ -37,7 +37,10 @@ export function ImpersonateDialog({ open, onOpenChange }: ImpersonateDialogProps
     setLoading(true);
     try {
       const { accessToken, impersonating } = await authApi.impersonate(email);
-      startImpersonation(accessToken, `${impersonating.firstName} ${impersonating.lastName}`);
+      startImpersonation(
+        accessToken,
+        `${impersonating.firstName} ${impersonating.lastName}`.trim(),
+      );
       // Reload completo em vez de navigate() — várias telas só buscam
       // dados no mount, um reload garante que nada fica com estado da
       // identidade anterior (ver plano/CLAUDE.md).

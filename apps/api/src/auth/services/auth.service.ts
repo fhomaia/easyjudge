@@ -17,6 +17,7 @@ import { JudgesService } from '../../judges/services/judges.service';
 import { EventsService } from '../../events/services/events.service';
 import { AthletesService } from '../../athletes/services/athletes.service';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { DocumentType } from '../../common/enums/document-type.enum';
 import { IMPERSONATOR_EMAIL } from '../../common/constants/impersonation';
 import { MailService } from './mail.service';
 import { EmailVerification } from '../entities/email-verification.entity';
@@ -46,6 +47,34 @@ export class AuthService {
 
   // Etapa 1: cria o usuário "pendente" e dispara o código de verificação.
   async register(dto: RegisterDto): Promise<{ userId: string }> {
+    // Atleta (inclui "espectador" do frontend, que chega como
+    // role=athlete — ver RegisterDialog) só pode informar CPF — a UI já
+    // restringe isso, reforçado aqui pra quem chamar a API direto.
+    if (dto.role === UserRole.ATHLETE && dto.documentType === DocumentType.CNPJ) {
+      throw new BadRequestException('Atletas só podem informar CPF.');
+    }
+    // O calendário do frontend já bloqueia datas futuras (DatePicker
+    // maxDate) — reforçado aqui pra quem chamar a API direto.
+    if (dto.birthDate && new Date(dto.birthDate) > new Date()) {
+      throw new BadRequestException(
+        'Data de nascimento não pode ser no futuro.',
+      );
+    }
+    // Restrição temporária (2026-07-31): a plataforma não aceita menores
+    // de idade por enquanto — evita lidar com consentimento de
+    // responsável legal (LGPD art. 14) nesta fase. O calendário do
+    // frontend já bloqueia datas mais recentes que esta (DatePicker
+    // maxDate na etapa "birthDate"), reforçado aqui pra quem chamar a
+    // API direto.
+    if (dto.birthDate) {
+      const eighteenYearsAgo = new Date();
+      eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
+      if (new Date(dto.birthDate) > eighteenYearsAgo) {
+        throw new BadRequestException(
+          'É necessário ter 18 anos ou mais para se cadastrar.',
+        );
+      }
+    }
     const user = await this.usersService.createPendingUser(dto);
     await this.issueVerificationCode(user.id, dto.email);
     return { userId: user.id };

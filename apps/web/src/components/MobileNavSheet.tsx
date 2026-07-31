@@ -181,7 +181,9 @@ export function MobileNavSheet({
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-white">
-                {profile ? `${profile.firstName} ${profile.lastName}` : "Carregando..."}
+                {profile
+                  ? `${profile.firstName} ${profile.lastName}`.trim()
+                  : "Carregando..."}
               </p>
               <p className="truncate text-xs text-white/50">
                 {profile ? getAccountLabel(profile) : ""}
