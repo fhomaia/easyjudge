@@ -18,7 +18,14 @@ async function bootstrap() {
   // Logos de evento/equipe (armazenamento local em disco nesta fase).
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 
-  app.enableCors();
+  // Local dev nunca passa por aqui de verdade (o frontend chama /api
+  // relativo, via proxy do Vite — same-origin do ponto de vista do
+  // navegador). Lista fixa em vez de env var: só existe um frontend
+  // real hoje, e o subdomínio padrão do Worker fica como fallback caso
+  // o domínio próprio tenha algum problema.
+  app.enableCors({
+    origin: ['https://cheercup.com.br', 'https://cheercup-web.fhomaia.workers.dev'],
+  });
 
   await app.listen(process.env.PORT ?? 3000);
 }
