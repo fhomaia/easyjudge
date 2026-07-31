@@ -5,8 +5,9 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import { ScoreEvent } from '../entities/score-event.entity';
+import { ScheduleEntry } from '../../schedule/entities/schedule-entry.entity';
 import { ScoreEventKind } from '../enums/score-event-kind.enum';
 import { ScoreEventInputDto } from '../dto/score-event-input.dto';
 import { WithdrawPresentationDto } from '../dto/withdraw-presentation.dto';
@@ -60,6 +61,23 @@ export interface ScoringCriterionView {
   // descrição do próprio grupo-raiz continua em ScoringGroupView.description,
   // não repetida aqui.
   subgroupDescriptions: { name: string; description: string }[];
+  // Maior nota atribuída a este critério entre todas as apresentações
+  // da MESMA categoria (comparação só faz sentido dentro da mesma
+  // categoria — mesmo sistema de pontuação, mesma faixa de comparação
+  // justa), com todas as equipes empatadas nesse valor (normalmente 1,
+  // mais de 1 só em empate real) — ver
+  // ScoringService.getCriterionComparisons. `null` quando nenhuma
+  // apresentação da categoria ainda tem nota nesse item. Usado só pelo
+  // texto compacto do mobile (ver ScoringCriteriaGroups.tsx); o slider
+  // do desktop usa `teamScores` abaixo.
+  bestScore: { value: number; teamNames: string[] } | null;
+  // Nota de cada OUTRA equipe da mesma categoria neste critério (exclui
+  // a equipe da própria apresentação sendo pontuada — ela já é
+  // representada pelo polegar do slider) — um marcador por equipe no
+  // slider do desktop, mesmo estilo pra todas, sem destaque de "líder"
+  // (ver ScoreBandSlider.tsx). Lista vazia quando não há nenhuma outra
+  // equipe com nota neste item ainda.
+  teamScores: { value: number; teamName: string }[];
 }
 
 export interface ScoringGroupView {
@@ -277,6 +295,8 @@ export class ScoringService {
     private readonly categoriesRepo: Repository<Category>,
     @InjectRepository(Team)
     private readonly teamsRepo: Repository<Team>,
+    @InjectRepository(ScheduleEntry)
+    private readonly scheduleEntriesRepo: Repository<ScheduleEntry>,
     private readonly judgesService: JudgesService,
     private readonly judgingService: JudgingService,
     private readonly scheduleService: ScheduleService,
@@ -317,6 +337,19 @@ export class ScoringService {
     ]);
 
     const groups = this.buildGroups(allCriteria, assignedLeafIds);
+
+    const criterionComparisons = await this.getCriterionComparisons(
+      category.id,
+      assignedLeafIds,
+      team.id,
+    );
+    for (const group of groups) {
+      for (const criterion of group.criteria) {
+        const comparison = criterionComparisons.get(criterion.id);
+        criterion.bestScore = comparison?.bestScore ?? null;
+        criterion.teamScores = comparison?.teamScores ?? [];
+      }
+    }
 
     const deductions = isLegalityJudge
       ? (await this.regulationsService.getForEvent(eventId)).deductions
@@ -685,6 +718,132 @@ export class ScoringService {
       averageByCriterion.set(criterionId, average);
     }
     return averageByCriterion;
+  }
+
+  // Nota de cada equipe da MESMA categoria em cada critério (comparação
+  // só faz sentido dentro da mesma categoria — mesmo sistema de
+  // pontuação) — alimenta tanto o indicador "Maior nota" do mobile
+  // quanto os marcadores por equipe do slider do desktop (ver
+  // ScoringCriterionView.bestScore/teamScores, ScoringCriteriaGroups.tsx,
+  // ScoreBandSlider.tsx). `criterionIds` já vem restrito aos critérios
+  // que o jurado está de fato vendo (assignedLeafIds) — não vale
+  // computar comparação de um critério que ele nem enxerga.
+  // `currentTeamId` é excluído só de `teamScores` (a própria equipe já
+  // é representada pelo polegar do slider) — `bestScore` continua
+  // considerando todas as equipes, igual antes.
+  private async getCriterionComparisons(
+    categoryId: string,
+    criterionIds: string[],
+    currentTeamId: string,
+  ): Promise<
+    Map<
+      string,
+      {
+        bestScore: { value: number; teamNames: string[] } | null;
+        teamScores: { value: number; teamName: string }[];
+      }
+    >
+  > {
+    if (criterionIds.length === 0) return new Map();
+
+    // Desistências saem da comparação — mesmo critério já usado nos
+    // resultados oficiais (uma apresentação desistida não tem nota de
+    // verdade, não faz sentido "liderar" nada).
+    const entries = await this.scheduleEntriesRepo.find({
+      where: {
+        categoryId,
+        type: ScheduleEntryType.PRESENTATION,
+        withdrawnAt: IsNull(),
+      },
+    });
+    const entriesWithTeam = entries.filter((e) => e.teamId);
+    if (entriesWithTeam.length === 0) return new Map();
+
+    const teamIds = [...new Set(entriesWithTeam.map((e) => e.teamId!))];
+    const teams = await this.teamsRepo.findBy({ id: In(teamIds) });
+    const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
+
+    const scoreEvents = await this.scoreEventsRepo.find({
+      where: {
+        scheduleEntryId: In(entriesWithTeam.map((e) => e.id)),
+        kind: ScoreEventKind.SCORE_SET,
+      },
+      order: { clientCreatedAt: 'ASC' },
+    });
+    const eventsByEntry = new Map<string, ScoreEvent[]>();
+    for (const event of scoreEvents) {
+      const list = eventsByEntry.get(event.scheduleEntryId) ?? [];
+      list.push(event);
+      eventsByEntry.set(event.scheduleEntryId, list);
+    }
+
+    // criterionId -> valor arredondado -> equipes empatadas nesse
+    // valor. Arredonda pra 1 casa decimal (mesma precisão exibida na
+    // UI, `score.toFixed(1)`) antes de comparar — `ScoreEvent.value` é
+    // float, e a MÉDIA de floats de vários jurados pode gerar ruído de
+    // arredondamento binário que quebraria uma comparação de igualdade
+    // direta (empate de verdade apareceria como "quase igual, mas não
+    // é" e nunca seria detectado).
+    const byCriterion = new Map<string, Map<number, Set<string>>>();
+    // criterionId -> nota bruta (não arredondada) de cada OUTRA equipe —
+    // vira um marcador por equipe no slider, posição calculada com a
+    // mesma precisão da nota de verdade, não a arredondada usada só pra
+    // detectar empate do líder.
+    const teamScoresByCriterion = new Map<
+      string,
+      { value: number; teamName: string }[]
+    >();
+    for (const entry of entriesWithTeam) {
+      const teamName = teamNameById.get(entry.teamId!);
+      if (!teamName) continue;
+      const averages = this.computeAverageScoreByCriterion(
+        eventsByEntry.get(entry.id) ?? [],
+      );
+      for (const criterionId of criterionIds) {
+        const value = averages.get(criterionId);
+        if (value === undefined) continue;
+        const rounded = Math.round(value * 10) / 10;
+        let valuesForCriterion = byCriterion.get(criterionId);
+        if (!valuesForCriterion) {
+          valuesForCriterion = new Map();
+          byCriterion.set(criterionId, valuesForCriterion);
+        }
+        const teamsAtValue = valuesForCriterion.get(rounded) ?? new Set<string>();
+        teamsAtValue.add(teamName);
+        valuesForCriterion.set(rounded, teamsAtValue);
+
+        if (entry.teamId !== currentTeamId) {
+          const list = teamScoresByCriterion.get(criterionId) ?? [];
+          list.push({ value, teamName });
+          teamScoresByCriterion.set(criterionId, list);
+        }
+      }
+    }
+
+    const comparisons = new Map<
+      string,
+      {
+        bestScore: { value: number; teamNames: string[] } | null;
+        teamScores: { value: number; teamName: string }[];
+      }
+    >();
+    for (const criterionId of criterionIds) {
+      const valuesForCriterion = byCriterion.get(criterionId);
+      const bestScore = valuesForCriterion
+        ? (() => {
+            const maxValue = Math.max(...valuesForCriterion.keys());
+            return {
+              value: maxValue,
+              teamNames: Array.from(valuesForCriterion.get(maxValue)!),
+            };
+          })()
+        : null;
+      comparisons.set(criterionId, {
+        bestScore,
+        teamScores: teamScoresByCriterion.get(criterionId) ?? [],
+      });
+    }
+    return comparisons;
   }
 
   // Nota final (soma dos critérios + deduções, sempre negativas) e
@@ -1920,6 +2079,11 @@ export class ScoringService {
         useScoreBands: criterion.useScoreBands,
         scoreBands: criterion.scoreBands,
         subgroupDescriptions,
+        // Súmula de detalhe (drill-down admin/Programa) não mostra o
+        // indicador de "maior nota"/marcadores por equipe — feature só
+        // da folha ao vivo do próprio jurado (ver ScoringService.getSheet).
+        bestScore: null,
+        teamScores: [],
         value: scoreByCriterion.get(criterion.id) ?? null,
       });
     }
@@ -2232,6 +2396,13 @@ export class ScoringService {
         useScoreBands: leaf.useScoreBands,
         scoreBands: leaf.scoreBands,
         subgroupDescriptions,
+        // Placeholder — só `getSheet` (folha do próprio jurado) de
+        // fato calcula isso (ver getCriterionComparisons), sobrescrevendo
+        // depois desta chamada. `getSheetForJudge` (Head Judge) nunca
+        // mostra essa feature (`showScoreBands=false` no frontend),
+        // então nem vale a query extra pra ele.
+        bestScore: null,
+        teamScores: [],
       });
     }
 

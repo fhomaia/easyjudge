@@ -216,7 +216,7 @@ export function EventLiveNotesPage() {
           {!assignment.isJudge ? (
             isAdminOrAssessor ? (
               <div className="p-4">
-                <AdminNotesOverview eventId={event.aliasId} />
+                <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
               </div>
             ) : isAthlete ? (
               <div className="p-4">

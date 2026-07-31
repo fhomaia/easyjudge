@@ -17,6 +17,7 @@ import {
 import { EventsService } from '../../events/services/events.service';
 import { EventActivityLogService } from '../../events/services/event-activity-log.service';
 import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
+import { StorageService } from '../../common/services/storage.service';
 
 export interface DeductionRuleView {
   type: DeductionType;
@@ -41,6 +42,7 @@ export class RegulationsService {
     private readonly documentsRepo: Repository<RegulationDocument>,
     private readonly eventsService: EventsService,
     private readonly activityLogService: EventActivityLogService,
+    private readonly storageService: StorageService,
   ) {}
 
   async getForEvent(eventId: string): Promise<RegulationView> {
@@ -96,11 +98,15 @@ export class RegulationsService {
       await this.documentsRepo.delete({ regulationId: regulation.id, kind });
     }
 
+    const fileUrl = await this.storageService.upload(
+      file,
+      'regulation-documents',
+    );
     const document = this.documentsRepo.create({
       regulationId: regulation.id,
       kind,
       name: name || file.originalname,
-      fileUrl: `/uploads/regulation-documents/${file.filename}`,
+      fileUrl,
       mimeType: file.mimetype,
       sizeBytes: file.size,
     });

@@ -241,11 +241,16 @@ export function EventLiveScoringDesktopView({
           )}
 
           <div className="flex shrink-0 items-center gap-4">
-            <div className="text-right text-xs text-muted-foreground">
+            {/* min-w reserva o espaço do texto mais longo ("Salvo
+                automaticamente às 23:59") — sem isso, a troca de texto
+                muda a largura deste bloco e, por estar entre outros
+                itens de `justify-between` no header, empurra
+                visivelmente o bloco de cronômetro/"Iniciar" ao lado. */}
+            <div className="min-w-[210px] text-right text-xs text-muted-foreground">
               {pendingCount > 0 ? (
                 <span className="text-amber-600">Salvando...</span>
               ) : (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center justify-end gap-1.5">
                   <CheckCircle2 className="size-3.5 text-emerald-600" />
                   Salvo automaticamente
                   {lastSyncedAt && ` às ${lastSyncedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}

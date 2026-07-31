@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2, Info, Users } from "lucide-react";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -45,6 +46,7 @@ import { useAuthStore } from "@/store/auth";
 
 export function JudgingPage() {
   const { id } = useParams<{ id: string }>();
+  const notificationsUnreadCount = useNotificationsUnreadCount(id);
   useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -485,7 +487,7 @@ export function JudgingPage() {
               <ArrowLeft className="size-4" />
               Voltar para configuração do evento
             </button>
-            <NotificationBell />
+            <NotificationBell unreadCount={notificationsUnreadCount} />
           </div>
 
           <div className="flex flex-1 flex-col px-10 pb-10">

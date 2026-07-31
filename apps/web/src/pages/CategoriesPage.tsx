@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, CalendarDays, MapPin, Plus } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { CategoryStatCards } from "@/components/CategoryStatCards";
 import {
@@ -55,6 +56,7 @@ function sortCategories(categories: Category[], sort: CategorySortOption): Categ
 
 export function CategoriesPage() {
   const { id } = useParams<{ id: string }>();
+  const notificationsUnreadCount = useNotificationsUnreadCount(id);
   useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -188,7 +190,7 @@ export function CategoriesPage() {
             <ArrowLeft className="size-4" />
             Voltar para configuração do evento
           </button>
-          <NotificationBell />
+          <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
         <div className="px-10 pb-10">

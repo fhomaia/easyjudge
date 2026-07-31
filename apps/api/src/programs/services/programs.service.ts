@@ -21,6 +21,7 @@ import type { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 import { AthletesService } from '../../athletes/services/athletes.service';
+import { StorageService } from '../../common/services/storage.service';
 
 interface ProgramUserInfo {
   email: string;
@@ -52,6 +53,7 @@ export class ProgramsService {
     private readonly usersService: UsersService,
     private readonly athletesService: AthletesService,
     private readonly activityLogService: EventActivityLogService,
+    private readonly storageService: StorageService,
   ) {}
 
   async create(
@@ -219,7 +221,7 @@ export class ProgramsService {
     file: Express.Multer.File,
   ): Promise<ProgramParticipation> {
     const participation = await this.findProgramOrThrow(eventId, id);
-    participation.logoUrl = `/uploads/logos/${file.filename}`;
+    participation.logoUrl = await this.storageService.upload(file, 'logos');
     const saved = await this.participationsRepo.save(participation);
     return this.toProgramView(saved);
   }

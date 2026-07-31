@@ -13,7 +13,7 @@ export class MailService {
     const apiKey = this.configService.get<string>('RESEND_API_KEY');
     this.fromAddress =
       this.configService.get<string>('EMAIL_FROM') ??
-      'easyJudge <onboarding@resend.dev>';
+      'Cheer Cup <onboarding@resend.dev>';
     // Enquanto o domínio não é verificado no Resend, o sandbox só entrega
     // pro email da própria conta — redireciona tudo pra lá (o corpo do
     // email mostra qual foi o cadastro de verdade). Remover essa variável
@@ -47,8 +47,8 @@ export class MailService {
       from: this.fromAddress,
       to: recipient,
       subject: redirected
-        ? `[teste: ${email}] Seu código de verificação easyJudge`
-        : 'Seu código de verificação easyJudge',
+        ? `[teste: ${email}] Seu código de verificação Cheer Cup`
+        : 'Seu código de verificação Cheer Cup',
       html: redirected
         ? `<p>Cadastro de teste para: <strong>${email}</strong></p><p>Seu código de verificação é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`
         : `<p>Seu código de verificação é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`,

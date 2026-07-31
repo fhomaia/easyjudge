@@ -68,8 +68,8 @@ export function LoginPage() {
           <CardHeader className="justify-items-center gap-5 text-center short:gap-2">
             <img
               src="/logo.png"
-              alt="easyJudge"
-              className="mx-auto w-full max-w-[220px] short:max-w-[130px]"
+              alt="Cheer Cup"
+              className="mx-auto w-full max-w-[150px] rounded-full short:max-w-[100px]"
             />
             <CardDescription className="text-base short:hidden">
               Entre na sua conta para continuar.

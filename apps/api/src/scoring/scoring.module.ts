@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScoreEvent } from './entities/score-event.entity';
 import { Category } from '../categories/entities/category.entity';
 import { Team } from '../teams/entities/team.entity';
+import { ScheduleEntry } from '../schedule/entities/schedule-entry.entity';
 import { ScoringController } from './controllers/scoring.controller';
 import { AdminScoringController } from './controllers/admin-scoring.controller';
 import { TeamScoringController } from './controllers/team-scoring.controller';
@@ -22,7 +23,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ScoreEvent, Category, Team]),
+    TypeOrmModule.forFeature([ScoreEvent, Category, Team, ScheduleEntry]),
     EventsModule,
     JudgesModule,
     JudgingModule,

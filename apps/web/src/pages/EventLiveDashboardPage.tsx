@@ -744,6 +744,7 @@ export function EventLiveDashboardPage() {
       canViewJudges={canViewJudges}
       completedEntryIds={completedEntryIdSet}
       notifications={notifications}
+      notificationsUnreadCount={notificationsUnreadCount}
       isJudge={assignment.isJudge}
       onGoToNow={nextJudgePresentationId ? handleGoToNow : null}
       delayLabel={delayLabel}

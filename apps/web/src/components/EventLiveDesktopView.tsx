@@ -77,6 +77,7 @@ interface EventLiveDesktopViewProps {
   canViewJudges: boolean;
   completedEntryIds: Set<string>;
   notifications: NotificationView[] | null;
+  notificationsUnreadCount: number | null;
   // "Ir para agora" só aparece pra quem lança nota (ver
   // EventLiveDashboardPage) — `onGoToNow` nulo significa jurado sem
   // apresentação pendente (botão fica desabilitado).
@@ -114,6 +115,7 @@ export function EventLiveDesktopView({
   canViewJudges,
   completedEntryIds,
   notifications,
+  notificationsUnreadCount,
   isJudge,
   onGoToNow,
   delayLabel,
@@ -431,9 +433,9 @@ export function EventLiveDesktopView({
                 <Bell className="size-3.5" />
                 NOTIFICAÇÕES
               </span>
-              {notifications && notifications.length > 0 && (
+              {!!notificationsUnreadCount && (
                 <span className="flex size-5 items-center justify-center rounded-full bg-blue-500 text-[11px] font-semibold text-white">
-                  {notifications.length}
+                  {notificationsUnreadCount}
                 </span>
               )}
             </div>

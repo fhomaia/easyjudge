@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import { AdminNotesOverviewList } from "@/components/scoring/AdminNotesOverviewList";
 import { AdminPresentationDetailPanel } from "@/components/scoring/AdminPresentationDetailPanel";
 import { ReleaseFlagsPanel } from "@/components/scoring/ReleaseFlagsPanel";
+import { Button } from "@/components/ui/button";
+import { downloadPresentationDetailsAsZip, slugify } from "@/lib/presentationDetailExport";
 import { adminScoringApi, type AdminOverviewEntry } from "@/api/client";
 
 // Visão do admin/assessor na tela de Notas — painel de liberação
@@ -13,15 +15,40 @@ import { adminScoringApi, type AdminOverviewEntry } from "@/api/client";
 // os dois.
 interface AdminNotesOverviewProps {
   eventId: string;
+  eventName: string;
 }
 
-export function AdminNotesOverview({ eventId }: AdminNotesOverviewProps) {
+export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewProps) {
   const [entries, setEntries] = useState<AdminOverviewEntry[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   useEffect(() => {
     adminScoringApi.getOverview(eventId).then(setEntries);
   }, [eventId]);
+
+  // "Baixar todas" — busca o detalhe completo de cada apresentação (a
+  // listagem não traz grupos/critérios, só o resumo) e empacota um PDF
+  // por apresentação num único .zip (decisão do usuário: zip com PDFs
+  // separados, não um PDF gigante). Desistências saem — não têm súmula
+  // de verdade (nunca chegam a ter nota), mesmo filtro que a lista já
+  // aplica visualmente (chevron/nota escondidos pra elas).
+  async function handleDownloadAll() {
+    if (!entries) return;
+    const scoredEntries = entries.filter((e) => !e.withdrawn);
+    if (scoredEntries.length === 0) return;
+    setDownloadingAll(true);
+    try {
+      const details = await Promise.all(
+        scoredEntries.map((entry) => adminScoringApi.getDetail(eventId, entry.scheduleEntryId)),
+      );
+      await downloadPresentationDetailsAsZip(details, `sumulas-${slugify(eventName)}.zip`);
+    } catch (err) {
+      console.error("Não foi possível gerar as súmulas.", err);
+    } finally {
+      setDownloadingAll(false);
+    }
+  }
 
   if (selectedId) {
     return (
@@ -33,6 +60,8 @@ export function AdminNotesOverview({ eventId }: AdminNotesOverviewProps) {
     );
   }
 
+  const scoredCount = entries?.filter((e) => !e.withdrawn).length ?? 0;
+
   return (
     <div>
       <ReleaseFlagsPanel eventId={eventId} />
@@ -41,7 +70,22 @@ export function AdminNotesOverview({ eventId }: AdminNotesOverviewProps) {
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : (
-        <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />
+        <>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-foreground">Súmulas ({scoredCount})</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleDownloadAll()}
+              disabled={downloadingAll || scoredCount === 0}
+            >
+              {downloadingAll ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              Baixar todas
+            </Button>
+          </div>
+          <AdminNotesOverviewList eventId={eventId} entries={entries} onSelect={setSelectedId} />
+        </>
       )}
     </div>
   );

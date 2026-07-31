@@ -1155,6 +1155,16 @@ export interface ScoringCriterionView {
   // — buildGroups achata a árvore em 2 níveis, então isso é o único
   // jeito de recuperar essa descrição pra exibir junto do item.
   subgroupDescriptions: { name: string; description: string }[];
+  // Maior nota atribuída a este critério entre as apresentações da
+  // MESMA categoria, com as equipes empatadas nesse valor (mais de uma
+  // só em empate real) — `null` quando ainda não há nota pra comparar.
+  // Usado só pelo texto compacto do mobile; o slider do desktop usa
+  // `teamScores` abaixo.
+  bestScore: { value: number; teamNames: string[] } | null;
+  // Nota de cada OUTRA equipe da mesma categoria neste critério (exclui
+  // a equipe da própria apresentação, já representada pelo polegar do
+  // slider) — um marcador por equipe no slider do desktop.
+  teamScores: { value: number; teamName: string }[];
 }
 
 export interface ScoringGroupView {

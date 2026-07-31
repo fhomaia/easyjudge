@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { Button } from "@/components/ui/button";
 import { ScheduleDaySettingsBar } from "@/components/ScheduleDaySettingsBar";
 import {
@@ -48,6 +49,7 @@ import { useAuthStore } from "@/store/auth";
 
 export function SchedulePage() {
   const { id } = useParams<{ id: string }>();
+  const notificationsUnreadCount = useNotificationsUnreadCount(id);
   useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -408,7 +410,7 @@ export function SchedulePage() {
               <ArrowLeft className="size-4" />
               Voltar para configuração do evento
             </button>
-            <NotificationBell />
+            <NotificationBell unreadCount={notificationsUnreadCount} />
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-6 px-10 pb-10">

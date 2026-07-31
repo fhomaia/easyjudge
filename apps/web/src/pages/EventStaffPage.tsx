@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MoreHorizontal, Plus, Trash2, UserCog } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ function getInitials(firstName: string, lastName: string): string {
 
 export function EventStaffPage() {
   const { id } = useParams<{ id: string }>();
+  const notificationsUnreadCount = useNotificationsUnreadCount(id);
   useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -87,7 +89,7 @@ export function EventStaffPage() {
             <ArrowLeft className="size-4" />
             Voltar para configuração do evento
           </button>
-          <NotificationBell />
+          <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
         <div className="px-10 pb-10">

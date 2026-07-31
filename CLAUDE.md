@@ -1610,6 +1610,64 @@ antes de desenhar).
   proxy do Vite → gateway → `EventEmitter2` → hook → estado React
   corretamente.
 
+## Maior nota por critério na súmula do jurado (2026-07-28)
+
+Indicador de comparação entre equipes na tela de lançamento de nota:
+pra cada item de avaliação, qual equipe tem a maior nota até agora,
+comparando só com outras apresentações da MESMA categoria (mesmo
+sistema de pontuação — comparar entre categorias diferentes não faria
+sentido, confirmado com o usuário antes de implementar). Mobile mostra
+texto; desktop só marca no slider (pedido explícito do usuário: "tomar
+cuidado pra não poluir a tela").
+
+- **Backend**: `ScoringService.getCriterionLeaders(categoryId,
+  criterionIds)` (novo, privado) — busca todas as `ScheduleEntry` tipo
+  `presentation` da categoria (exclui desistências, `withdrawnAt IS
+  NOT NULL`), os `Team` e `ScoreEvent` delas numa query em lote cada,
+  reusa **`computeAverageScoreByCriterion`** (o mesmo método privado já
+  existente do fix de média multi-jurado) pra obter a nota de cada
+  apresentação por critério, agrega pelo maior valor e quais equipes
+  empataram nele. Chamado dentro de `getSheet`, resultado anexado em
+  cada `ScoringCriterionView.bestScore` (`{ value, teamNames } | null`,
+  novo campo — `buildGroups` sempre inicializa como `null`, só
+  `getSheet` de fato sobrescreve; `getSheetForJudge`/Head Judge e
+  `buildPresentationDetail` deixam `null` de propósito, a feature é só
+  da folha do próprio jurado). Precisou registrar `ScheduleEntry` no
+  `TypeOrmModule.forFeature` de `scoring.module.ts` (repo direto, mesmo
+  padrão já usado ali pra `Category`/`Team` — evita depender de método
+  novo em `ScheduleService`).
+  - **Empate por arredondamento, não igualdade direta**:
+    `ScoreEvent.value` é `float` (double precision) e a MÉDIA de vários
+    jurados pode gerar ruído de arredondamento binário — comparação
+    arredonda pra 1 casa decimal (`Math.round(v * 10) / 10`, mesma
+    precisão já exibida na UI) antes de agrupar por valor, senão um
+    empate real podia não ser detectado.
+  - Equipe da própria apresentação sendo pontuada entra na comparação
+    normalmente (não há razão pra excluí-la).
+- **Frontend**: `ScoringCriteriaGroups.tsx`, mesmo gate `showScoreBands`
+  já usado pelo resto da feature de faixas (Head Judge nunca recebe
+  `true`, então nunca vê isso). Mobile: "Maior nota: 12.0 (Equipe B)"
+  quando só uma equipe lidera; quando 2+ empatadas, vira "Maior nota:
+  12.0" + linha separada "Mesma nota atribuída às equipes X, Y" — só
+  aparece quando a condição é verdadeira (nada renderiza se
+  `bestScore` for `null`). Desktop: `ScoreBandSlider.tsx` ganhou prop
+  `bestScore` opcional — marcador `Trophy` (lucide, âmbar, cor
+  deliberadamente diferente das cores de faixa) posicionado por
+  `left: (value/maxScore)*100%`, ACIMA do trilho (os nomes de faixa já
+  ocupam a linha de baixo) — nome(s) da(s) equipe(s) só aparece(m) num
+  rótulo no hover, padrão CSS `group`/`group-hover:opacity-100` já
+  usado no projeto (sem lib de tooltip nova).
+- **Testado com evento/template/categoria/3 equipes descartáveis**
+  (criados e apagados só pra este teste, nunca em cima de dado real):
+  cenário 1 (Equipe B=12, sozinha na frente) → `bestScore: {value: 12,
+  teamNames: ["Equipe B"]}`, confirmado na tela ("Maior nota: 12.0
+  (Equipe B)"); cenário 2 (Equipe C também lançada em 12, empatando com
+  B) → `bestScore: {value: 12, teamNames: ["Equipe B", "Equipe C"]}`,
+  confirmado na tela (linha de empate apareceu). Desktop confirmado via
+  DOM: exatamente 1 ícone `Trophy` renderizado (só no bloco desktop,
+  `showSlider` já é `!isMobile`), posicionado em `left: 60%` (12/20),
+  tooltip com o nome da equipe líder.
+
 ## Próximos passos (não iniciados ainda)
 
 **Atualização (2026-07-28):** o item 1 antigo (tempo real) **já foi

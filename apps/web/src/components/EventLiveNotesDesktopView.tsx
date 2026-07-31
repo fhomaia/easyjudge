@@ -144,7 +144,7 @@ export function EventLiveNotesDesktopView({
         <main className="flex-1 overflow-y-auto p-6">
           {!assignment.isJudge ? (
             isAdminOrAssessor ? (
-              <AdminNotesOverview eventId={event.aliasId} />
+              <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
             ) : isAthlete ? (
               <AthleteNotesOverview eventId={event.aliasId} />
             ) : (

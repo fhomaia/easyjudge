@@ -232,14 +232,59 @@ export function EventLiveScoringPage() {
     void emitEvent({ kind: "score_set", criterionId, value: next });
   }
 
+  // Arrastar o slider dispara `onValueChange` a cada pixel (dezenas de
+  // chamadas por segundo, confirmado em teste real: um único arraste
+  // gerou 417 ScoreEvent pro mesmo critério) — gravar (`enqueueEvent`,
+  // IndexedDB) continua acontecendo a cada tick, imediato e síncrono,
+  // sem debounce (não abre mão do "notas nunca podem ser perdidas": o
+  // valor já está durável no navegador antes de qualquer delay). Só o
+  // ENVIO pro servidor (`flushQueue`) e a atualização do indicador
+  // "Salvando.../Salvo automaticamente" são adiados — sem isso, o
+  // indicador (e o cabeçalho inteiro, que reflow ao redor dele) pisca
+  // a cada tick, deslocando visivelmente o botão "Iniciar" ao lado.
+  // `scoreFlushTimerRef` é um único timer compartilhado (não por
+  // critério) — propositalmente: arrastar sliders de critérios
+  // diferentes em sequência rápida também não deve piscar o indicador,
+  // só o `enqueueEvent` de cada evento precisa ser individual.
+  const scoreFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function flushScoresNow() {
+    if (!id) return;
+    const { pendingAfter } = await flushQueue(id);
+    setPendingCount(pendingAfter);
+    if (pendingAfter === 0) setLastSyncedAt(new Date());
+  }
+
+  async function emitScoreEvent(criterionId: string, value: number) {
+    if (!id || !sheet || event?.status !== "started") return;
+    const input: ScoreEventInput = {
+      id: crypto.randomUUID(),
+      scheduleEntryId: sheet.presentation.id,
+      clientCreatedAt: new Date().toISOString(),
+      kind: "score_set",
+      criterionId,
+      value,
+    };
+    await enqueueEvent(id, input);
+    setPendingCount((prev) => prev + 1);
+    if (scoreFlushTimerRef.current) clearTimeout(scoreFlushTimerRef.current);
+    scoreFlushTimerRef.current = setTimeout(() => {
+      scoreFlushTimerRef.current = null;
+      void flushScoresNow();
+    }, 300);
+  }
+
   // Digitar a nota direto (em vez de só +/-) — mesmo clamp/arredondamento
   // de adjustScore, só que a partir de um valor absoluto informado pelo
-  // jurado em vez de um passo relativo ao valor atual.
+  // jurado em vez de um passo relativo ao valor atual. Usado tanto pelo
+  // slider (arraste contínuo) quanto pelo input numérico (um commit só,
+  // no blur) — o debounce de `emitScoreEvent` cobre os dois sem
+  // distinguir a origem, 300ms é imperceptível num commit único.
   function setScoreDirect(criterionId: string, maxScore: number, allowDecimal: boolean, rawValue: number) {
     const rounded = allowDecimal ? Math.round(rawValue * 10) / 10 : Math.round(rawValue);
     const next = Math.min(maxScore, Math.max(0, rounded));
     setScores((prev) => ({ ...prev, [criterionId]: next }));
-    void emitEvent({ kind: "score_set", criterionId, value: next });
+    void emitScoreEvent(criterionId, next);
   }
 
   function addDeduction(deductionType: DeductionType) {

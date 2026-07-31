@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, History } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { EVENT_ACTIVITY_ACTION_LABELS } from "@/lib/eventActivityLabels";
 import { EVENT_ACTIVITY_ACTION_ICONS, isDestructiveActivityAction } from "@/lib/eventActivityIcons";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
@@ -25,6 +26,7 @@ import { useAuthStore } from "@/store/auth";
 // vivo (removida de lá, ver EventLiveShared).
 export function EventHistoryPage() {
   const { id } = useParams<{ id: string }>();
+  const notificationsUnreadCount = useNotificationsUnreadCount(id);
   useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -66,7 +68,7 @@ export function EventHistoryPage() {
             <ArrowLeft className="size-4" />
             Voltar para eventos
           </button>
-          <NotificationBell />
+          <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
         <div className="px-10 pb-10">

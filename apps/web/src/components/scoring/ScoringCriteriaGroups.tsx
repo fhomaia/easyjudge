@@ -174,6 +174,27 @@ export function ScoringCriteriaGroups({
                               linha compacta (nome + ícone) só faz sentido onde
                               não tem slider. */}
                           {hasBands && isMobile && <CurrentBandBadge bands={bands!} score={score} />}
+                          {/* Comparação com as outras equipes da mesma
+                              categoria — só na folha do próprio jurado
+                              (showScoreBands), nunca no Painel Head Judge.
+                              No desktop isso vira só a marcação no slider
+                              (ver ScoreBandSlider), sem texto solto aqui. */}
+                          {showScoreBands && isMobile && criterion.bestScore && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">Maior nota:</span>{" "}
+                              {criterion.bestScore.value.toFixed(1)}
+                              {criterion.bestScore.teamNames.length === 1 &&
+                                ` (${criterion.bestScore.teamNames[0]})`}
+                            </p>
+                          )}
+                          {showScoreBands &&
+                            isMobile &&
+                            criterion.bestScore &&
+                            criterion.bestScore.teamNames.length > 1 && (
+                              <p className="mt-0.5 text-xs text-amber-600">
+                                Mesma nota atribuída às equipes {criterion.bestScore.teamNames.join(", ")}
+                              </p>
+                            )}
                         </div>
                         <input
                           inputMode="decimal"
@@ -226,6 +247,7 @@ export function ScoringCriteriaGroups({
                           onValueChange={(next) =>
                             onSetScore(criterion.id, criterion.maxScore, criterion.allowDecimalScoring, next)
                           }
+                          teamScores={criterion.teamScores}
                         />
                       )}
                     </div>

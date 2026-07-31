@@ -47,7 +47,7 @@ export function BrandMark({ compact }: { compact?: boolean }) {
           compact ? "text-base" : "text-lg",
         )}
       >
-        easy<span className="text-brand-yellow-bright">Judge</span>
+        Cheer<span className="text-brand-yellow-bright">Cup</span>
       </p>
     </div>
   );

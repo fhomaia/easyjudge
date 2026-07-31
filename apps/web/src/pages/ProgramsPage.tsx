@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { CreateProgramDialog } from "@/components/CreateProgramDialog";
 import { EditProgramDialog } from "@/components/EditProgramDialog";
@@ -40,6 +41,7 @@ const PAGE_SIZE = 6;
 
 export function ProgramsPage() {
   const { id } = useParams<{ id: string }>();
+  const notificationsUnreadCount = useNotificationsUnreadCount(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
@@ -198,7 +200,7 @@ export function ProgramsPage() {
             <ArrowLeft className="size-4" />
             Voltar para configuração do evento
           </button>
-          <NotificationBell />
+          <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
         <div className="px-10 pb-10">

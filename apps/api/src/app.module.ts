@@ -19,6 +19,7 @@ import { ScoringModule } from './scoring/scoring.module';
 import { AthletesModule } from './athletes/athletes.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
@@ -36,6 +37,10 @@ import { RealtimeModule } from './realtime/realtime.module';
     // reage a ele (RealtimeModule/EventsGateway), evitando import
     // circular (ver comentário em realtime.module.ts).
     EventEmitterModule.forRoot(),
+    // Global também — StorageService (upload de logo/documento pro R2,
+    // com fallback pra disco local) é usado por 3 domínios diferentes
+    // (events, programs, regulations) sem relação entre si.
+    CommonModule,
     AuthModule,
     UsersModule,
     EventsModule,

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, UserCog } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { Button } from "@/components/ui/button";
 import { SetupProgressSummary } from "@/components/SetupProgressSummary";
 import { SetupStepCard } from "@/components/SetupStepCard";
@@ -37,6 +38,7 @@ import { useAuthStore } from "@/store/auth";
 
 export function EventSetupPage() {
   const { id } = useParams<{ id: string }>();
+  const notificationsUnreadCount = useNotificationsUnreadCount(id);
   useEventSetupGuard(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -296,7 +298,7 @@ export function EventSetupPage() {
             <ArrowLeft className="size-4" />
             Voltar para eventos
           </button>
-          <NotificationBell />
+          <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
         <div className="px-10 pb-10">

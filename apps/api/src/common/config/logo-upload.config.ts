@@ -1,8 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { mkdirSync } from 'fs';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
 
 const ALLOWED_MIME_TYPES = [
   'image/png',
@@ -12,18 +9,8 @@ const ALLOWED_MIME_TYPES = [
 ];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
-export const LOGO_UPLOAD_DIR = join(process.cwd(), 'uploads', 'logos');
-
 export const logoUploadOptions = {
-  storage: diskStorage({
-    destination: (_req, _file, callback) => {
-      mkdirSync(LOGO_UPLOAD_DIR, { recursive: true });
-      callback(null, LOGO_UPLOAD_DIR);
-    },
-    filename: (_req, file, callback) => {
-      callback(null, `${randomUUID()}${extname(file.originalname)}`);
-    },
-  }),
+  storage: memoryStorage(),
   fileFilter: (
     _req: unknown,
     file: Express.Multer.File,

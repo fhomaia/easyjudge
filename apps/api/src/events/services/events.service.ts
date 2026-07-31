@@ -23,6 +23,7 @@ import { Category } from '../../categories/entities/category.entity';
 import { ProgramParticipation } from '../../programs/entities/program-participation.entity';
 import { ScheduleDay } from '../../schedule/entities/schedule-day.entity';
 import { Regulation } from '../../regulations/entities/regulation.entity';
+import { StorageService } from '../../common/services/storage.service';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
 import { SpecialRoleAssignment } from '../../judging/entities/special-role-assignment.entity';
 import { NotificationsService } from '../../notifications/services/notifications.service';
@@ -122,6 +123,7 @@ export class EventsService {
     private readonly activityLogService: EventActivityLogService,
     private readonly notificationsService: NotificationsService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly storageService: StorageService,
   ) {}
 
   // Cria a v1 do evento (aliasId = id, já que é a primeira versão) e o
@@ -525,7 +527,7 @@ export class EventsService {
 
   async setEventLogo(aliasId: string, file: Express.Multer.File) {
     const event = await this.findEventOrThrow(aliasId);
-    event.logoUrl = `/uploads/logos/${file.filename}`;
+    event.logoUrl = await this.storageService.upload(file, 'logos');
     return this.eventsRepo.save(event);
   }
 
