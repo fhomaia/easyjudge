@@ -13,11 +13,11 @@ type Phase = "strike" | "flash" | "done";
 interface BrandBackdropProps {
   // Por padrão fica atrás de tudo (-z-10, uso normal em Login/Home) —
   // sobrescrito quando reaproveitado como overlay POR CIMA da página
-  // (ver PublishCelebrationOverlay), que precisa de um z-index positivo.
+  // (ver EventCelebrationOverlay), que precisa de um z-index positivo.
   className?: string;
   // "split" (default, Login/Home): fase final revela a tela dividida
   // em azul/amarelo com as fotos e o contorno branco do raio, e fica
-  // assim. "plain" (PublishCelebrationOverlay): a fase final não
+  // assim. "plain" (EventCelebrationOverlay): a fase final não
   // renderiza nada — só o raio riscando + o flash, depois o fundo
   // volta a ficar transparente, revelando o que estiver atrás (o
   // overlay coloca sua própria imagem de fundo por trás).

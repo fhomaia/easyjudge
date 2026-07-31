@@ -19,7 +19,7 @@ interface PublishEventCardProps {
 // as etapas acima estão concluídas. Visual propositalmente mais
 // "comemorativo" (gradiente com as cores da marca) pra destacar que é
 // a etapa final — a celebração de verdade (raio + "Prontos para o
-// show!") acontece em PublishCelebrationOverlay, disparada pelo
+// show!") acontece em EventCelebrationOverlay, disparada pelo
 // chamador depois que `onPublished` resolve.
 export function PublishEventCard({
   event,

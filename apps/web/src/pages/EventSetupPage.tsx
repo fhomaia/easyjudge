@@ -9,7 +9,7 @@ import { SetupProgressSummary } from "@/components/SetupProgressSummary";
 import { SetupStepCard } from "@/components/SetupStepCard";
 import { SetupRecommendedBanner } from "@/components/SetupRecommendedBanner";
 import { PublishEventCard } from "@/components/PublishEventCard";
-import { PublishCelebrationOverlay } from "@/components/PublishCelebrationOverlay";
+import { EventCelebrationOverlay } from "@/components/EventCelebrationOverlay";
 import { buildSetupSteps, type RegulationSummary, type ScheduleSummary } from "@/lib/eventSetupSteps";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import {
@@ -365,9 +365,12 @@ export function EventSetupPage() {
         </div>
       </main>
 
-      <PublishCelebrationOverlay
+      <EventCelebrationOverlay
         open={publishCelebrationOpen}
-        onGoHome={() => navigate("/")}
+        title="Prontos para o show!"
+        subtitle="Seu evento foi publicado com sucesso."
+        actionLabel="Ir para a Home"
+        onAction={() => navigate("/")}
       />
     </div>
   );

@@ -2012,6 +2012,215 @@ ainda) considerar um checkbox de aceite por LGPD.
   termos aceitos → `200`, com `terms_accepted_at` gravado com timestamp
   real no banco.
 
+## Escanear QR do evento pela câmera, dentro do app (2026-07-31)
+
+Antes, quem escaneava o QR do evento precisava usar a câmera nativa do
+celular (a URL codificada no QR, `${origin}/join/${eventCode}`, abre o
+navegador direto — ver "Código + QR de evento" mais acima). Pedido do
+usuário: dar a opção de escanear sem sair do app, pra quem já está
+navegando dentro do Cheer Cup e vê o QR físico impresso/projetado no
+evento.
+
+- **Lib nova: `qr-scanner`** (não `@zxing/*` nem `jsqr` cru) — decide
+  câmera+decodificação+worker sozinha, API pequena
+  (`new QrScanner(videoEl, onDecode, options)` +
+  `.start()`/`.stop()`/`.destroy()`), TypeScript nativo. Versão 1.4.2:
+  o próprio pacote avisa no código que configurar `WORKER_PATH`
+  manualmente "não é mais necessário nem suportado" — resolve o
+  dynamic import do worker sozinho, Vite já lida com isso nativamente
+  (confirmado sem nenhuma config extra, nem no dev nem no build).
+- **`QrCodeScanner.tsx`** (novo componente, `apps/web/src/components`):
+  só liga a câmera enquanto a prop `active` é `true` — nunca eager,
+  nunca fica rodando em segundo plano. `onScan` é guardado num `ref`
+  atualizado a cada render (não como dependência direta do `useEffect`
+  que abre a câmera) — sem isso, toda vez que o componente pai
+  re-renderiza com uma closure nova de `onScan`, o efeito reiniciaria
+  câmera/scanner à toa. Ao ler QUALQUER código, chama `scanner.stop()`
+  antes de disparar `onScan` — sem isso o scanner continua decodificando
+  quadro a quadro e dispararia a mesma leitura repetidas vezes enquanto
+  o pai ainda processa a tentativa anterior (o vídeo trava no último
+  frame, dando feedback visual de "capturado"). Cleanup do `useEffect`
+  sempre chama `stop()` + `destroy()` — cobre fechar o dialog, trocar de
+  aba, ou desmontar por qualquer motivo.
+- **`JoinByCodeDialog.tsx`** ganhou abas (`Tabs` do shadcn, componente
+  novo no projeto — `npx shadcn add tabs`, Base UI por trás como o
+  resto): "Digitar código" (fluxo antigo, inalterado) e "Escanear QR"
+  (`QrCodeScanner`, com `active={open && mode === "scan"}` — câmera só
+  liga com o dialog aberto E essa aba selecionada). As duas abas
+  convergem pro mesmo `joinWithCode(code)` compartilhado — sucesso já
+  fecha o dialog e chama `onJoined` (mesmo comportamento de sempre);
+  falha mostra o mesmo `FormError` de cima e incrementa um contador
+  `scanAttempt`, usado como `key` do `QrCodeScanner` — forçar remount é
+  o jeito mais simples de fazer o scanner voltar a escanear depois de um
+  código inválido/expirado (ele já tinha parado sozinho ao ler o
+  primeiro resultado).
+- **`extractEventCode(scanned)`** (helper local, `JoinByCodeDialog.tsx`):
+  o QR de verdade codifica a URL inteira, não só o código — tenta
+  `new URL(scanned)` e extrai o segmento depois de `/join/`; se não for
+  uma URL válida (QR gerado de outra forma, ex. impresso só com o
+  código puro), usa o valor escaneado como está. Backend já normaliza
+  o código (`trim/uppercase/strip`, `EventsService.joinByCode`), então
+  não precisou duplicar essa parte no frontend.
+- **Câmera pedida sob demanda, nunca a de vídeo-chamada por padrão**:
+  `preferredCamera: "environment"` (traseira) — faz sentido pro caso de
+  uso (apontar pro QR físico), diferente da frontal que a maioria dos
+  navegadores usa por padrão.
+- **Testado**: typecheck limpo; UI verificada no navegador (abas
+  trocam, container de vídeo aparece ao selecionar "Escanear QR", sem
+  erro no console — só um aviso inofensivo da própria lib
+  ("only accessible if the page is transferred via https", dev em
+  `http://localhost`, não aparece em produção que já é HTTPS). **Não
+  testado com câmera de verdade nesta sessão** — o navegador
+  automatizado usado pra verificar a UI não tem hardware de câmera
+  disponível/permissão configurada, e o prompt nativo do Chrome pra
+  autorizar câmera é UI do próprio navegador (fora do DOM da página),
+  não dá pra clicar via automação. Vale um teste manual do usuário num
+  celular de verdade antes de considerar pronto.
+- **Política de Privacidade** (`PrivacyPolicyPage.tsx`) ganhou uma
+  seção nova ("2. Acesso à câmera (QR code)", demais seções
+  renumeradas) deixando explícito que o vídeo é processado só no
+  navegador do usuário, nunca enviado/gravado — decisão consciente de
+  não tratar isso como "coleta de dado novo" de verdade (o vídeo nunca
+  sai do dispositivo), mas documentar por transparência mesmo assim.
+
+## Animação de raio ao logar/cadastrar (2026-07-31)
+
+Pedido do usuário: reaproveitar a mesma animação de raio+clarão já usada
+em duas situações (fundo da LoginPage, variant="split", com fotos; e o
+overlay "Prontos para o show!" ao publicar evento,
+`PublishCelebrationOverlay`, variant="plain", com uma foto própria por
+trás) — só que desta vez **sem nenhuma imagem de fundo**, disparada ao
+logar com sucesso OU terminar o cadastro (`RegisterDialog`).
+`BrandBackdrop` já tinha o variant certo pra isso (`variant="plain"`,
+raio risca + clarão branco, fundo transparente do primeiro frame) —
+não precisou de nenhuma mudança nesse componente, só um novo jeito de
+dispará-lo. Passou por duas versões nesta mesma sessão — a primeira
+tinha um bug real de performance, corrigido na segunda.
+
+- **1ª versão (store global) — tinha um problema real de UX, não só de
+  arquitetura**: login bem-sucedido chamava `useAuthStore.login()`
+  IMEDIATAMENTE (setando `accessToken`), disparando a animação em
+  seguida. Só que `GuestRoute` reage ao token na hora — troca
+  `<Outlet/>` (LoginPage) por `<Navigate to="/" />" no mesmo instante,
+  ANTES da minha própria chamada explícita de `navigate("/")` sequer
+  rodar. Ou seja: a Home já começava a montar e buscar dados **ao
+  mesmo tempo** que a animação do raio tentava rodar, competindo pelo
+  mesmo thread principal — resultado: usuário relatou a animação
+  "travada"/soluçando. A solução inicial (um store `Zustand`
+  `lightningTransition.ts`, renderizado como irmão de `<Routes>` em
+  `App.tsx`, sobrevivendo à troca de rota) resolvia o problema de
+  desmontagem, mas não esse problema de concorrência de thread — nunca
+  chegou a ser a versão final.
+- **2ª versão (final) — adia `login()` até a animação acabar,
+  sem precisar de nenhum store novo**: a causa raiz era chamar
+  `login()` cedo demais, não onde a animação vive. Corrigido invertendo
+  a ordem: o token vem da API e fica em `pendingToken` (estado local,
+  `LoginPage`/`RegisterDialog`), a animação (`BrandBackdrop
+  variant="plain"`) toca ALI MESMO — ainda em `/login`, com a Home nem
+  tendo começado a montar — e só no `onDone` da animação (~900ms
+  depois) é que `login(pendingToken)` roda de verdade, seguido de
+  `navigate("/")`. Como `GuestRoute` só reage quando `login()`
+  realmente é chamado, a troca de rota (e o trabalho de montar/buscar
+  dados da Home) só começa DEPOIS da animação já ter acabado — sem
+  concorrência, sem soluço. Isso eliminou a necessidade do store global
+  (`store/lightningTransition.ts` foi deletado): já que `LoginPage`/
+  `RegisterDialog` continuam montadas durante toda a animação (o token
+  ainda não foi setado, então `GuestRoute` não redireciona), um
+  `useState` local basta.
+  - `LoginPage.handleSubmit`: `authApi.login()` → `setPendingToken()`
+    (não `login()` ainda) → `<BrandBackdrop variant="plain"
+    onDone={completeLogin} />` renderizada condicionalmente → `onDone`
+    chama `completeLogin()`, que só ENTÃO chama `login(pendingToken)` +
+    `joinPendingEventIfAny()` + `navigate("/")`.
+  - `RegisterDialog.submitPassword`: mesmo padrão
+    (`authApi.setPassword()` → `setPendingToken()` →
+    `completeRegistration()` no `onDone`, que chama `login()` +
+    `handleOpenChange(false)` + `onSuccess()`). O popup continua aberto
+    por trás enquanto o raio cobre a tela inteira — `BrandBackdrop`
+    renderizado com `z-[60]` (não `z-50`, igual ao `Dialog`) pra
+    garantir que fica por cima do popup independente da ordem de
+    portal do Base UI.
+  - De propósito NÃO dentro de `useAuthStore.login()` em si — esse
+    mesmo método também é chamado por `startImpersonation`/
+    `stopImpersonation` (ver `store/auth.ts`), onde a animação não faz
+    sentido (ação de admin trocando de conta, não um "bem-vindo" de
+    verdade).
+- **Testado via `javascript_tool`** (nunca com credencial real — ver
+  `feedback_browser_testing_real_data.md`): expondo temporariamente
+  `setPendingToken` em `window.__setPendingToken` de dentro da própria
+  `LoginPage` (revertido logo em seguida), disparado com um token falso
+  enquanto deslogado de verdade em `/login`. Confirmado que o caminho
+  fica em `/login` com o `<polyline>` do raio no DOM durante toda a
+  animação, e só troca pra `/` no exato instante em que o overlay some
+  — nunca antes. (Números absolutos de tempo do primeiro teste saíram
+  incoerentes — Chrome throttla `setTimeout` de aba em segundo plano/
+  sem foco pra ~1x/segundo, esticando os ~900ms reais; a SEQUÊNCIA
+  relativa, que é o que importa, ficou confirmada mesmo assim.)
+- **Incidente real durante esse teste**: a sessão real do usuário no
+  Chrome foi perdida — o backup de `localStorage['easyjudge-auth']`
+  feito antes de deslogar pra testar acabou não sendo restaurado
+  corretamente (o valor "restaurado" tinha o tamanho de um token de
+  teste, não da sessão real), e não havia como recuperar localmente.
+  Usuário precisou logar de novo manualmente; nenhum dado de
+  servidor foi afetado, só o token local. Lição registrada em detalhe
+  em `feedback_browser_testing_real_data.md` (novo caso, 2026-07-31) —
+  sequências de teste que chamam `login()`/`logout()` de verdade (não
+  só leem estado) são mais arriscadas de fazer save/restore do que
+  parecem à primeira vista.
+
+## Raio ao abrir evento ao vivo + celebração ao iniciar evento (2026-08-01)
+
+Duas extensões do trabalho de animação acima, pedidas na sequência.
+
+- **Abrir um evento publicado/iniciado pela listagem (Home) agora toca o
+  raio primeiro** — mesmo `BrandBackdrop variant="plain"` sem mensagem
+  do fix de login/cadastro, mesmo motivo (navegar antes faria a tela ao
+  vivo começar a montar/buscar dados ao mesmo tempo que a animação,
+  competindo pelo thread principal). `EventListItem`/`EventGridItem`
+  (clique no card inteiro, não nos pills/menu internos — esses já
+  paravam propagação) pararam de chamar `navigate()` direto pro caso
+  `isLive` (`published`/`started`) — ganharam uma prop nova
+  `onOpenLive(event)`, implementada em `HomePage` como
+  `setPendingOpenEvent(event)`; a navegação de verdade só acontece no
+  `onDone` do `BrandBackdrop`. Caso `isConfigurable` (`created` →
+  `/setup`) não mudou, continua navegando direto — o pedido era
+  especificamente sobre evento "já iniciado" (ao vivo).
+- **`EventCelebrationOverlay`** — generalização do antigo
+  `PublishCelebrationOverlay` (arquivo renomeado/substituído, mesma
+  animação/fundo `bg-publish-celebration.webp`) pra aceitar
+  `title`/`subtitle`/`actionLabel`/`onAction` como props em vez de
+  texto fixo — usado agora em **3 lugares**, cada um com texto/ação
+  própria:
+  - `EventSetupPage` (publicar): texto original "Prontos para o
+    show!", inalterado.
+  - `HomePage` (clique no pill "Iniciar evento" da listagem): "Vamos
+    começar o show!" / "O evento começou — boa competição!", botão "Ir
+    para o evento ao vivo" → navega pra `/events/:id/live`.
+  - `EventLiveDashboardPage` (botão "Iniciar evento" na própria tela ao
+    vivo, mobile E desktop — os dois compartilham o mesmo `handleStart`,
+    então um `useState` só cobre as duas visões): mesmo texto, mas
+    botão "Continuar" só fecha o overlay — já está na tela certa, não
+    precisa navegar.
+- **Testado ponta a ponta com conta e eventos descartáveis** (usuário
+  organization novo, 2 eventos publicados com `startDate` de hoje —
+  necessário pra `EventLifecycleAction.canStart` liberar o pill, que
+  exige `isEventDay`; conta/eventos deletados ao final, incluindo um
+  `DELETE FROM event_activity_logs` manual — a exclusão do `User` bateu
+  em FK de `event_activity_logs.actor_id`, que não é limpa em cascata):
+  os 3 fluxos confirmados visualmente — raio puro abrindo evento ao
+  vivo pela Home (URL já muda pra `/live` mas o frame do raio ainda
+  aparece por cima da Home, confirma que a troca de rota só ocorre
+  depois do `onDone`); celebração completa iniciando pelo pill da Home,
+  com o botão levando pro evento; celebração iniciando de dentro da
+  própria tela ao vivo, com "Continuar" só fechando no lugar.
+- **Incidente à parte, não relacionado ao código**: uma aba nova criada
+  por engano durante o teste mostrou por um instante a sessão real do
+  usuário (login feito por ele mesmo, em algum momento entre turnos,
+  já que a sessão anterior tinha sido perdida — ver incidente acima) —
+  fechada sem nenhuma ação além de um clique perdido em área vazia da
+  Home (sem efeito). O teste de verdade foi refeito só depois de
+  confirmar a aba estava deslogada.
+
 ## Próximos passos (não iniciados ainda)
 
 **Atualização (2026-07-28):** o item 1 antigo (tempo real) **já foi

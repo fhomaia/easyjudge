@@ -4,34 +4,50 @@ import { PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandBackdrop } from "@/components/BrandBackdrop";
 
-interface PublishCelebrationOverlayProps {
+interface EventCelebrationOverlayProps {
   open: boolean;
-  onGoHome: () => void;
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  onAction: () => void;
 }
 
-// Disparado ao publicar o evento (ver PublishEventCard) — reaproveita a
-// mesma animação de raio da tela de login (BrandBackdrop), só que como
-// um overlay POR CIMA da página atual (z-50, não -z-10) em vez de atrás
-// dela — os elementos da página de setup ficam completamente
+// Generalizado a partir do antigo PublishCelebrationOverlay (2026-08-01)
+// pra ser reaproveitado tanto ao publicar quanto ao iniciar um evento —
+// mesma animação/fundo nos dois casos, só o texto e a ação do botão
+// mudam por prop (ver EventSetupPage, "publicar", e
+// HomePage/EventLiveDashboardPage, "iniciar").
+//
+// Reaproveita a mesma animação de raio da tela de login (BrandBackdrop),
+// só que como um overlay POR CIMA da página atual (z-50, não -z-10) em
+// vez de atrás dela — os elementos da página ficam completamente
 // encobertos (o próprio fundo opaco do raio já resolve isso, sem
 // precisar de nenhum efeito de opacidade à parte). Depois que o raio
-// termina (BrandBackdrop.onDone), revela "Prontos para o show!" + CTA
-// pra Home, no mesmo estilo de reveal com delay já usado no logo da
-// LoginPage.
+// termina (BrandBackdrop.onDone), revela o texto + CTA, no mesmo estilo
+// de reveal com delay já usado no logo da LoginPage.
 //
 // Fundo (2026-07-19, a pedido do usuário): variant="plain" no
 // BrandBackdrop — o raio risca a tela e o flash estoura igual ao
 // login, mas a fase final não revela o split azul/amarelo com as duas
 // fotos; em vez disso o BrandBackdrop fica transparente do primeiro
 // frame em diante (nesse variant ele nunca pinta um navy sólido por
-// cima), revelando esta imagem única (`bg-publish-celebration.webp`)
-// posicionada atrás dele no DOM (mesma z-index, a ordem no DOM decide
-// quem fica por cima) — ela já aparece assim que a tela é aberta, o
-// raio risca por cima dela em vez de escondê-la até a animação acabar.
-// Uma camada `bg-brand-navy/55` fica entre a foto e o BrandBackdrop
-// pra escurecer o fundo (a foto tem uma nuvem bem clara no centro,
-// exatamente onde o texto cai) e garantir contraste pro texto branco.
-export function PublishCelebrationOverlay({ open, onGoHome }: PublishCelebrationOverlayProps) {
+// cima), revelando esta imagem única (`bg-publish-celebration.webp`,
+// nome do arquivo mantido mesmo reaproveitada pro "iniciar" — trocar
+// exigiria outra imagem, fora de escopo, e o fundo funciona bem pros
+// dois textos) posicionada atrás dele no DOM (mesma z-index, a ordem no
+// DOM decide quem fica por cima) — ela já aparece assim que a tela é
+// aberta, o raio risca por cima dela em vez de escondê-la até a
+// animação acabar. Uma camada `bg-brand-navy/55` fica entre a foto e o
+// BrandBackdrop pra escurecer o fundo (a foto tem uma nuvem bem clara
+// no centro, exatamente onde o texto cai) e garantir contraste pro
+// texto branco.
+export function EventCelebrationOverlay({
+  open,
+  title,
+  subtitle,
+  actionLabel,
+  onAction,
+}: EventCelebrationOverlayProps) {
   const [showMessage, setShowMessage] = useState(false);
 
   if (!open) return null;
@@ -61,16 +77,12 @@ export function PublishCelebrationOverlay({ open, onGoHome }: PublishCelebration
               <PartyPopper className="mx-auto size-16 text-white drop-shadow-lg" />
             </motion.div>
 
-            <h1 className="text-4xl font-bold text-white drop-shadow-lg sm:text-6xl">
-              Prontos para o show!
-            </h1>
-            <p className="max-w-md text-lg text-white/90">
-              Seu evento foi publicado com sucesso.
-            </p>
+            <h1 className="text-4xl font-bold text-white drop-shadow-lg sm:text-6xl">{title}</h1>
+            <p className="max-w-md text-lg text-white/90">{subtitle}</p>
 
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="mt-4">
-              <Button size="lg" onClick={onGoHome}>
-                Ir para a Home
+              <Button size="lg" onClick={onAction}>
+                {actionLabel}
               </Button>
             </motion.div>
           </motion.div>

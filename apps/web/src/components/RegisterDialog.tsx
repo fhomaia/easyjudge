@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Progress } from "@/components/ui/progress";
 import { FormError } from "@/components/FormError";
 import { DatePicker } from "@/components/DatePicker";
+import { BrandBackdrop } from "@/components/BrandBackdrop";
 import {
   authApi,
   ApiError,
@@ -203,6 +204,12 @@ export function RegisterDialog({
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState(INITIAL_STATE);
+  // Token fica em espera até a animação do raio terminar (mesmo
+  // raciocínio de LoginPage.pendingToken) — chamar `login()` cedo
+  // demais faria o GuestRoute trocar pra Home (e ela começar a buscar
+  // dados) enquanto o raio ainda está rodando aqui dentro do popup,
+  // ainda aberto, disputando o mesmo thread principal.
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
 
   const step: StepKey = STEPS[stepIndex];
 
@@ -219,6 +226,7 @@ export function RegisterDialog({
     setError(null);
     setUserId(null);
     setForm(INITIAL_STATE);
+    setPendingToken(null);
   }
 
   function handleOpenChange(next: boolean) {
@@ -351,24 +359,32 @@ export function RegisterDialog({
         form.password,
         form.confirmPassword,
       );
-      login(accessToken);
-      handleOpenChange(false);
-      onSuccess();
+      // `login()`/fechar o popup/onSuccess só acontecem depois da
+      // animação (ver BrandBackdrop mais abaixo e completeRegistration)
+      // — mesmo raciocínio de LoginPage.pendingToken.
+      setPendingToken(accessToken);
     } catch (err) {
       setError(
         err instanceof ApiError
           ? err.message
           : "Não foi possível definir a senha.",
       );
-    } finally {
       setLoading(false);
     }
+  }
+
+  async function completeRegistration() {
+    if (!pendingToken) return;
+    login(pendingToken);
+    handleOpenChange(false);
+    onSuccess();
   }
 
   const progress = ((stepIndex + 1) / STEPS.length) * 100;
   const canGoBack = stepIndex > 0 && !LOCKED_STEPS.includes(step);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="gap-7 p-10 short:gap-3 short:p-5 sm:max-w-lg">
         <DialogTitle className="sr-only">Criar conta</DialogTitle>
@@ -837,6 +853,24 @@ export function RegisterDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Só toca DEPOIS que o password foi definido (pendingToken) — o
+        popup continua aberto por trás enquanto o raio cobre a tela
+        inteira; login()/fechar o popup só acontecem no onDone (ver
+        completeRegistration acima). Mesmo raciocínio de
+        LoginPage.pendingToken: chamar login() cedo demais faria o
+        GuestRoute trocar pra Home enquanto a animação ainda roda,
+        competindo pelo mesmo thread principal. z-[60] (não z-50, igual
+        ao Dialog) garante que fica por cima do popup mesmo se a ordem
+        de portal do Base UI colocar os dois no mesmo nível. */}
+    {pendingToken && (
+      <BrandBackdrop
+        variant="plain"
+        className="z-[60]"
+        onDone={() => void completeRegistration()}
+      />
+    )}
+    </>
   );
 }
 

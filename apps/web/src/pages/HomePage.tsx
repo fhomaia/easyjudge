@@ -20,6 +20,8 @@ import { EventListItem } from "@/components/EventListItem";
 import { EventGridItem } from "@/components/EventGridItem";
 import { Pagination } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
+import { BrandBackdrop } from "@/components/BrandBackdrop";
+import { EventCelebrationOverlay } from "@/components/EventCelebrationOverlay";
 import { listVariants } from "@/lib/motionVariants";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { ApiError, eventsApi, usersApi, type Event, type UserProfile } from "@/api/client";
@@ -53,6 +55,16 @@ export function HomePage() {
   const [joinByCodeOpen, setJoinByCodeOpen] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Evento sendo aberto (publicado/iniciado, clique no card) — o raio
+  // (sem mensagem, mesma animação do login) toca AQUI na Home antes de
+  // navegar pra `/live`, não depois — mesmo motivo do fix de
+  // login/cadastro: navegar primeiro faria a tela ao vivo começar a
+  // montar/buscar dados ao mesmo tempo que a animação, competindo pelo
+  // mesmo thread e deixando tudo travado.
+  const [pendingOpenEvent, setPendingOpenEvent] = useState<Event | null>(null);
+  // Evento recém-iniciado (clique em "Iniciar evento") — celebração com
+  // mensagem (EventCelebrationOverlay), CTA leva pra tela ao vivo.
+  const [startCelebrationTarget, setStartCelebrationTarget] = useState<Event | null>(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EventStatusFilter>("all");
@@ -146,11 +158,19 @@ export function HomePage() {
     try {
       const updated = await eventsApi.start(event.aliasId);
       handleEventUpdated(updated);
+      setStartCelebrationTarget(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro inesperado. Tente novamente.");
     } finally {
       setStartingId(null);
     }
+  }
+
+  // Clique no card de um evento publicado/iniciado — ver comentário do
+  // estado `pendingOpenEvent` acima sobre por que a navegação só
+  // acontece depois do raio (BrandBackdrop.onDone), nunca antes.
+  function handleOpenLive(event: Event) {
+    setPendingOpenEvent(event);
   }
 
   async function handlePublish(event: Event) {
@@ -291,6 +311,7 @@ export function HomePage() {
                                 onViewHistory={handleViewHistory}
                                 onTogglePublish={handleTogglePublish}
                                 onShare={setShareTarget}
+                                onOpenLive={handleOpenLive}
                               />
                             ) : (
                               <EventGridItem
@@ -303,6 +324,7 @@ export function HomePage() {
                                 onViewHistory={handleViewHistory}
                                 onTogglePublish={handleTogglePublish}
                                 onShare={setShareTarget}
+                                onOpenLive={handleOpenLive}
                               />
                             ),
                           )}
@@ -377,6 +399,33 @@ export function HomePage() {
         confirmLabel="Reverter"
         confirmingLabel="Revertendo..."
         onConfirm={handleRevert}
+      />
+
+      {/* Sem mensagem — só o raio+clarão, igual ao fix de login/cadastro.
+          Só navega no onDone, nunca antes (ver comentário do estado
+          `pendingOpenEvent` acima). */}
+      {pendingOpenEvent && (
+        <BrandBackdrop
+          variant="plain"
+          className="z-50"
+          onDone={() => {
+            const target = pendingOpenEvent;
+            setPendingOpenEvent(null);
+            if (target) navigate(`/events/${target.aliasId}/live`);
+          }}
+        />
+      )}
+
+      <EventCelebrationOverlay
+        open={startCelebrationTarget !== null}
+        title="Vamos começar o show!"
+        subtitle="O evento começou — boa competição!"
+        actionLabel="Ir para o evento ao vivo"
+        onAction={() => {
+          const target = startCelebrationTarget;
+          setStartCelebrationTarget(null);
+          if (target) navigate(`/events/${target.aliasId}/live`);
+        }}
       />
     </div>
   );

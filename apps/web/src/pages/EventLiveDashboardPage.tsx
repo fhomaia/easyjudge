@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { BlinkingDot } from "@/components/BlinkingDot";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { EventCelebrationOverlay } from "@/components/EventCelebrationOverlay";
 import { EventStatusBadge } from "@/components/EventStatusBadge";
 import {
   DropdownMenu,
@@ -108,6 +109,7 @@ export function EventLiveDashboardPage() {
   const [programsDialogOpen, setProgramsDialogOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [startCelebrationOpen, setStartCelebrationOpen] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
@@ -330,6 +332,7 @@ export function EventLiveDashboardPage() {
     try {
       const updated = await eventsApi.start(event.aliasId);
       setEvent(updated);
+      setStartCelebrationOpen(true);
     } catch (err) {
       // Sem sistema de toast no projeto ainda — silencioso é melhor que
       // travar a tela; o botão volta a ficar clicável pra tentar de novo.
@@ -776,6 +779,16 @@ export function EventLiveDashboardPage() {
       onOpenChange={setProgramsDialogOpen}
       programs={programs}
       teams={teams}
+    />
+
+    {/* Já estamos na tela ao vivo (diferente do "Iniciar evento" clicado
+        na Home) — o CTA só fecha o overlay em vez de navegar. */}
+    <EventCelebrationOverlay
+      open={startCelebrationOpen}
+      title="Vamos começar o show!"
+      subtitle="O evento começou — boa competição!"
+      actionLabel="Continuar"
+      onAction={() => setStartCelebrationOpen(false)}
     />
     </>
   );

@@ -19,6 +19,10 @@ interface EventListItemProps {
   onViewHistory: (event: Event) => void;
   onTogglePublish: (event: Event) => void;
   onShare: (event: Event) => void;
+  // Publicado/iniciado abre a tela "ao vivo" com a animação de raio
+  // primeiro (ver HomePage.handleOpenLive) — por isso não navega direto
+  // daqui como "created" (setup) continua fazendo.
+  onOpenLive: (event: Event) => void;
 }
 
 export function EventListItem({
@@ -30,6 +34,7 @@ export function EventListItem({
   onViewHistory,
   onTogglePublish,
   onShare,
+  onOpenLive,
 }: EventListItemProps) {
   const isAdmin = event.currentUserRole === "admin";
   const isAssessor = event.currentUserRole === "assessor";
@@ -46,7 +51,7 @@ export function EventListItem({
         isConfigurable
           ? () => navigate(`/events/${event.aliasId}/setup`)
           : isLive
-            ? () => navigate(`/events/${event.aliasId}/live`)
+            ? () => onOpenLive(event)
             : undefined
       }
       className={cn(

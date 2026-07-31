@@ -35,6 +35,10 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
+  // Token fica em espera aqui até a animação do raio terminar — só
+  // então chama `login()` de verdade (ver comentário no JSX abaixo,
+  // sobre por que essa ordem importa).
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -42,21 +46,37 @@ export function LoginPage() {
     setLoading(true);
     try {
       const { accessToken } = await authApi.login(email, password);
-      login(accessToken);
-      await joinPendingEventIfAny();
-      navigate("/");
+      setPendingToken(accessToken);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Não foi possível entrar.",
       );
-    } finally {
       setLoading(false);
     }
+  }
+
+  async function completeLogin() {
+    if (!pendingToken) return;
+    login(pendingToken);
+    await joinPendingEventIfAny();
+    navigate("/");
   }
 
   return (
     <div className="relative flex min-h-svh items-center justify-center overflow-x-hidden overflow-y-auto p-6 short:p-3">
       <BrandBackdrop />
+
+      {/* Só chama `login()` (que seta o token no useAuthStore) DEPOIS
+          que o raio termina, nunca antes — GuestRoute reage ao token na
+          hora e já troca pra Home, o que desmontaria esta página (e
+          faria a Home começar a buscar dados) enquanto a animação ainda
+          estivesse rodando, competindo pelo mesmo thread principal e
+          deixando tudo travado/soluçando. Tocando o raio ainda AQUI, com
+          a Home nem tendo começado a montar, ele roda liso; só depois a
+          troca de rota acontece, já com a animação encerrada. */}
+      {pendingToken && (
+        <BrandBackdrop variant="plain" className="z-50" onDone={() => void completeLogin()} />
+      )}
 
       <motion.div
         className="relative w-full max-w-sm sm:max-w-md"
