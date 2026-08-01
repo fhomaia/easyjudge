@@ -9,7 +9,11 @@ import { EventMemberRole } from '../enums/event-member-role.enum';
 // cards "Jurados cadastrados"/"Programas cadastrados"/"Espectadores"/
 // "Atletas" do painel Início. Acesso amplo (mesmo conjunto de papéis
 // que já enxerga essa tela — ver useEventLiveGuard no front): é só uma
-// contagem, não expõe nome/email de ninguém.
+// contagem, não expõe nome/email de ninguém. SPECTATOR entrou em
+// 2026-08-01, junto da Início ficar disponível pra qualquer papel
+// (pedido do usuário) — sem isso, os cards "Espectadores"/"Atletas"
+// ficavam sempre "0" pra quem via a tela como espectador (fetch dando
+// 403, caindo no fallback silencioso do frontend).
 @Controller('events/:eventId/member-counts')
 @UseGuards(JwtAuthGuard, EventMemberGuard)
 @EventRoles(
@@ -18,6 +22,7 @@ import { EventMemberRole } from '../enums/event-member-role.enum';
   EventMemberRole.JUDGE,
   EventMemberRole.PROGRAM,
   EventMemberRole.ATHLETE,
+  EventMemberRole.SPECTATOR,
 )
 export class EventMemberCountsController {
   constructor(private readonly eventsService: EventsService) {}

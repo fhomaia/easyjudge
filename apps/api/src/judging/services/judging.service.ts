@@ -412,6 +412,17 @@ export class JudgingService {
     resourceId: string,
     judgeIds: string[],
   ): Promise<void> {
+    // Um recurso (pista) já é a granularidade "por dia" (cada dia tem
+    // suas próprias linhas de ScheduleResource, mesmo replicando o
+    // nome "Pista 1" — ver ScheduleService) — então só precisa travar
+    // em 1 jurado por recurso pra satisfazer "um jurado de legalidade
+    // por dia, por pista" (pedido do usuário). Head Judge continua sem
+    // limite, não foi pedido pra esse.
+    if (role === SpecialJudgeRole.LEGALITY_JUDGE && judgeIds.length > 1) {
+      throw new BadRequestException(
+        'Só é possível indicar um jurado de legalidade por pista.',
+      );
+    }
     const event = await this.eventsService.findEventOrThrow(eventId);
     await this.scheduleService.findResourceInEventOrThrow(eventId, resourceId);
     await this.assertJudgesBelongToEvent(eventId, judgeIds);

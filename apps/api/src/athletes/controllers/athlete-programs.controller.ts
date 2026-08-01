@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AthletesService } from '../services/athletes.service';
 import { RequestProgramLinkDto } from '../dto/request-program-link.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -27,5 +38,11 @@ export class AthleteProgramsController {
       req.user.userId,
       dto.programEmail,
     );
+  }
+
+  @Delete(':linkId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Req() req: AuthenticatedRequest, @Param('linkId') linkId: string) {
+    return this.athletesService.removeMyLink(req.user.userId, linkId);
   }
 }

@@ -105,7 +105,7 @@ export function EventLiveTeamNotesPage() {
         type="button"
         onClick={() => void handleContest()}
         disabled={contesting}
-        className="w-full rounded-xl border border-red-300 bg-red-500/5 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-500/10 disabled:opacity-60"
+        className="shrink-0 rounded-xl border border-red-300 bg-red-500/5 px-4 py-2 text-sm font-semibold whitespace-nowrap text-red-600 hover:bg-red-500/10 disabled:opacity-60"
       >
         {contesting ? "Enviando..." : "Solicitar contestação"}
       </button>
@@ -131,15 +131,18 @@ export function EventLiveTeamNotesPage() {
         <main className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-4">
           {selectedId && detail ? (
             <div>
-              <button
-                type="button"
-                onClick={() => setSelectedId(null)}
-                className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="size-4" />
-                Voltar
-              </button>
-              <PresentationNotesDetail detail={detail} actions={contestButton} celebrateHitZero />
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft className="size-4" />
+                  Voltar
+                </button>
+                {contestButton}
+              </div>
+              <PresentationNotesDetail detail={detail} celebrateHitZero />
             </div>
           ) : (
             <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />
@@ -180,15 +183,18 @@ export function EventLiveTeamNotesPage() {
           <main className="flex-1 overflow-y-auto p-6">
             {selectedId && detail ? (
               <div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(null)}
-                  className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronLeft className="size-4" />
-                  Voltar
-                </button>
-                <PresentationNotesDetail detail={detail} actions={contestButton} celebrateHitZero />
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(null)}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <ChevronLeft className="size-4" />
+                    Voltar
+                  </button>
+                  {contestButton}
+                </div>
+                <PresentationNotesDetail detail={detail} celebrateHitZero />
               </div>
             ) : (
               <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />

@@ -37,19 +37,27 @@ export class ScheduleController {
 
   // Override do @Roles/@EventRoles de classe (ADMIN/ASSESSOR) só pra
   // esta rota — jurado precisa LER o cronograma pra saber o que julgar
-  // (telas "Início"/"Notas" do evento ao vivo) e, desde o fluxo de
-  // desistência (2026-07-26), programa também precisa LER pra ver/
-  // sinalizar desistência das próprias apresentações na tela de
-  // cronograma ao vivo (EventLiveSchedulePage). Continua sem poder
-  // editar nada aqui (as outras rotas deste controller continuam
-  // admin/assessor only).
+  // (telas "Início"/"Notas" do evento ao vivo), desde o fluxo de
+  // desistência (2026-07-26) programa também precisa LER pra ver/
+  // sinalizar desistência das próprias apresentações, atleta também
+  // (achado em 2026-08-01: mesmo bug de PROGRAM faltando aqui antes,
+  // agora com ATHLETE — a tela de Cronograma ao vivo aparecia vazia
+  // pra esse papel), e espectador também (2026-08-01: a tela Início
+  // passou a ficar disponível pra todo mundo — pedido do usuário —, e
+  // o card "Atraso atual" dela usa os dados do cronograma pra calcular
+  // o atraso, independente de o espectador poder abrir a tela de
+  // Cronograma completo em si, que continua fora do alcance dele).
+  // Continua sem poder editar nada aqui (as outras rotas deste
+  // controller continuam admin/assessor only).
   @Get('days')
-  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM)
+  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
   @EventRoles(
     EventMemberRole.ADMIN,
     EventMemberRole.ASSESSOR,
     EventMemberRole.JUDGE,
     EventMemberRole.PROGRAM,
+    EventMemberRole.ATHLETE,
+    EventMemberRole.SPECTATOR,
   )
   getDays(@Param('eventId') eventId: string) {
     return this.scheduleService.getDays(eventId);

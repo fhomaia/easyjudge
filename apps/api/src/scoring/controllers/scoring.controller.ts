@@ -50,30 +50,44 @@ export class ScoringController {
 
   // Alimenta o card "Atraso atual" do painel Início — todo mundo que
   // enxerga essa tela precisa ler isso (não é uma ação de jurado), não
-  // só admin/assessor/jurado — programa e atleta também veem Início
+  // só admin/assessor/jurado — programa, atleta e (desde 2026-08-01,
+  // Início disponível pra todo mundo) espectador também veem Início
   // (ver useEventLiveGuard no front). Sobrescreve o @EventRoles(JUDGE)
   // da classe só nesta rota.
+  //
+  // Bug real achado em 2026-08-01: o @EventRoles abaixo já incluía
+  // PROGRAM/ATHLETE, mas faltava o @Roles (nível de conta,
+  // UserRole) correspondente — sem um @Roles próprio no método, o
+  // NestJS usa o da CLASSE (@Roles(JUDGE, ORGANIZATION)), que barrava
+  // contas program/athlete com 403 mesmo com o EventRoles liberando.
+  // Confirmado via curl que as duas rotas devolviam 403 pra uma conta
+  // atleta antes desta correção.
   @Get('started-presentations')
+  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
   @EventRoles(
     EventMemberRole.ADMIN,
     EventMemberRole.ASSESSOR,
     EventMemberRole.JUDGE,
     EventMemberRole.PROGRAM,
     EventMemberRole.ATHLETE,
+    EventMemberRole.SPECTATOR,
   )
   getStartedPresentations(@Param('eventId') eventId: string) {
     return this.scoringService.getStartedPresentations(eventId);
   }
 
-  // Mesmo raciocínio de started-presentations — alimenta o cronograma
-  // ao vivo (ver ScoringService.getCompletedPresentationIds).
+  // Mesmo raciocínio de started-presentations (inclusive o mesmo bug
+  // de @Roles faltando, corrigido junto) — alimenta o cronograma ao
+  // vivo (ver ScoringService.getCompletedPresentationIds).
   @Get('completed-presentations')
+  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
   @EventRoles(
     EventMemberRole.ADMIN,
     EventMemberRole.ASSESSOR,
     EventMemberRole.JUDGE,
     EventMemberRole.PROGRAM,
     EventMemberRole.ATHLETE,
+    EventMemberRole.SPECTATOR,
   )
   getCompletedPresentationIds(@Param('eventId') eventId: string) {
     return this.scoringService.getCompletedPresentationIds(eventId);

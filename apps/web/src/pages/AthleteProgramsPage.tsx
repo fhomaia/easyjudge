@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, CheckCircle2, Clock, Plus } from "lucide-react";
+import { Building2, CheckCircle2, Clock, Plus, X } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RequestProgramLinkDialog } from "@/components/RequestProgramLinkDialog";
 import { athleteProgramsApi, usersApi, type AthleteLinkView, type UserProfile } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
@@ -21,6 +22,7 @@ export function AthleteProgramsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [links, setLinks] = useState<AthleteLinkView[] | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<AthleteLinkView | null>(null);
 
   useEffect(() => {
     usersApi
@@ -46,13 +48,13 @@ export function AthleteProgramsPage() {
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="flex-1 overflow-y-auto pt-14 sm:pt-0">
-        <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+        <div className="w-full px-6 py-10 sm:px-10 lg:px-16">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Building2 className="size-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-2xl font-semibold text-foreground">Meus programas</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Os programas aos quais você está vinculado.
@@ -60,7 +62,7 @@ export function AthleteProgramsPage() {
               </div>
             </div>
 
-            <Button onClick={() => setRequestOpen(true)}>
+            <Button onClick={() => setRequestOpen(true)} className="shrink-0">
               <Plus data-icon="inline-start" />
               Vincular a um programa
             </Button>
@@ -69,8 +71,8 @@ export function AthleteProgramsPage() {
           <div className="mt-6 rounded-lg border border-border/60 bg-card">
             <div className="divide-y divide-border/60">
               {(links ?? []).map((link) => (
-                <div key={link.id} className="flex items-center justify-between gap-4 p-4">
-                  <div className="min-w-0">
+                <div key={link.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">
                       {link.programEmail}
                     </p>
@@ -81,23 +83,34 @@ export function AthleteProgramsPage() {
                     )}
                   </div>
 
-                  {link.confirmed ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                  <div className="flex shrink-0 items-center gap-2">
+                    {link.confirmed ? (
+                      <Badge
+                        variant="outline"
+                        className="border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                      >
+                        <CheckCircle2 className="size-3" data-icon="inline-start" />
+                        Confirmado
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                      >
+                        <Clock className="size-3" data-icon="inline-start" />
+                        Aguardando confirmação
+                      </Badge>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setRemoveTarget(link)}
+                      aria-label="Remover vínculo"
+                      title="Remover vínculo"
+                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <CheckCircle2 className="size-3" data-icon="inline-start" />
-                      Confirmado
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                    >
-                      <Clock className="size-3" data-icon="inline-start" />
-                      Aguardando confirmação
-                    </Badge>
-                  )}
+                      <X className="size-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
 
@@ -115,6 +128,21 @@ export function AthleteProgramsPage() {
         open={requestOpen}
         onOpenChange={setRequestOpen}
         onCreated={(link) => setLinks((prev) => [link, ...(prev ?? [])])}
+      />
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title="Remover vínculo"
+        description={`Você deixa de estar vinculado a ${removeTarget?.programEmail ?? "este programa"}. Você perde o acesso aos eventos dele como atleta (continua podendo entrar como espectador, se tiver o código).`}
+        confirmLabel="Remover"
+        confirmingLabel="Removendo..."
+        onConfirm={async () => {
+          if (!removeTarget) return;
+          await athleteProgramsApi.remove(removeTarget.id);
+          setLinks((prev) => (prev ?? []).filter((l) => l.id !== removeTarget.id));
+          setRemoveTarget(null);
+        }}
       />
     </div>
   );

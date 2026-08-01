@@ -123,7 +123,7 @@ export function EventLiveNotificationsPage() {
                 <div className="divide-y divide-border">
                   {notifications.map((notification) => {
                     const Icon = NOTIFICATION_ICONS[notification.type];
-                    const href = notificationHref(event.aliasId, notification);
+                    const href = notificationHref(event.aliasId, event.currentUserRoles, notification);
                     const content = (
                       <>
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">

@@ -39,9 +39,14 @@ export class RegulationsController {
   // esta rota — a tela "Início" do evento ao vivo (EventLiveDashboardPage/
   // EventLiveDesktopView) mostra os documentos do regulamento pra
   // qualquer papel que enxerga aquela tela (mesma audiência de
-  // useEventLiveGuard: admin/assessor/jurado/programa/atleta, não
-  // espectador). Continua sem poder editar nada aqui (as outras rotas
-  // deste controller continuam admin/assessor only).
+  // useEventLiveGuard: admin/assessor/jurado/programa/atleta e, desde
+  // 2026-08-01, espectador também — Início passou a ficar disponível
+  // pra todo mundo, pedido do usuário). O botão de documentos já
+  // aparecia incondicionalmente na tela pra qualquer papel; sem
+  // SPECTATOR aqui ele ficava sempre desabilitado ("nenhum documento
+  // enviado") mesmo quando existiam documentos, porque o fetch dava
+  // 403. Continua sem poder editar nada aqui (as outras rotas deste
+  // controller continuam admin/assessor only).
   @Get()
   @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
   @EventRoles(
@@ -50,6 +55,7 @@ export class RegulationsController {
     EventMemberRole.JUDGE,
     EventMemberRole.PROGRAM,
     EventMemberRole.ATHLETE,
+    EventMemberRole.SPECTATOR,
   )
   get(@Param('eventId') eventId: string) {
     return this.regulationsService.getForEvent(eventId);

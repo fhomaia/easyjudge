@@ -446,7 +446,7 @@ export function EventLiveDesktopView({
             ) : (
               <div className="mt-2 divide-y divide-border">
                 {notifications.slice(0, 3).map((notification) => {
-                  const href = notificationHref(event.aliasId, notification);
+                  const href = notificationHref(event.aliasId, event.currentUserRoles, notification);
                   return (
                     <button
                       key={notification.id}

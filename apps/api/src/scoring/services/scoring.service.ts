@@ -159,6 +159,11 @@ export interface AdminOverviewEntryView {
   // ação global do evento (ver ReleaseFlagsView/getReleaseFlags), não
   // faz mais sentido repetir o mesmo valor em toda linha da lista.
   contestationRequested: boolean;
+  // Diferente de PresentationDetailView/ScoringSheetView (que também
+  // têm esse campo) — aqui é o que dá pra badge da LISTA trocar de
+  // "Contestação" pra "Contestação resolvida" sem precisar abrir o
+  // detalhe (2026-08-01, pedido do usuário).
+  contestationResolved: boolean;
   // Nota final e percentual (ver computePresentationResult) — mostrados
   // direto na lista de Notas (admin/assessor e Programa) pra não
   // precisar abrir o detalhe por critério só pra ver o resultado.
@@ -674,6 +679,7 @@ export class ScoringService {
             resourceName: resource.name,
             dayDate: day.date,
             contestationRequested: !!entry.contestationRequestedAt,
+            contestationResolved: !!entry.contestationResolvedAt,
             finalResult,
             percentage,
             withdrawn: !!entry.withdrawnAt,
@@ -1283,6 +1289,7 @@ export class ScoringService {
             resourceName: resource.name,
             dayDate: day.date,
             contestationRequested: !!entry.contestationRequestedAt,
+            contestationResolved: !!entry.contestationResolvedAt,
             finalResult,
             percentage,
             withdrawn: !!entry.withdrawnAt,

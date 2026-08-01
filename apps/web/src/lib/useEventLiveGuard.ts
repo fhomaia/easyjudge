@@ -17,12 +17,18 @@ import { eventsApi } from "@/api/client";
 // própria página, não aqui no guard — a rota fica acessível, só o
 // conteúdo é que aparece bloqueado). "spectator" (espectador genérico,
 // sem vínculo com equipe) deliberadamente NÃO entra aqui por padrão —
-// só admin/assessor/jurado/equipe/atleta têm acesso à maioria dessas
-// telas. Exceção: EventLiveResultsPage passa `allowSpectator: true`, já
-// que resultado é a única tela "ao vivo" que espectador genérico pode
-// acessar — a página em si decide se mostra o conteúdo ou um aviso de
-// "em breve" via `Event.resultsReleasedAt` (ver
-// ScoringService.getPublicEventResults).
+// só quem passa `allowSpectator: true` libera. Hoje são duas exceções:
+// EventLiveResultsPage (resultado é uma tela "ao vivo" que espectador
+// genérico pode acessar desde sempre, a página decide se mostra o
+// conteúdo ou um aviso de "em breve" via `Event.resultsReleasedAt`,
+// ver ScoringService.getPublicEventResults) e, desde 2026-08-01,
+// EventLiveDashboardPage (Início) também — pedido do usuário pra ficar
+// disponível a todo tipo de usuário. Os endpoints que a Início consome
+// (member-counts, regulation, schedule/days, started/completed-
+// presentations) precisaram ganhar SPECTATOR nos próprios guards
+// também, senão a página deixava de redirecionar mas os cards
+// continuavam vindo vazios/errados (fetch 403 caindo no fallback
+// silencioso do frontend).
 export function useEventLiveGuard(
   eventId: string | undefined,
   options?: { allowSpectator?: boolean },

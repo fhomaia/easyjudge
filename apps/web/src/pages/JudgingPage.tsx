@@ -430,7 +430,15 @@ export function JudgingPage() {
       }
     } else if (openRole && openResourceId) {
       const current = judgeIdsByRoleResource.get(assignmentKey(openRole, openResourceId)) ?? [];
-      const next = checked ? [...current, judgeId] : current.filter((jid) => jid !== judgeId);
+      // Jurado de Legalidade: só um por pista (pedido do usuário,
+      // reforçado no backend em JudgingService.setSpecialRoleJudges) —
+      // marcar um novo jurado substitui o anterior, em vez de acumular.
+      // Head Judge continua podendo ter mais de um.
+      const next = checked
+        ? openRole === "legality_judge"
+          ? [judgeId]
+          : [...current, judgeId]
+        : current.filter((jid) => jid !== judgeId);
       patchRoleAssignments(openRole, openResourceId, next);
       if (id) {
         judgingApi

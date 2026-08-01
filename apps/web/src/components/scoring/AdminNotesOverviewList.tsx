@@ -57,7 +57,12 @@ export function AdminNotesOverviewList({ entries, onSelect }: AdminNotesOverview
               Desistência
             </span>
           )}
-          {entry.contestationRequested && (
+          {entry.contestationRequested && entry.contestationResolved && (
+            <span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              Contestação resolvida
+            </span>
+          )}
+          {entry.contestationRequested && !entry.contestationResolved && (
             <span className="shrink-0 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
               Contestação
             </span>

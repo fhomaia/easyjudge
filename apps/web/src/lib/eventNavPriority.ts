@@ -17,9 +17,9 @@ export function resolveCenterTab(roles: EventMemberRole[]): "resultados" | "nota
 // admin/assessor/judge (e quem acumula programa com qualquer um
 // desses) sempre vão pro hub "/live/notes" (resolve a visão certa
 // internamente, ver EventLiveNotesPage). Só quem é EXCLUSIVAMENTE
-// programa tem tela própria, "/live/team" (EventLiveTeamNotesPage) —
-// mesma regra de precedência já usada pelo redirect da Início pra
-// programa (ver `onlyProgram` em EventLiveDashboardPage).
+// programa tem tela própria, "/live/team" (EventLiveTeamNotesPage).
+// Reusada também por notificationHref (ver lib/notificationDisplay.ts)
+// pra notificações de "notas"/"contestação liberadas".
 export function resolveNotesHref(eventId: string, roles: EventMemberRole[]): string {
   const onlyProgram =
     roles.includes("program") &&

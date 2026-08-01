@@ -10,7 +10,8 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import type { NotificationType, NotificationView } from "@/api/client";
+import type { EventMemberRole, NotificationType, NotificationView } from "@/api/client";
+import { resolveNotesHref } from "@/lib/eventNavPriority";
 
 // Ícone por tipo — cor é sempre a mesma (azul, ver EventLiveShared/
 // NotificationsPage), só o ícone muda pra dar contexto rápido sem
@@ -33,13 +34,21 @@ export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/form
 // Pra onde o clique numa notificação leva — sempre a tela onde a ação
 // relacionada acontece (súmula, notas, resultado). `null` = sem destino
 // (não deveria acontecer com os tipos de hoje, mas alguns tipos futuros
-// podem não ter um destino natural).
-export function notificationHref(eventId: string, notification: NotificationView): string | null {
+// podem não ter um destino natural). `roles` é o mesmo
+// `event.currentUserRoles` já usado pra resolver a aba "Notas" da
+// navegação (ver resolveNotesHref) — usado aqui pelos mesmos dois
+// motivos: "notas liberadas" e "contestação liberada" (2026-08-01,
+// pedido do usuário) são sobre a súmula, não sobre o resultado final.
+export function notificationHref(
+  eventId: string,
+  roles: EventMemberRole[],
+  notification: NotificationView,
+): string | null {
   switch (notification.type) {
     case "scores_released":
-      return `/events/${eventId}/live/notes`;
-    case "results_released":
     case "contestation_released":
+      return resolveNotesHref(eventId, roles);
+    case "results_released":
       return `/events/${eventId}/live/results`;
     case "presentation_started":
     case "presentation_completed":

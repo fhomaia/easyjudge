@@ -86,7 +86,7 @@ export function EventLiveDashboardPage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  useEventLiveGuard(id);
+  useEventLiveGuard(id, { allowSpectator: true });
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
@@ -230,17 +230,6 @@ export function EventLiveDashboardPage() {
     if (!event) return;
     if (event.status === "created") navigate(`/events/${event.aliasId}/setup`, { replace: true });
     else if (event.status === "completed") navigate("/", { replace: true });
-  }, [event, navigate]);
-
-  // Programa (papel "program", sem admin/assessor/jurado) não usa
-  // este dashboard — vai direto pra visão das próprias equipes na tela
-  // de notas (ver EventLiveTeamNotesPage).
-  useEffect(() => {
-    if (!event) return;
-    const onlyProgram =
-      event.currentUserRoles.includes("program") &&
-      !event.currentUserRoles.some((r) => r === "admin" || r === "assessor" || r === "judge");
-    if (onlyProgram) navigate(`/events/${event.aliasId}/live/team`, { replace: true });
   }, [event, navigate]);
 
   // Sem WebSocket ainda (ver "Próximos passos" do projeto) — o horário
@@ -652,7 +641,7 @@ export function EventLiveDashboardPage() {
               <div className="mt-1 divide-y divide-border">
                 {notifications.slice(0, 4).map((notification) => {
                   const Icon = NOTIFICATION_ICONS[notification.type];
-                  const href = notificationHref(event.aliasId, notification);
+                  const href = notificationHref(event.aliasId, event.currentUserRoles, notification);
                   return (
                     <button
                       key={notification.id}

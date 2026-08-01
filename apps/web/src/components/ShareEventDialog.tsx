@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Check, Copy, Download, QrCode } from "lucide-react";
+import { Check, Copy, Download, QrCode, Share2 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import {
   Dialog,
@@ -57,6 +57,26 @@ export function ShareEventDialog({ event, onOpenChange }: ShareEventDialogProps)
     link.click();
   }
 
+  // Web Share API — abre a folha de compartilhamento nativa do
+  // sistema (WhatsApp, email, Instagram, etc., o que estiver
+  // instalado), em vez de reimplementar botão por app. Só existe em
+  // navegadores mobile (majoritariamente) — sem `navigator.share`,
+  // esse botão nem aparece, sobra só copiar/baixar QR de sempre.
+  async function handleShare() {
+    if (!joinUrl || !event) return;
+    try {
+      await navigator.share({
+        title: event.name,
+        text: `🎉 Acompanhe o "${event.name}" ao vivo! Resultado em tempo real, na Cheer Cup! 🏆`,
+        url: joinUrl,
+      });
+    } catch (err) {
+      // AbortError = usuário fechou a folha de compartilhamento sem
+      // escolher nada — não é um erro de verdade, não precisa de feedback.
+      if (err instanceof Error && err.name === "AbortError") return;
+    }
+  }
+
   function handleOpenChange(next: boolean) {
     if (!next) setCopied(false);
     onOpenChange(next);
@@ -81,6 +101,13 @@ export function ShareEventDialog({ event, onOpenChange }: ShareEventDialogProps)
                 {formatCodeForDisplay(event.eventCode)}
               </p>
             </div>
+
+            {typeof navigator.share === "function" && (
+              <Button type="button" onClick={() => void handleShare()} className="w-full">
+                <Share2 data-icon="inline-start" />
+                Compartilhar
+              </Button>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <Button type="button" variant="outline" onClick={handleCopy}>

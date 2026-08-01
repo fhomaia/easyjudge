@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { AlertTriangle, Scale } from "lucide-react";
 import { formatElapsed } from "@/lib/deductionIcons";
 import { DEDUCTION_LABELS } from "@/lib/deductionLabels";
@@ -14,9 +13,11 @@ import type { PresentationDetail } from "@/api/client";
 // notas (ver ScoringService.computeAverageScoreByCriterion) — esta
 // tela mostra só o valor final, sem listar jurado por jurado. Reusada
 // pelo admin/assessor (sem restrição) e pelo Programa (só das próprias
-// equipes, já liberado). `actions` é o slot pras ações que variam por
-// quem está olhando (toggles de liberação pro admin, botão de
-// contestar pro Programa).
+// equipes, já liberado). Ações que variam por quem está olhando (ex:
+// "Solicitar contestação" do Programa) ficam no TOPO da tela de quem
+// chama esta view, ao lado do "Voltar" — não são mais um slot aqui
+// dentro (2026-08-01: o botão de contestar era `w-full` no meio da
+// súmula, pedido do usuário pra virar compacto e subir pro topo).
 //
 // `celebrateHitZero` (2026-08-01): só true nos consumidores
 // Programa/Atleta (EventLiveTeamNotesPage/AthletePresentationDetailPanel)
@@ -25,13 +26,11 @@ import type { PresentationDetail } from "@/api/client";
 // comemoração da PRÓPRIA equipe, não uma métrica de gestão).
 interface PresentationNotesDetailProps {
   detail: PresentationDetail;
-  actions?: ReactNode;
   celebrateHitZero?: boolean;
 }
 
 export function PresentationNotesDetail({
   detail,
-  actions,
   celebrateHitZero = false,
 }: PresentationNotesDetailProps) {
   // Toca sempre que a súmula for aberta (sem "só na primeira vez" —
@@ -81,8 +80,6 @@ export function PresentationNotesDetail({
         maxScore={maxScore}
         variant="desktop"
       />
-
-      {actions}
 
       {detail.groups.map((group) => (
         <div key={group.id} className="rounded-2xl border border-border bg-card p-4">

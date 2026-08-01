@@ -94,6 +94,17 @@ export class AthletesService {
   async remove(programUserId: string, linkId: string): Promise<void> {
     const link = await this.linksRepo.findOneBy({ id: linkId, programUserId });
     if (!link) throw new NotFoundException('Vínculo não encontrado.');
+    await this.revokeEventAccessForLink(link);
+    await this.linksRepo.remove(link);
+  }
+
+  // Atleta se desvinculando do PRÓPRIO lado ("Meus programas") — mesmo
+  // efeito de `remove` (acima, lado do programa), só escopado por
+  // athleteUserId em vez de programUserId.
+  async removeMyLink(athleteUserId: string, linkId: string): Promise<void> {
+    const link = await this.linksRepo.findOneBy({ id: linkId, athleteUserId });
+    if (!link) throw new NotFoundException('Vínculo não encontrado.');
+    await this.revokeEventAccessForLink(link);
     await this.linksRepo.remove(link);
   }
 
@@ -244,6 +255,40 @@ export class AthletesService {
           firstName: link.firstName,
           lastName: link.lastName,
         },
+      );
+    }
+  }
+
+  // Inverso de syncEventAccessForLink — chamado ao desfazer um vínculo
+  // (de qualquer lado, ver remove/removeMyLink). Tira ATHLETE de todo
+  // evento onde esse programa concedeu o papel, mas não deixa a pessoa
+  // sem nenhum acesso: ela cai pra SPECTATOR no lugar (pedido explícito
+  // do usuário) — mesmo raciocínio de "resgate de código" já usado em
+  // EventsService.joinByCode, upsertMemberRole é idempotente então não
+  // duplica nem rebaixa quem já tiver um papel maior por outro motivo
+  // (ex: também é jurado nesse evento).
+  private async revokeEventAccessForLink(link: AthleteLink): Promise<void> {
+    if (!link.programUserId || !link.athleteUserId) return;
+    const aliasIds = await this.eventsService.findAliasIdsForMemberRole(
+      link.programUserId,
+      EventMemberRole.PROGRAM,
+    );
+    const identity = {
+      userId: link.athleteUserId,
+      email: link.email ?? link.programEmail,
+      firstName: link.firstName,
+      lastName: link.lastName,
+    };
+    for (const aliasId of aliasIds) {
+      await this.eventsService.removeMemberRole(
+        aliasId,
+        EventMemberRole.ATHLETE,
+        identity,
+      );
+      await this.eventsService.upsertMemberRole(
+        aliasId,
+        EventMemberRole.SPECTATOR,
+        identity,
       );
     }
   }

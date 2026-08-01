@@ -275,7 +275,7 @@ export function EventLiveNotesPage() {
                     <MapPin className="size-4" />
                     {nextItem.resourceName} · {formatMinutes(nextItem.start)}
                   </p>
-                  {nextItem.entry.contestationRequestedAt && (
+                  {nextItem.entry.contestationRequestedAt && !nextItem.entry.contestationResolvedAt && (
                     <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-red-500/20 px-2.5 py-1.5 text-xs font-semibold text-white">
                       <AlertTriangle className="size-3.5" />
                       Contestação solicitada
@@ -343,7 +343,12 @@ export function EventLiveNotesPage() {
                     {myPresentations.map((item, index) => {
                       const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
                       const isNext = index === nextIndex;
-                      const contested = Boolean(item.entry.contestationRequestedAt);
+                      const contested =
+                        Boolean(item.entry.contestationRequestedAt) &&
+                        !item.entry.contestationResolvedAt;
+                      const contestationResolved =
+                        Boolean(item.entry.contestationRequestedAt) &&
+                        Boolean(item.entry.contestationResolvedAt);
                       const withdrawn = Boolean(item.entry.withdrawnAt);
                       return (
                         <button
@@ -383,6 +388,12 @@ export function EventLiveNotesPage() {
                               <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                                 <CheckCircle2 className="size-3.5" />
                                 Concluída
+                              </span>
+                            )}
+                            {contestationResolved && (
+                              <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                                <CheckCircle2 className="size-3.5" />
+                                Contestação resolvida
                               </span>
                             )}
                             {contested && (

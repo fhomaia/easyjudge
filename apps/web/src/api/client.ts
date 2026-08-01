@@ -595,6 +595,9 @@ export const athleteProgramsApi = {
       method: "POST",
       body: JSON.stringify({ programEmail }),
     }),
+
+  remove: (linkId: string) =>
+    authRequest<void>(`/athletes/me/programs/${linkId}`, { method: "DELETE" }),
 };
 
 export interface Team {
@@ -1403,6 +1406,7 @@ export interface AdminOverviewEntry {
   resourceName: string;
   dayDate: string;
   contestationRequested: boolean;
+  contestationResolved: boolean;
   finalResult: number;
   percentage: number;
   withdrawn: boolean;
