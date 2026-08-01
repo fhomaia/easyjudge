@@ -3,7 +3,9 @@ import { AlertTriangle, Scale } from "lucide-react";
 import { formatElapsed } from "@/lib/deductionIcons";
 import { DEDUCTION_LABELS } from "@/lib/deductionLabels";
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
+import { HitZeroCelebration } from "@/components/scoring/HitZeroCelebration";
 import { sumMaxScores } from "@/lib/scoringSummary";
+import { isPresentationHitZero } from "@/lib/hitZero";
 import type { PresentationDetail } from "@/api/client";
 
 // Visão somente-leitura de UMA apresentação — todos os grupos do
@@ -15,12 +17,28 @@ import type { PresentationDetail } from "@/api/client";
 // equipes, já liberado). `actions` é o slot pras ações que variam por
 // quem está olhando (toggles de liberação pro admin, botão de
 // contestar pro Programa).
+//
+// `celebrateHitZero` (2026-08-01): só true nos consumidores
+// Programa/Atleta (EventLiveTeamNotesPage/AthletePresentationDetailPanel)
+// — o admin/assessor vê toda súmula do evento, inclusive de rotinas
+// alheias, então a celebração não faz sentido pra esse papel (é uma
+// comemoração da PRÓPRIA equipe, não uma métrica de gestão).
 interface PresentationNotesDetailProps {
   detail: PresentationDetail;
   actions?: ReactNode;
+  celebrateHitZero?: boolean;
 }
 
-export function PresentationNotesDetail({ detail, actions }: PresentationNotesDetailProps) {
+export function PresentationNotesDetail({
+  detail,
+  actions,
+  celebrateHitZero = false,
+}: PresentationNotesDetailProps) {
+  // Toca sempre que a súmula for aberta (sem "só na primeira vez" —
+  // decisão do usuário), então o `key` no componente pai precisa mudar
+  // por apresentação pra reiniciar a animação a cada seleção.
+  const isHitZero = celebrateHitZero && isPresentationHitZero(detail);
+
   // Total (soma de TODOS os critérios, de todos os jurados) + soma das
   // deduções (já vêm com `value` negativo do backend — ver
   // ScoringService.buildPresentationDetail) + resultado final — mesmo
@@ -37,6 +55,8 @@ export function PresentationNotesDetail({ detail, actions }: PresentationNotesDe
 
   return (
     <div className="space-y-4">
+      {isHitZero && <HitZeroCelebration key={detail.presentation.id} />}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-lg font-bold text-foreground">{detail.presentation.teamName}</p>

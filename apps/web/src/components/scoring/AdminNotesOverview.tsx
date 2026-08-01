@@ -76,15 +76,16 @@ export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewPro
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="icon-sm"
               onClick={() => void handleDownloadAll()}
               disabled={downloadingAll || scoredCount === 0}
+              aria-label="Baixar todas as súmulas em PDF"
+              title="Baixar todas as súmulas em PDF"
             >
               {downloadingAll ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-              Baixar todas
             </Button>
           </div>
-          <AdminNotesOverviewList eventId={eventId} entries={entries} onSelect={setSelectedId} />
+          <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />
         </>
       )}
     </div>

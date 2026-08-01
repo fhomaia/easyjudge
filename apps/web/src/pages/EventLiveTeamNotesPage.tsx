@@ -139,7 +139,7 @@ export function EventLiveTeamNotesPage() {
                 <ChevronLeft className="size-4" />
                 Voltar
               </button>
-              <PresentationNotesDetail detail={detail} actions={contestButton} />
+              <PresentationNotesDetail detail={detail} actions={contestButton} celebrateHitZero />
             </div>
           ) : (
             <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />
@@ -188,7 +188,7 @@ export function EventLiveTeamNotesPage() {
                   <ChevronLeft className="size-4" />
                   Voltar
                 </button>
-                <PresentationNotesDetail detail={detail} actions={contestButton} />
+                <PresentationNotesDetail detail={detail} actions={contestButton} celebrateHitZero />
               </div>
             ) : (
               <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />

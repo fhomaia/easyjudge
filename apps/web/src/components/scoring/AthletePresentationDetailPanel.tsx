@@ -38,7 +38,7 @@ export function AthletePresentationDetailPanel({
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : (
-        <PresentationNotesDetail detail={detail} />
+        <PresentationNotesDetail detail={detail} celebrateHitZero />
       )}
     </div>
   );
