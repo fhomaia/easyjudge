@@ -85,10 +85,13 @@ const SECTIONS: LegalSection[] = [
     title: "6. Crianças e adolescentes",
     content: (
       <p>
-        Atletas menores de idade podem ter dados tratados na plataforma (ex.: por vínculo com um
-        programa/equipe). Se você é responsável legal por um atleta menor de idade e tem dúvidas
-        sobre como os dados dele são tratados, ou deseja exercer os direitos previstos no art. 14
-        da LGPD em nome dele, entre em contato pelo canal abaixo.
+        A Cheer Cup aceita cadastro de contas próprias a partir de 13 anos — ao se cadastrar, o
+        usuário declara ter essa idade (ver Termos de Uso, "Cadastro e conta"). Além disso, atletas
+        menores de idade podem ter dados tratados na plataforma sem conta própria, por vínculo com
+        um programa/equipe. Se você é responsável legal por um adolescente com conta na Cheer Cup,
+        ou por um atleta menor de idade vinculado a um programa/equipe, e tem dúvidas sobre como os
+        dados dele são tratados, ou deseja exercer os direitos previstos no art. 14 da LGPD em nome
+        dele, entre em contato pelo canal abaixo.
       </p>
     ),
   },
@@ -156,7 +159,7 @@ export function PrivacyPolicyPage() {
   return (
     <LegalPageLayout
       title="Política de Privacidade"
-      updatedAt="31 de julho de 2026"
+      updatedAt="1 de agosto de 2026"
       sections={SECTIONS}
     />
   );

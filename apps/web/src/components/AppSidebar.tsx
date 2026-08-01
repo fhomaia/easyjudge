@@ -4,7 +4,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getAccountLabel } from "@/lib/roleLabels";
 import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
-import { BrandMark, MobileNavSheet, NAV_ITEMS, type EventNavItem } from "@/components/MobileNavSheet";
+import {
+  BrandMark,
+  MobileNavSheet,
+  NAV_ITEMS,
+  type EventNavItem,
+} from "@/components/MobileNavSheet";
 import { ImpersonateDialog } from "@/components/ImpersonateDialog";
 import { HelpDialog } from "@/components/HelpDialog";
 import { useAuthStore } from "@/store/auth";
@@ -44,32 +49,34 @@ function NavLinks({
           <p className="px-3 pt-1 pb-1.5 text-xs font-semibold tracking-wide text-white/40">
             NESTE EVENTO
           </p>
-          {eventNavItems.map(({ key, label, icon: Icon, current, badge, onClick }) => (
-            <button
-              key={key}
-              type="button"
-              disabled={!onClick}
-              onClick={onClick}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
-                current
-                  ? "bg-white/10 text-white"
-                  : onClick
-                    ? "text-white/60 hover:bg-white/5 hover:text-white"
-                    : "text-white/40",
-              )}
-            >
-              <span className="relative flex">
-                <Icon className="size-4" />
-                {badge ? (
-                  <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
-                    {badge}
-                  </span>
-                ) : null}
-              </span>
-              {label}
-            </button>
-          ))}
+          {eventNavItems.map(
+            ({ key, label, icon: Icon, current, badge, onClick }) => (
+              <button
+                key={key}
+                type="button"
+                disabled={!onClick}
+                onClick={onClick}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                  current
+                    ? "bg-white/10 text-white"
+                    : onClick
+                      ? "text-white/60 hover:bg-white/5 hover:text-white"
+                      : "text-white/40",
+                )}
+              >
+                <span className="relative flex">
+                  <Icon className="size-4" />
+                  {badge ? (
+                    <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
+                      {badge}
+                    </span>
+                  ) : null}
+                </span>
+                {label}
+              </button>
+            ),
+          )}
           <div className="my-2 border-t border-white/10" />
         </>
       )}
@@ -103,6 +110,7 @@ function ProfileFooter({
   profile: UserProfile | null;
   onLogout: () => void;
 }) {
+  const navigate = useNavigate();
   const [impersonateOpen, setImpersonateOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const canImpersonate = profile?.email.toLowerCase() === IMPERSONATOR_EMAIL;
@@ -129,7 +137,8 @@ function ProfileFooter({
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-amber-300">
             <Eye className="size-3.5 shrink-0" />
             <span className="truncate">
-              Vendo como <span className="font-semibold">{impersonatingLabel}</span>
+              Vendo como{" "}
+              <span className="font-semibold">{impersonatingLabel}</span>
             </span>
           </div>
           <button
@@ -141,62 +150,83 @@ function ProfileFooter({
           </button>
         </div>
       )}
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow text-sm font-semibold text-brand-navy">
-          {profile ? getUserInitials(profile) : "…"}
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white">
-            {profile
-              ? `${profile.firstName} ${profile.lastName}`.trim()
-              : "Carregando..."}
-          </p>
-          <p className="truncate text-xs text-white/50">
-            {profile ? getAccountLabel(profile) : ""}
-          </p>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={() => setHelpOpen(true)}
-          aria-label="Preciso de ajuda"
-          title="Preciso de ajuda"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          onClick={() => navigate("/profile")}
+          className="flex min-w-0 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-white/5"
         >
-          <CircleHelp className="size-4" />
+          <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-yellow text-sm font-semibold text-brand-navy">
+            {profile?.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt=""
+                className="size-full object-cover"
+              />
+            ) : profile ? (
+              getUserInitials(profile)
+            ) : (
+              "…"
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">
+              {profile
+                ? `${profile.firstName} ${profile.lastName}`.trim()
+                : "Carregando..."}
+            </p>
+            <p className="truncate text-xs text-white/50">
+              {profile ? getAccountLabel(profile) : ""}
+            </p>
+          </div>
         </button>
-        <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
-        {canImpersonate && (
-          <>
-            <button
-              type="button"
-              onClick={() => setImpersonateOpen(true)}
-              aria-label="Entrar como outro usuário"
-              title="Entrar como outro usuário"
-              className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <UserCog className="size-4" />
-            </button>
-            <ImpersonateDialog open={impersonateOpen} onOpenChange={setImpersonateOpen} />
-          </>
-        )}
-        <button
-          type="button"
-          onClick={onLogout}
-          aria-label="Sair"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <LogOut className="size-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            aria-label="Preciso de ajuda"
+            title="Preciso de ajuda"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <CircleHelp className="size-4" />
+          </button>
+          <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+          {canImpersonate && (
+            <>
+              <button
+                type="button"
+                onClick={() => setImpersonateOpen(true)}
+                aria-label="Entrar como outro usuário"
+                title="Entrar como outro usuário"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <UserCog className="size-4" />
+              </button>
+              <ImpersonateDialog
+                open={impersonateOpen}
+                onOpenChange={setImpersonateOpen}
+              />
+            </>
+          )}
+          <button
+            type="button"
+            onClick={onLogout}
+            aria-label="Sair"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogOut className="size-4" />
+          </button>
+        </div>
       </div>
-    </div>
     </div>
   );
 }
 
-export function AppSidebar({ profile, onLogout, eventNavItems }: AppSidebarProps) {
+export function AppSidebar({
+  profile,
+  onLogout,
+  eventNavItems,
+}: AppSidebarProps) {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -234,7 +264,11 @@ export function AppSidebar({ profile, onLogout, eventNavItems }: AppSidebarProps
           <BrandMark />
         </div>
 
-        <NavLinks profile={profile} onNavigate={navigate} eventNavItems={eventNavItems} />
+        <NavLinks
+          profile={profile}
+          onNavigate={navigate}
+          eventNavItems={eventNavItems}
+        />
         <ProfileFooter profile={profile} onLogout={onLogout} />
       </aside>
     </>

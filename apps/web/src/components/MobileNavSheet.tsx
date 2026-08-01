@@ -207,9 +207,23 @@ export function MobileNavSheet({
           </nav>
 
           <div className="flex items-center justify-between gap-2 border-t border-white/10 p-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow text-sm font-semibold text-brand-navy">
-                {profile ? getUserInitials(profile) : "…"}
+            <button
+              type="button"
+              onClick={() => goTo("/profile")}
+              className="flex min-w-0 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-white/5"
+            >
+              <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-yellow text-sm font-semibold text-brand-navy">
+                {profile?.avatarUrl ? (
+                  <img
+                    src={profile.avatarUrl}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : profile ? (
+                  getUserInitials(profile)
+                ) : (
+                  "…"
+                )}
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-white">
@@ -221,7 +235,7 @@ export function MobileNavSheet({
                   {profile ? getAccountLabel(profile) : ""}
                 </p>
               </div>
-            </div>
+            </button>
             <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"

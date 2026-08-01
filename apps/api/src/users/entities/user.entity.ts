@@ -45,19 +45,25 @@ export class User {
   @Column({ name: 'birth_date', type: 'date', nullable: true })
   birthDate: string | null;
 
+  // Foto de perfil (tela "Meu perfil", 2026-08-01) — mesmo padrão de
+  // logoUrl em Event/Program: upload via StorageService (R2 em
+  // produção, disco local em dev), guarda só a URL final.
+  @Column({ name: 'avatar_url', type: 'varchar', nullable: true })
+  avatarUrl: string | null;
+
   @Index({ unique: true })
   @Column()
   email: string;
 
-  @Column({ name: 'team_or_institution_name', nullable: true })
-  teamOrInstitutionName?: string;
+  @Column({ name: 'team_or_institution_name', type: 'varchar', nullable: true })
+  teamOrInstitutionName?: string | null;
 
   // Email do programa informado no cadastro por uma conta ATHLETE — só
   // usado nesse momento pra criar o primeiro AthleteLink (ver
   // AuthService.setPassword/AthletesService.createOrRequestLink), não é
   // atualizado depois disso.
-  @Column({ name: 'program_email', nullable: true })
-  programEmail?: string;
+  @Column({ name: 'program_email', type: 'varchar', nullable: true })
+  programEmail?: string | null;
 
   // Nulo até o usuário concluir a etapa "definir senha".
   // Enquanto for nulo, o cadastro é considerado incompleto.
@@ -78,6 +84,30 @@ export class User {
   // backfill: não temos como saber retroativamente se aceitaram).
   @Column({ name: 'terms_accepted_at', type: 'timestamptz', nullable: true })
   termsAcceptedAt: Date | null;
+
+  // Qual versão do texto foi aceita (ver CURRENT_TERMS_VERSION em
+  // UsersService) — sem isso, termsAcceptedAt sozinho não prova o QUÊ
+  // foi aceito se o texto mudar depois. Nulo pelo mesmo motivo de
+  // termsAcceptedAt (contas anteriores a essa coluna, 2026-08-01).
+  @Column({ name: 'terms_version', type: 'varchar', nullable: true })
+  termsVersion: string | null;
+
+  // Desativar (2026-08-01): reversível — voltar a fazer login com
+  // email+senha corretos já reativa a conta sozinho (ver
+  // AuthService.login). Excluir: `active` também vira false, mas
+  // junto com `passwordHash: null` e os dados pessoais anonimizados
+  // (ver UsersService.deleteAccount) — login nunca mais funciona,
+  // mesmo que alguém soubesse a senha antiga. A linha nunca é
+  // apagada de verdade (várias FKs NOT NULL apontam pra cá — ver
+  // CLAUDE.md), só esvaziada.
+  @Column({ default: true })
+  active: boolean;
+
+  @Column({ name: 'deactivated_at', type: 'timestamptz', nullable: true })
+  deactivatedAt: Date | null;
+
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

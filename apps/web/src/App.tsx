@@ -20,6 +20,7 @@ import { ScoringTemplatesListPage } from "@/pages/ScoringTemplatesListPage";
 import { ScoringTemplateBuilderPage } from "@/pages/ScoringTemplateBuilderPage";
 import { AthletesManagementPage } from "@/pages/AthletesManagementPage";
 import { AthleteProgramsPage } from "@/pages/AthleteProgramsPage";
+import { ProfilePage } from "@/pages/ProfilePage";
 import { JoinEventPage } from "@/pages/JoinEventPage";
 import { TermsOfUsePage } from "@/pages/TermsOfUsePage";
 import { PrivacyPolicyPage } from "@/pages/PrivacyPolicyPage";
@@ -61,6 +62,7 @@ function App() {
         <Route path="/scoring-templates/:id" element={<ScoringTemplateBuilderPage />} />
         <Route path="/athletes" element={<AthletesManagementPage />} />
         <Route path="/athletes/programs" element={<AthleteProgramsPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

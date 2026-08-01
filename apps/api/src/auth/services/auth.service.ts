@@ -60,18 +60,20 @@ export class AuthService {
         'Data de nascimento não pode ser no futuro.',
       );
     }
-    // Restrição temporária (2026-07-31): a plataforma não aceita menores
-    // de idade por enquanto — evita lidar com consentimento de
-    // responsável legal (LGPD art. 14) nesta fase. O calendário do
+    // Idade mínima de 13 anos (2026-08-01, ver CLAUDE.md — revisado de
+    // 18 pra 13 a pedido do usuário). Sem fluxo de consentimento de
+    // responsável legal (LGPD art. 14) — a mitigação é a cláusula de
+    // autodeclaração de idade nos Termos de Uso (`TermsOfUsePage`,
+    // "Cadastro e conta"), não uma verificação de fato. O calendário do
     // frontend já bloqueia datas mais recentes que esta (DatePicker
     // maxDate na etapa "birthDate"), reforçado aqui pra quem chamar a
     // API direto.
     if (dto.birthDate) {
-      const eighteenYearsAgo = new Date();
-      eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
-      if (new Date(dto.birthDate) > eighteenYearsAgo) {
+      const minAgeDate = new Date();
+      minAgeDate.setFullYear(minAgeDate.getFullYear() - 13);
+      if (new Date(dto.birthDate) > minAgeDate) {
         throw new BadRequestException(
-          'É necessário ter 18 anos ou mais para se cadastrar.',
+          'É necessário ter 13 anos ou mais para se cadastrar.',
         );
       }
     }
@@ -262,6 +264,13 @@ export class AuthService {
     );
     if (!passwordMatches) {
       throw new UnauthorizedException('Email ou senha inválidos.');
+    }
+
+    // Conta desativada (não excluída — essa já teria caído no !user.
+    // passwordHash acima, já que a exclusão zera a senha): login com a
+    // senha certa já reativa sozinho, sem precisar de suporte.
+    if (!user.active) {
+      await this.usersService.reactivate(user.id);
     }
 
     return this.buildAccessToken(user.id, user.role);

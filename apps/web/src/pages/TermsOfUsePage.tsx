@@ -25,12 +25,19 @@ const SECTIONS: LegalSection[] = [
     id: "cadastro-e-conta",
     title: "2. Cadastro e conta",
     content: (
-      <p>
-        Você é responsável por manter a exatidão dos dados informados no cadastro e pela
-        confidencialidade da sua senha. Cada pessoa deve manter uma única conta, vinculada ao
-        papel que efetivamente exerce (jurado, produtor, programa/ginásio, atleta ou
-        espectador).
-      </p>
+      <>
+        <p>
+          Você é responsável por manter a exatidão dos dados informados no cadastro e pela
+          confidencialidade da sua senha. Cada pessoa deve manter uma única conta, vinculada ao
+          papel que efetivamente exerce (jurado, produtor, programa/ginásio, atleta ou
+          espectador).
+        </p>
+        <p>
+          Ao criar uma conta, o usuário declara que possui 13 anos ou mais e que as informações
+          fornecidas são verdadeiras. Caso seja constatado que a idade informada é falsa, a Cheer
+          Cup poderá suspender ou excluir a conta.
+        </p>
+      </>
     ),
   },
   {
@@ -112,6 +119,6 @@ const SECTIONS: LegalSection[] = [
 
 export function TermsOfUsePage() {
   return (
-    <LegalPageLayout title="Termos de Uso" updatedAt="31 de julho de 2026" sections={SECTIONS} />
+    <LegalPageLayout title="Termos de Uso" updatedAt="1 de agosto de 2026" sections={SECTIONS} />
   );
 }

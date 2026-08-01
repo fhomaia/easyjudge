@@ -1,10 +1,37 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, IsNull, Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { AthleteLink } from '../../athletes/entities/athlete-link.entity';
 import { RegisterDto } from '../../auth/dto/register.dto';
+import { UpdateProfileDto } from '../dto/update-profile.dto';
+import { ChangePasswordDto } from '../dto/change-password.dto';
+import { PasswordConfirmationDto } from '../dto/password-confirmation.dto';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { DocumentType } from '../../common/enums/document-type.enum';
+import { StorageService } from '../../common/services/storage.service';
+
+// Mesmo valor de AuthService.BCRYPT_SALT_ROUNDS — duplicado aqui de
+// propósito (não dá pra importar de lá: AuthModule já importa
+// UsersModule, o caminho inverso criaria ciclo).
+const BCRYPT_SALT_ROUNDS = 12;
+
+// Identifica QUAL versão dos Termos de Uso/Política de Privacidade foi
+// aceita no cadastro (um único checkbox cobre os dois documentos, ver
+// RegisterDialog) — sem isso, `termsAcceptedAt` sozinho prova só QUANDO
+// alguém aceitou, não O QUÊ. Precisa ser bumpada junto com `updatedAt`
+// de TermsOfUsePage/PrivacyPolicyPage (apps/web) sempre que o TEXTO
+// mudar de verdade (não a cada typo/formatação) — mesmo formato
+// AAAA-MM-DD por ser sortable, independente do texto de exibição
+// "1 de agosto de 2026" usado nessas páginas.
+const CURRENT_TERMS_VERSION = '2026-08-01';
 
 @Injectable()
 export class UsersService {
@@ -17,6 +44,9 @@ export class UsersService {
     // ScoringTemplatesModule pra evitar isso.
     @InjectRepository(AthleteLink)
     private readonly athleteLinksRepository: Repository<AthleteLink>,
+    // StorageService é global (CommonModule, ver common.module.ts) —
+    // injeta direto sem precisar importar o módulo.
+    private readonly storageService: StorageService,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -47,6 +77,16 @@ export class UsersService {
 
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });
+  }
+
+  // Mesmo padrão de findByEmailWithPassword — usado por
+  // deactivateAccount/deleteAccount pra conferir a senha atual.
+  async findByIdWithPassword(id: string): Promise<User | null> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.id = :id', { id })
+      .getOne();
   }
 
   // Usado pra popular a lista de "vincular a um programa já
@@ -120,6 +160,7 @@ export class UsersService {
       // dto.acceptedTerms já é obrigatoriamente `true` aqui (@Equals(true)
       // no DTO barra qualquer outro valor antes de chegar neste método).
       termsAcceptedAt: new Date(),
+      termsVersion: CURRENT_TERMS_VERSION,
     });
 
     return this.usersRepository.save(user);
@@ -145,5 +186,174 @@ export class UsersService {
       where: { athleteUserId: userId, confirmedAt: Not(IsNull()) },
     });
     return count > 0;
+  }
+
+  private async findByIdOrThrow(userId: string): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    return user;
+  }
+
+  // Nome sempre editável; documento/data de nascimento só podem ser
+  // PREENCHIDOS uma vez (quem já tem valor salvo não pode trocar por
+  // aqui — evita reabrir a mesma discussão de segurança de "editar
+  // email" que decidimos deixar de fora do escopo desta tela, ver
+  // CLAUDE.md "Página de perfil").
+  async updateProfile(userId: string, dto: UpdateProfileDto): Promise<User> {
+    const user = await this.findByIdOrThrow(userId);
+
+    if (dto.firstName !== undefined) user.firstName = dto.firstName;
+    if (dto.lastName !== undefined) user.lastName = dto.lastName;
+
+    if (dto.documentNumber !== undefined) {
+      if (user.documentNumber) {
+        throw new ConflictException(
+          'Documento já cadastrado — não pode ser alterado.',
+        );
+      }
+      const existingDocument = await this.usersRepository.findOne({
+        where: { documentNumber: dto.documentNumber },
+      });
+      if (existingDocument) {
+        throw new ConflictException('Este documento já está cadastrado.');
+      }
+      user.documentType = dto.documentType ?? DocumentType.CPF;
+      user.documentNumber = dto.documentNumber;
+    }
+
+    if (dto.birthDate !== undefined) {
+      if (user.birthDate) {
+        throw new ConflictException(
+          'Data de nascimento já cadastrada — não pode ser alterada.',
+        );
+      }
+      // Mesmas duas checagens de AuthService.register (data futura +
+      // idade mínima) — duplicadas aqui pelo mesmo motivo do
+      // BCRYPT_SALT_ROUNDS acima (sem import cruzado com AuthModule).
+      if (new Date(dto.birthDate) > new Date()) {
+        throw new BadRequestException(
+          'Data de nascimento não pode ser no futuro.',
+        );
+      }
+      const minAgeDate = new Date();
+      minAgeDate.setFullYear(minAgeDate.getFullYear() - 13);
+      if (new Date(dto.birthDate) > minAgeDate) {
+        throw new BadRequestException(
+          'É necessário ter 13 anos ou mais.',
+        );
+      }
+      user.birthDate = dto.birthDate;
+    }
+
+    return this.usersRepository.save(user);
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+    // passwordHash tem select:false — addSelect explícito, mesmo padrão
+    // de findByEmailWithPassword.
+    const user = await this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.id = :id', { id: userId })
+      .getOne();
+    if (!user || !user.passwordHash) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+
+    const currentMatches = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!currentMatches) {
+      throw new UnauthorizedException('Senha atual incorreta.');
+    }
+
+    const passwordHash = await bcrypt.hash(
+      dto.newPassword,
+      BCRYPT_SALT_ROUNDS,
+    );
+    await this.usersRepository.update(userId, { passwordHash });
+  }
+
+  private async assertPasswordMatches(
+    userId: string,
+    password: string,
+  ): Promise<User> {
+    const user = await this.findByIdWithPassword(userId);
+    if (!user || !user.passwordHash) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+    const matches = await bcrypt.compare(password, user.passwordHash);
+    if (!matches) {
+      throw new UnauthorizedException('Senha incorreta.');
+    }
+    return user;
+  }
+
+  // Reversível — voltar a fazer login com email+senha corretos já
+  // reativa a conta sozinho (ver AuthService.login), sem precisar de
+  // suporte.
+  async deactivateAccount(
+    userId: string,
+    dto: PasswordConfirmationDto,
+  ): Promise<void> {
+    const user = await this.assertPasswordMatches(userId, dto.password);
+    user.active = false;
+    user.deactivatedAt = new Date();
+    await this.usersRepository.save(user);
+  }
+
+  // Chamado só por AuthService.login, quando o login de uma conta
+  // desativada (não excluída) tem sucesso — não é exposto por endpoint
+  // próprio porque a reativação É o login.
+  async reactivate(userId: string): Promise<void> {
+    await this.usersRepository.update(userId, {
+      active: true,
+      deactivatedAt: null,
+    });
+  }
+
+  // Irreversível. Não apaga a linha (Event.createdById,
+  // EventActivityLog.actorId, JudgeParticipation/ProgramParticipation/
+  // ScoringTemplate.createdById são NOT NULL com ON DELETE NO ACTION —
+  // ver CLAUDE.md) — só anonimiza os dados pessoais e zera a senha,
+  // então login nunca mais funciona. `EventMember`/rosters guardam seu
+  // próprio snapshot de nome, então histórico de eventos passados não
+  // é afetado.
+  async deleteAccount(
+    userId: string,
+    dto: PasswordConfirmationDto,
+  ): Promise<void> {
+    const user = await this.assertPasswordMatches(userId, dto.password);
+    user.firstName = 'Usuário';
+    user.lastName = 'excluído';
+    // TLD .invalid é reservado pela RFC 2606 pra exatamente esse uso —
+    // nunca resolve de verdade, e libera o email real pra um cadastro
+    // novo (a coluna é unique).
+    user.email = `deleted-${userId}@cheercup.invalid`;
+    user.documentType = null;
+    user.documentNumber = null;
+    user.birthDate = null;
+    // Não apaga o arquivo em si do storage — só a referência (mesmo
+    // comportamento que removeAvatar já tem hoje; não existe método de
+    // exclusão no StorageService).
+    user.avatarUrl = null;
+    user.teamOrInstitutionName = null;
+    user.programEmail = null;
+    user.passwordHash = null;
+    user.active = false;
+    user.deletedAt = new Date();
+    user.deactivatedAt = null;
+    await this.usersRepository.save(user);
+  }
+
+  async setAvatar(userId: string, file: Express.Multer.File): Promise<User> {
+    const user = await this.findByIdOrThrow(userId);
+    user.avatarUrl = await this.storageService.upload(file, 'avatars');
+    return this.usersRepository.save(user);
+  }
+
+  async removeAvatar(userId: string): Promise<void> {
+    await this.usersRepository.update(userId, { avatarUrl: null });
   }
 }

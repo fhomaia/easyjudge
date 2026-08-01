@@ -5,11 +5,7 @@ import { cpf, cnpj } from "cpf-cnpj-validator";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,7 +22,12 @@ import {
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import { formatCpf, formatCnpj } from "@/lib/masks";
-import { ROLE_LABELS, SIGNUP_ROLE_LABELS, type SignupRole } from "@/lib/roleLabels";
+import { getMaxBirthDate } from "@/lib/birthDate";
+import {
+  ROLE_LABELS,
+  SIGNUP_ROLE_LABELS,
+  type SignupRole,
+} from "@/lib/roleLabels";
 
 // "Espectador" some do enum de verdade: no fundo é role=athlete sem
 // vínculo (ver roleLabels.ts) — só pula as etapas "team"/"programEmail"
@@ -94,23 +95,16 @@ function isOptionalCpfOnlyRole(role: SignupRole): boolean {
   return role === "athlete" || role === "spectator";
 }
 
-// Restrição temporária (2026-07-31): a plataforma não aceita menores de
-// idade por enquanto — evita lidar com consentimento de responsável
-// legal (LGPD art. 14) nesta fase. Usado como limite do calendário
-// (não dá pra nem selecionar uma data mais recente), reforçado também
-// no backend (AuthService.register).
-function getMaxBirthDate(): Date {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 18);
-  return d;
-}
-
 const LOCKED_STEPS: StepKey[] = ["verify", "password"];
 
 // Mesma regra do backend (common/validators/strong-password.validator.ts)
 // — validada em tempo real aqui pra o usuário ver o erro assim que
 // termina de digitar, sem precisar tentar enviar primeiro.
-const PASSWORD_RULES: { key: string; label: string; test: (v: string) => boolean }[] = [
+const PASSWORD_RULES: {
+  key: string;
+  label: string;
+  test: (v: string) => boolean;
+}[] = [
   { key: "length", label: "Mínimo 8 caracteres", test: (v) => v.length >= 8 },
   { key: "upper", label: "Uma letra maiúscula", test: (v) => /[A-Z]/.test(v) },
   { key: "number", label: "Um número", test: (v) => /\d/.test(v) },
@@ -239,7 +233,8 @@ export function RegisterDialog({
     setDirection(1);
     setStepIndex((i) => {
       let next = Math.min(i + 1, STEPS.length - 1);
-      while (next < STEPS.length - 1 && !isStepApplicable(STEPS[next], form)) next++;
+      while (next < STEPS.length - 1 && !isStepApplicable(STEPS[next], form))
+        next++;
       return next;
     });
   }
@@ -297,14 +292,17 @@ export function RegisterDialog({
         birthDate: form.birthDate || undefined,
         email: form.email,
         teamOrInstitutionName: form.teamOrInstitutionName || undefined,
-        programEmail: form.role === "athlete" ? form.programEmail || undefined : undefined,
+        programEmail:
+          form.role === "athlete" ? form.programEmail || undefined : undefined,
         acceptedTerms: form.acceptedTerms,
       });
       setUserId(userId);
       goNext();
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : "Não foi possível criar a conta.",
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível criar a conta.",
       );
     } finally {
       setLoading(false);
@@ -385,29 +383,29 @@ export function RegisterDialog({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="gap-7 p-10 short:gap-3 short:p-5 sm:max-w-lg">
-        <DialogTitle className="sr-only">Criar conta</DialogTitle>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="gap-7 p-10 short:gap-3 short:p-5 sm:max-w-lg">
+          <DialogTitle className="sr-only">Criar conta</DialogTitle>
 
-        <div className="flex items-center gap-3">
-          {canGoBack ? (
-            <button
-              type="button"
-              onClick={goBack}
-              className="text-muted-foreground hover:text-foreground"
-              aria-label="Voltar"
-            >
-              <ArrowLeft className="size-4" />
-            </button>
-          ) : (
-            <span className="size-4" />
-          )}
-          <Progress value={progress} className="flex-1" />
-        </div>
+          <div className="flex items-center gap-3">
+            {canGoBack ? (
+              <button
+                type="button"
+                onClick={goBack}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Voltar"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+            ) : (
+              <span className="size-4" />
+            )}
+            <Progress value={progress} className="flex-1" />
+          </div>
 
-        <FormError message={error} />
+          <FormError message={error} />
 
-        {/* Alguns passos (ex. "role", com 5 opções desde que "Espectador"
+          {/* Alguns passos (ex. "role", com 5 opções desde que "Espectador"
             foi acrescentado) ficam mais altos que um min-h fixo
             calibrado à mão — como os passos são posicionados via
             `absolute` (evita "pulo" de layout na troca de passo, ver
@@ -449,412 +447,479 @@ export function RegisterDialog({
             intrínseca do passo, que é o que de fato transborda e chega
             no scrollHeight do Popup. Ver o spacer no fim do "role"
             abaixo (o único passo alto o bastante pra precisar). */}
-        <div className="relative min-h-[400px] overflow-visible short:min-h-[200px]">
-          <AnimatePresence mode="wait" custom={direction} initial={false}>
-            <motion.div
-              key={step}
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="absolute inset-0"
-            >
-              {step === "role" && (
-                <div className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">Qual será seu tipo de conta?</h3>
-                  <RadioGroup
-                    value={form.role}
-                    onValueChange={(v) => {
-                      const role = v as SignupRole;
-                      update("role", role);
-                      // Se o usuário já tinha escolhido CNPJ (ex.: veio de
-                      // "Programa") e volta pra trocar pra atleta/espectador,
-                      // força de volta pra CPF — os únicos aceitos aqui.
-                      if (isOptionalCpfOnlyRole(role)) {
-                        update("documentType", "cpf");
-                      }
-                      goNext();
-                    }}
-                    className="grid gap-3"
-                  >
-                    {SIGNUP_ROLE_ORDER.map((r) => (
-                      <OptionCard
-                        key={r}
-                        value={r}
-                        label={SIGNUP_ROLE_LABELS[r]}
-                        onSelect={r === form.role ? goNext : undefined}
-                      />
-                    ))}
-                  </RadioGroup>
-                  {/* Sempre presente (não só em paisagem) — ver comentário
+          <div className="relative min-h-[400px] overflow-visible short:min-h-[200px]">
+            <AnimatePresence mode="wait" custom={direction} initial={false}>
+              <motion.div
+                key={step}
+                custom={direction}
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="absolute inset-0"
+              >
+                {step === "role" && (
+                  <div className="grid gap-5 short:gap-3">
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Qual será seu tipo de conta?
+                    </h3>
+                    <RadioGroup
+                      value={form.role}
+                      onValueChange={(v) => {
+                        const role = v as SignupRole;
+                        update("role", role);
+                        // Se o usuário já tinha escolhido CNPJ (ex.: veio de
+                        // "Programa") e volta pra trocar pra atleta/espectador,
+                        // força de volta pra CPF — os únicos aceitos aqui.
+                        if (isOptionalCpfOnlyRole(role)) {
+                          update("documentType", "cpf");
+                        }
+                        goNext();
+                      }}
+                      className="grid gap-3"
+                    >
+                      {SIGNUP_ROLE_ORDER.map((r) => (
+                        <OptionCard
+                          key={r}
+                          value={r}
+                          label={SIGNUP_ROLE_LABELS[r]}
+                          onSelect={r === form.role ? goNext : undefined}
+                        />
+                      ))}
+                    </RadioGroup>
+                    {/* Sempre presente (não só em paisagem) — ver comentário
                       do wrapper acima. Precisa estar AQUI (filho real do
                       próprio passo, depois do RadioGroup), não como
                       irmão do wrapper lá fora. */}
-                  <div aria-hidden className="h-4" />
-                </div>
-              )}
+                    <div aria-hidden className="h-4" />
+                  </div>
+                )}
 
-              {step === "firstName" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">
-                    {form.role === "program"
-                      ? "Qual o nome do seu programa/ginásio?"
-                      : "Qual é o seu nome?"}
-                  </h3>
-                  <Input
-                    autoFocus
-                    aria-label={form.role === "program" ? "Nome do programa/ginásio" : "Nome"}
-                    value={form.firstName}
-                    onChange={(e) => update("firstName", e.target.value)}
-                    required
-                  />
-                  <Button type="submit" className="w-full">
-                    Continuar
-                  </Button>
-                </form>
-              )}
-
-              {step === "lastName" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">E o seu sobrenome?</h3>
-                  <Input
-                    autoFocus
-                    aria-label="Sobrenome"
-                    value={form.lastName}
-                    onChange={(e) => update("lastName", e.target.value)}
-                    required
-                  />
-                  <Button type="submit" className="w-full">
-                    Continuar
-                  </Button>
-                </form>
-              )}
-
-              {step === "document" && (
-                <form onSubmit={submitDocument} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">
-                    {isOptionalCpfOnlyRole(form.role) ? (
-                      <>
-                        Qual é o seu CPF?{" "}
-                        <span className="text-sm font-normal text-muted-foreground">
-                          (opcional)
-                        </span>
-                      </>
-                    ) : (
-                      "Qual é o seu documento?"
-                    )}
-                  </h3>
-                  {!isOptionalCpfOnlyRole(form.role) && (
-                    <RadioGroup
-                      value={form.documentType}
-                      onValueChange={(v) => {
-                        const type = v as DocumentType;
-                        update("documentType", type);
-                        update(
-                          "documentNumber",
-                          type === "cpf"
-                            ? formatCpf(form.documentNumber)
-                            : formatCnpj(form.documentNumber),
-                        );
-                      }}
-                      className="grid grid-cols-2 gap-3"
-                    >
-                      <OptionCard value="cpf" label="CPF" />
-                      <OptionCard value="cnpj" label="CNPJ" />
-                    </RadioGroup>
-                  )}
-                  <Input
-                    autoFocus
-                    aria-label={form.documentType === "cpf" ? "CPF" : "CNPJ"}
-                    placeholder={
-                      form.documentType === "cpf"
-                        ? "000.000.000-00"
-                        : "00.000.000/0000-00"
-                    }
-                    value={form.documentNumber}
-                    onChange={(e) =>
-                      update(
-                        "documentNumber",
-                        form.documentType === "cpf"
-                          ? formatCpf(e.target.value)
-                          : formatCnpj(e.target.value),
-                      )
-                    }
-                    required={!isOptionalCpfOnlyRole(form.role)}
-                  />
-                  <Button type="submit" className="w-full">
-                    {isOptionalCpfOnlyRole(form.role) && form.documentNumber === ""
-                      ? "Pular"
-                      : "Continuar"}
-                  </Button>
-                </form>
-              )}
-
-              {step === "birthDate" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">
-                    Qual é a sua data de nascimento?
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    A Cheer Cup ainda não aceita cadastro de menores de 18 anos.
-                  </p>
-                  <DatePicker
-                    id="birthDate"
-                    value={form.birthDate}
-                    onChange={(v) => update("birthDate", v)}
-                    placeholder="Selecione a data de nascimento"
-                    captionLayout="dropdown"
-                    startMonth={new Date(new Date().getFullYear() - 100, 0, 1)}
-                    endMonth={getMaxBirthDate()}
-                    maxDate={getMaxBirthDate()}
-                  />
-                  <Button type="submit" className="w-full" disabled={!form.birthDate}>
-                    Continuar
-                  </Button>
-                </form>
-              )}
-
-              {step === "email" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">Qual é o seu email?</h3>
-                  <Input
-                    autoFocus
-                    aria-label="Email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value.trim())}
-                    required
-                  />
-                  <Button type="submit" className="w-full">
-                    Continuar
-                  </Button>
-                </form>
-              )}
-
-              {step === "team" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">
-                    Qual sua equipe ou instituição?{" "}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      (opcional)
-                    </span>
-                  </h3>
-                  <Input
-                    autoFocus
-                    aria-label="Equipe ou instituição"
-                    value={form.teamOrInstitutionName}
-                    onChange={(e) => update("teamOrInstitutionName", e.target.value)}
-                  />
-                  <Button type="submit" className="w-full">
-                    {form.teamOrInstitutionName ? "Continuar" : "Pular"}
-                  </Button>
-                </form>
-              )}
-
-              {step === "programEmail" && (
-                <form onSubmit={submitSimpleStep} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">
-                    Qual o email do seu programa?{" "}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      (opcional)
-                    </span>
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Pedimos o vínculo com ele — precisa ser confirmado depois. Dá pra pular e
-                    vincular mais tarde, em &quot;Meus programas&quot;.
-                  </p>
-                  <Input
-                    autoFocus
-                    type="email"
-                    aria-label="Email do programa"
-                    value={form.programEmail}
-                    onChange={(e) => update("programEmail", e.target.value.trim())}
-                  />
-                  <Button type="submit" className="w-full">
-                    {form.programEmail ? "Continuar" : "Pular"}
-                  </Button>
-                </form>
-              )}
-
-              {step === "summary" && (
-                <div className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">Confere se está tudo certo:</h3>
-                  <dl className="grid gap-2 rounded-lg border p-3 text-sm">
-                    <SummaryRow label="Papel" value={SIGNUP_ROLE_LABELS[form.role]} />
-                    <SummaryRow
-                      label="Nome"
-                      value={`${form.firstName} ${form.lastName}`.trim()}
-                    />
-                    <SummaryRow
-                      label={form.documentType === "cpf" ? "CPF" : "CNPJ"}
-                      value={form.documentNumber || "Não informado"}
-                    />
-                    {form.birthDate && (
-                      <SummaryRow
-                        label="Data de nascimento"
-                        value={format(parseISO(form.birthDate), "dd/MM/yyyy", { locale: ptBR })}
-                      />
-                    )}
-                    <SummaryRow label="Email" value={form.email} />
-                    {form.role !== "spectator" && form.role !== "athlete" && (
-                      <SummaryRow
-                        label="Equipe/instituição"
-                        value={form.teamOrInstitutionName || "Não informado"}
-                      />
-                    )}
-                    {form.role === "athlete" && (
-                      <SummaryRow
-                        label="Email do programa"
-                        value={form.programEmail || "Não informado"}
-                      />
-                    )}
-                  </dl>
-                  <label className="flex items-start gap-2 text-sm text-foreground">
-                    <Checkbox
-                      checked={form.acceptedTerms}
-                      onCheckedChange={(value) => update("acceptedTerms", value === true)}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      Li e concordo com os{" "}
-                      <a
-                        href="/terms"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-brand-blue underline underline-offset-2 hover:text-brand-yellow"
-                      >
-                        Termos de Uso
-                      </a>{" "}
-                      e a{" "}
-                      <a
-                        href="/privacy"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-brand-blue underline underline-offset-2 hover:text-brand-yellow"
-                      >
-                        Política de Privacidade
-                      </a>
-                      .
-                    </span>
-                  </label>
-                  <Button
-                    type="button"
-                    disabled={loading || !form.acceptedTerms}
-                    className="w-full"
-                    onClick={submitSummary}
+                {step === "firstName" && (
+                  <form
+                    onSubmit={submitSimpleStep}
+                    className="grid gap-5 short:gap-3"
                   >
-                    {loading ? "Enviando..." : "Confirmar e criar conta"}
-                  </Button>
-                </div>
-              )}
-
-              {step === "verify" && (
-                <form onSubmit={submitVerify} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">
-                    Enviamos um código pro seu email. Qual é?
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Verifique <strong>{form.email}</strong>.
-                  </p>
-                  <Input
-                    autoFocus
-                    aria-label="Código de verificação"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={form.code}
-                    onChange={(e) => update("code", e.target.value)}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={handleResendCode}
-                    className="justify-self-start text-sm text-brand-blue underline underline-offset-3 hover:text-brand-yellow"
-                  >
-                    Reenviar código
-                  </button>
-                  <Button type="submit" disabled={loading} className="w-full">
-                    {loading ? "Verificando..." : "Confirmar"}
-                  </Button>
-                </form>
-              )}
-
-              {step === "password" && (
-                <form onSubmit={submitPassword} className="grid gap-5 short:gap-3">
-                  <h3 className="text-xl font-medium short:text-lg">Agora, crie uma senha:</h3>
-
-                  <div className="grid gap-2.5">
+                    <h3 className="text-xl font-medium short:text-lg">
+                      {form.role === "program"
+                        ? "Qual o nome do seu programa/ginásio?"
+                        : "Qual é o seu nome?"}
+                    </h3>
                     <Input
                       autoFocus
-                      aria-label="Senha"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
+                      aria-label={
+                        form.role === "program"
+                          ? "Nome do programa/ginásio"
+                          : "Nome"
+                      }
+                      value={form.firstName}
+                      onChange={(e) => update("firstName", e.target.value)}
                       required
                     />
-                    <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                      {PASSWORD_RULES.map((rule) => {
-                        const met = rule.test(form.password);
-                        return (
-                          <li
-                            key={rule.key}
-                            className={cn(
-                              "flex items-center gap-1.5 text-sm",
-                              met ? "text-emerald-600" : "text-muted-foreground",
-                            )}
-                          >
-                            {met ? (
-                              <Check className="size-3.5 shrink-0" />
-                            ) : (
-                              <X className="size-3.5 shrink-0" />
-                            )}
-                            {rule.label}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+                    <Button type="submit" className="w-full">
+                      Continuar
+                    </Button>
+                  </form>
+                )}
 
-                  <div className="grid gap-2.5">
-                    <Input
-                      aria-label="Confirmar senha"
-                      type="password"
-                      value={form.confirmPassword}
-                      onChange={(e) => update("confirmPassword", e.target.value)}
-                      placeholder="Confirmar senha"
-                      required
-                    />
-                    {form.confirmPassword.length > 0 &&
-                      form.confirmPassword !== form.password && (
-                        <p className="text-sm text-destructive">
-                          As senhas não coincidem.
-                        </p>
-                      )}
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={
-                      loading ||
-                      !isPasswordStrong(form.password) ||
-                      form.password !== form.confirmPassword
-                    }
-                    className="w-full"
+                {step === "lastName" && (
+                  <form
+                    onSubmit={submitSimpleStep}
+                    className="grid gap-5 short:gap-3"
                   >
-                    {loading ? "Finalizando..." : "Finalizar cadastro"}
-                  </Button>
-                </form>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </DialogContent>
-    </Dialog>
+                    <h3 className="text-xl font-medium short:text-lg">
+                      E o seu sobrenome?
+                    </h3>
+                    <Input
+                      autoFocus
+                      aria-label="Sobrenome"
+                      value={form.lastName}
+                      onChange={(e) => update("lastName", e.target.value)}
+                      required
+                    />
+                    <Button type="submit" className="w-full">
+                      Continuar
+                    </Button>
+                  </form>
+                )}
 
-    {/* Só toca DEPOIS que o password foi definido (pendingToken) — o
+                {step === "document" && (
+                  <form
+                    onSubmit={submitDocument}
+                    className="grid gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      {isOptionalCpfOnlyRole(form.role) ? (
+                        <>
+                          Qual é o seu CPF?{" "}
+                          <span className="text-sm font-normal text-muted-foreground">
+                            (opcional)
+                          </span>
+                        </>
+                      ) : (
+                        "Qual é o seu documento?"
+                      )}
+                    </h3>
+                    {!isOptionalCpfOnlyRole(form.role) && (
+                      <RadioGroup
+                        value={form.documentType}
+                        onValueChange={(v) => {
+                          const type = v as DocumentType;
+                          update("documentType", type);
+                          update(
+                            "documentNumber",
+                            type === "cpf"
+                              ? formatCpf(form.documentNumber)
+                              : formatCnpj(form.documentNumber),
+                          );
+                        }}
+                        className="grid grid-cols-2 gap-3"
+                      >
+                        <OptionCard value="cpf" label="CPF" />
+                        <OptionCard value="cnpj" label="CNPJ" />
+                      </RadioGroup>
+                    )}
+                    <Input
+                      autoFocus
+                      aria-label={form.documentType === "cpf" ? "CPF" : "CNPJ"}
+                      placeholder={
+                        form.documentType === "cpf"
+                          ? "000.000.000-00"
+                          : "00.000.000/0000-00"
+                      }
+                      value={form.documentNumber}
+                      onChange={(e) =>
+                        update(
+                          "documentNumber",
+                          form.documentType === "cpf"
+                            ? formatCpf(e.target.value)
+                            : formatCnpj(e.target.value),
+                        )
+                      }
+                      required={!isOptionalCpfOnlyRole(form.role)}
+                    />
+                    <Button type="submit" className="w-full">
+                      {isOptionalCpfOnlyRole(form.role) &&
+                      form.documentNumber === ""
+                        ? "Pular"
+                        : "Continuar"}
+                    </Button>
+                  </form>
+                )}
+
+                {step === "birthDate" && (
+                  <form
+                    onSubmit={submitSimpleStep}
+                    className="grid gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Qual é a sua data de nascimento?
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      A Cheer Cup ainda não aceita cadastro de menores de 13
+                      anos.
+                    </p>
+                    <DatePicker
+                      id="birthDate"
+                      value={form.birthDate}
+                      onChange={(v) => update("birthDate", v)}
+                      placeholder="Selecione a data de nascimento"
+                      captionLayout="dropdown"
+                      startMonth={
+                        new Date(new Date().getFullYear() - 100, 0, 1)
+                      }
+                      endMonth={getMaxBirthDate()}
+                      maxDate={getMaxBirthDate()}
+                    />
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={!form.birthDate}
+                    >
+                      Continuar
+                    </Button>
+                  </form>
+                )}
+
+                {step === "email" && (
+                  <form
+                    onSubmit={submitSimpleStep}
+                    className="grid gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Qual é o seu email?
+                    </h3>
+                    <Input
+                      autoFocus
+                      aria-label="Email"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => update("email", e.target.value.trim())}
+                      required
+                    />
+                    <Button type="submit" className="w-full">
+                      Continuar
+                    </Button>
+                  </form>
+                )}
+
+                {step === "team" && (
+                  <form
+                    onSubmit={submitSimpleStep}
+                    className="grid gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Qual sua equipe ou instituição?{" "}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        (opcional)
+                      </span>
+                    </h3>
+                    <Input
+                      autoFocus
+                      aria-label="Equipe ou instituição"
+                      value={form.teamOrInstitutionName}
+                      onChange={(e) =>
+                        update("teamOrInstitutionName", e.target.value)
+                      }
+                    />
+                    <Button type="submit" className="w-full">
+                      {form.teamOrInstitutionName ? "Continuar" : "Pular"}
+                    </Button>
+                  </form>
+                )}
+
+                {step === "programEmail" && (
+                  <form
+                    onSubmit={submitSimpleStep}
+                    className="grid gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Qual o email do seu programa?{" "}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        (opcional)
+                      </span>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Pedimos o vínculo com ele — precisa ser confirmado depois.
+                      Dá pra pular e vincular mais tarde, em &quot;Meus
+                      programas&quot;.
+                    </p>
+                    <Input
+                      autoFocus
+                      type="email"
+                      aria-label="Email do programa"
+                      value={form.programEmail}
+                      onChange={(e) =>
+                        update("programEmail", e.target.value.trim())
+                      }
+                    />
+                    <Button type="submit" className="w-full">
+                      {form.programEmail ? "Continuar" : "Pular"}
+                    </Button>
+                  </form>
+                )}
+
+                {step === "summary" && (
+                  <div className="grid gap-5 short:gap-3">
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Confere se está tudo certo:
+                    </h3>
+                    <dl className="grid gap-2 rounded-lg border p-3 text-sm">
+                      <SummaryRow
+                        label="Papel"
+                        value={SIGNUP_ROLE_LABELS[form.role]}
+                      />
+                      <SummaryRow
+                        label="Nome"
+                        value={`${form.firstName} ${form.lastName}`.trim()}
+                      />
+                      <SummaryRow
+                        label={form.documentType === "cpf" ? "CPF" : "CNPJ"}
+                        value={form.documentNumber || "Não informado"}
+                      />
+                      {form.birthDate && (
+                        <SummaryRow
+                          label="Data de nascimento"
+                          value={format(
+                            parseISO(form.birthDate),
+                            "dd/MM/yyyy",
+                            { locale: ptBR },
+                          )}
+                        />
+                      )}
+                      <SummaryRow label="Email" value={form.email} />
+                      {form.role !== "spectator" && form.role !== "athlete" && (
+                        <SummaryRow
+                          label="Equipe/instituição"
+                          value={form.teamOrInstitutionName || "Não informado"}
+                        />
+                      )}
+                      {form.role === "athlete" && (
+                        <SummaryRow
+                          label="Email do programa"
+                          value={form.programEmail || "Não informado"}
+                        />
+                      )}
+                    </dl>
+                    <label className="flex items-start gap-2 text-sm text-foreground">
+                      <Checkbox
+                        checked={form.acceptedTerms}
+                        onCheckedChange={(value) =>
+                          update("acceptedTerms", value === true)
+                        }
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Li e concordo com os{" "}
+                        <a
+                          href="/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-brand-blue underline underline-offset-2 hover:text-brand-yellow"
+                        >
+                          Termos de Uso
+                        </a>{" "}
+                        e a{" "}
+                        <a
+                          href="/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-brand-blue underline underline-offset-2 hover:text-brand-yellow"
+                        >
+                          Política de Privacidade
+                        </a>
+                        .
+                      </span>
+                    </label>
+                    <Button
+                      type="button"
+                      disabled={loading || !form.acceptedTerms}
+                      className="w-full"
+                      onClick={submitSummary}
+                    >
+                      {loading ? "Enviando..." : "Confirmar e criar conta"}
+                    </Button>
+                  </div>
+                )}
+
+                {step === "verify" && (
+                  <form
+                    onSubmit={submitVerify}
+                    className="grid gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Enviamos um código pro seu email. Qual é?
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Verifique <strong>{form.email}</strong>.
+                    </p>
+                    <Input
+                      autoFocus
+                      aria-label="Código de verificação"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={form.code}
+                      onChange={(e) => update("code", e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={handleResendCode}
+                      className="justify-self-start text-sm text-brand-blue underline underline-offset-3 hover:text-brand-yellow"
+                    >
+                      Reenviar código
+                    </button>
+                    <Button type="submit" disabled={loading} className="w-full">
+                      {loading ? "Verificando..." : "Confirmar"}
+                    </Button>
+                  </form>
+                )}
+
+                {step === "password" && (
+                  <form
+                    onSubmit={submitPassword}
+                    className="grid gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Agora, crie uma senha:
+                    </h3>
+
+                    <div className="grid gap-2.5">
+                      <Input
+                        autoFocus
+                        aria-label="Senha"
+                        type="password"
+                        value={form.password}
+                        onChange={(e) => update("password", e.target.value)}
+                        required
+                      />
+                      <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        {PASSWORD_RULES.map((rule) => {
+                          const met = rule.test(form.password);
+                          return (
+                            <li
+                              key={rule.key}
+                              className={cn(
+                                "flex items-center gap-1.5 text-sm",
+                                met
+                                  ? "text-emerald-600"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              {met ? (
+                                <Check className="size-3.5 shrink-0" />
+                              ) : (
+                                <X className="size-3.5 shrink-0" />
+                              )}
+                              {rule.label}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+
+                    <div className="grid gap-2.5">
+                      <Input
+                        aria-label="Confirmar senha"
+                        type="password"
+                        value={form.confirmPassword}
+                        onChange={(e) =>
+                          update("confirmPassword", e.target.value)
+                        }
+                        placeholder="Confirmar senha"
+                        required
+                      />
+                      {form.confirmPassword.length > 0 &&
+                        form.confirmPassword !== form.password && (
+                          <p className="text-sm text-destructive">
+                            As senhas não coincidem.
+                          </p>
+                        )}
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={
+                        loading ||
+                        !isPasswordStrong(form.password) ||
+                        form.password !== form.confirmPassword
+                      }
+                      className="w-full"
+                    >
+                      {loading ? "Finalizando..." : "Finalizar cadastro"}
+                    </Button>
+                  </form>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Só toca DEPOIS que o password foi definido (pendingToken) — o
         popup continua aberto por trás enquanto o raio cobre a tela
         inteira; login()/fechar o popup só acontecem no onDone (ver
         completeRegistration acima). Mesmo raciocínio de
@@ -863,13 +928,13 @@ export function RegisterDialog({
         competindo pelo mesmo thread principal. z-[60] (não z-50, igual
         ao Dialog) garante que fica por cima do popup mesmo se a ordem
         de portal do Base UI colocar os dois no mesmo nível. */}
-    {pendingToken && (
-      <BrandBackdrop
-        variant="plain"
-        className="z-[60]"
-        onDone={() => void completeRegistration()}
-      />
-    )}
+      {pendingToken && (
+        <BrandBackdrop
+          variant="plain"
+          className="z-[60]"
+          onDone={() => void completeRegistration()}
+        />
+      )}
     </>
   );
 }

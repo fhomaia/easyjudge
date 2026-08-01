@@ -159,21 +159,68 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
   email: string;
+  avatarUrl: string | null;
+  documentType: DocumentType | null;
+  documentNumber: string | null;
+  birthDate: string | null;
   hasConfirmedAthleteLink: boolean;
+}
+
+// Nome sempre editável; documentNumber/birthDate só valem enquanto o
+// usuário ainda não tinha um valor salvo (ver UsersService.updateProfile
+// no backend — tentar mudar um valor já preenchido dá 409).
+export interface UpdateProfilePayload {
+  firstName?: string;
+  lastName?: string;
+  documentType?: DocumentType;
+  documentNumber?: string;
+  birthDate?: string;
 }
 
 export const usersApi = {
   me: () => authRequest<UserProfile>("/users/me"),
+
+  updateProfile: (payload: UpdateProfilePayload) =>
+    authRequest<UserProfile>("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string,
+  ) =>
+    authRequest<void>("/users/me/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+    }),
+
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return authUpload<UserProfile>("/users/me/avatar", formData);
+  },
+
+  removeAvatar: () =>
+    authRequest<UserProfile>("/users/me/avatar", { method: "DELETE" }),
+
+  deactivateAccount: (password: string) =>
+    authRequest<void>("/users/me/deactivate", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+
+  deleteAccount: (password: string) =>
+    authRequest<void>("/users/me/delete", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
 };
 
 export type EventStatus = "created" | "published" | "started" | "completed";
 export type EventMemberRole =
-  | "admin"
-  | "assessor"
-  | "judge"
-  | "spectator"
-  | "program"
-  | "athlete";
+  "admin" | "assessor" | "judge" | "spectator" | "program" | "athlete";
 
 export interface Event {
   id: string;
@@ -308,7 +355,9 @@ export const eventsApi = {
   // "Jurados cadastrados"/"Programas cadastrados"/"Espectadores"/
   // "Atletas" do painel Início.
   getMemberCounts: (id: string) =>
-    authRequest<Partial<Record<EventMemberRole, number>>>(`/events/${id}/member-counts`),
+    authRequest<Partial<Record<EventMemberRole, number>>>(
+      `/events/${id}/member-counts`,
+    ),
 };
 
 // Roster de acessos do evento ("Gerenciar acessos") — quem faz parte
@@ -367,7 +416,8 @@ export const eventStaffApi = {
 export type CategoryStatus = "active" | "inactive";
 export type CategoryModality = "all_star" | "university" | "school";
 export type CategoryDivision = "coed" | "all_girl" | "all_boy";
-export type CategoryFormat = "team_cheer" | "group_stunt" | "coed" | "partner" | "custom";
+export type CategoryFormat =
+  "team_cheer" | "group_stunt" | "coed" | "partner" | "custom";
 
 export interface Category {
   id: string;
@@ -404,7 +454,8 @@ export type UpdateCategoryPayload = Partial<CategoryPayload> & {
 };
 
 export const categoriesApi = {
-  list: (eventId: string) => authRequest<Category[]>(`/events/${eventId}/categories`),
+  list: (eventId: string) =>
+    authRequest<Category[]>(`/events/${eventId}/categories`),
 
   create: (eventId: string, payload: CategoryPayload) =>
     authRequest<Category>(`/events/${eventId}/categories`, {
@@ -419,7 +470,9 @@ export const categoriesApi = {
     }),
 
   remove: (eventId: string, id: string) =>
-    authRequest<void>(`/events/${eventId}/categories/${id}`, { method: "DELETE" }),
+    authRequest<void>(`/events/${eventId}/categories/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 export interface Program {
@@ -463,7 +516,8 @@ export interface ProgramCatalogEntry {
 }
 
 export const programsApi = {
-  list: (eventId: string) => authRequest<Program[]>(`/events/${eventId}/programs`),
+  list: (eventId: string) =>
+    authRequest<Program[]>(`/events/${eventId}/programs`),
 
   getCatalog: () => authRequest<ProgramCatalogEntry[]>("/programs/catalog"),
 
@@ -483,12 +537,17 @@ export const programsApi = {
     }),
 
   remove: (eventId: string, id: string) =>
-    authRequest<void>(`/events/${eventId}/programs/${id}`, { method: "DELETE" }),
+    authRequest<void>(`/events/${eventId}/programs/${id}`, {
+      method: "DELETE",
+    }),
 
   uploadLogo: (eventId: string, id: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    return authUpload<Program>(`/events/${eventId}/programs/${id}/logo`, formData);
+    return authUpload<Program>(
+      `/events/${eventId}/programs/${id}/logo`,
+      formData,
+    );
   },
 };
 
@@ -519,7 +578,8 @@ export const athletesApi = {
       body: JSON.stringify(payload),
     }),
 
-  remove: (id: string) => authRequest<void>(`/athletes/${id}`, { method: "DELETE" }),
+  remove: (id: string) =>
+    authRequest<void>(`/athletes/${id}`, { method: "DELETE" }),
 
   confirm: (id: string) =>
     authRequest<AthleteLinkView>(`/athletes/${id}/confirm`, { method: "POST" }),
@@ -569,18 +629,34 @@ export const teamsApi = {
       body: JSON.stringify(payload),
     }),
 
-  update: (eventId: string, programId: string, teamId: string, payload: TeamPayload) =>
-    authRequest<Team>(`/events/${eventId}/programs/${programId}/teams/${teamId}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+  update: (
+    eventId: string,
+    programId: string,
+    teamId: string,
+    payload: TeamPayload,
+  ) =>
+    authRequest<Team>(
+      `/events/${eventId}/programs/${programId}/teams/${teamId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    ),
 
   remove: (eventId: string, programId: string, teamId: string) =>
-    authRequest<void>(`/events/${eventId}/programs/${programId}/teams/${teamId}`, {
-      method: "DELETE",
-    }),
+    authRequest<void>(
+      `/events/${eventId}/programs/${programId}/teams/${teamId}`,
+      {
+        method: "DELETE",
+      },
+    ),
 
-  addCategory: (eventId: string, programId: string, teamId: string, categoryId: string) =>
+  addCategory: (
+    eventId: string,
+    programId: string,
+    teamId: string,
+    categoryId: string,
+  ) =>
     authRequest<Team>(
       `/events/${eventId}/programs/${programId}/teams/${teamId}/categories`,
       { method: "POST", body: JSON.stringify({ categoryId }) },
@@ -631,7 +707,8 @@ export const judgesApi = {
 
   getCatalog: () => authRequest<JudgeCatalogEntry[]>("/judges/catalog"),
 
-  get: (eventId: string, id: string) => authRequest<Judge>(`/events/${eventId}/judges/${id}`),
+  get: (eventId: string, id: string) =>
+    authRequest<Judge>(`/events/${eventId}/judges/${id}`),
 
   create: (eventId: string, payload: JudgePayload) =>
     authRequest<Judge>(`/events/${eventId}/judges`, {
@@ -743,12 +820,15 @@ export const scoringTemplatesApi = {
       body: JSON.stringify(payload),
     }),
 
-  remove: (id: string) => authRequest<void>(`/scoring-templates/${id}`, { method: "DELETE" }),
+  remove: (id: string) =>
+    authRequest<void>(`/scoring-templates/${id}`, { method: "DELETE" }),
 };
 
 export const scoringCriteriaApi = {
   list: (templateId: string) =>
-    authRequest<ScoringCriterion[]>(`/scoring-templates/${templateId}/criteria`),
+    authRequest<ScoringCriterion[]>(
+      `/scoring-templates/${templateId}/criteria`,
+    ),
 
   create: (templateId: string, payload: CreateScoringCriterionPayload) =>
     authRequest<ScoringCriterion>(`/scoring-templates/${templateId}/criteria`, {
@@ -756,22 +836,36 @@ export const scoringCriteriaApi = {
       body: JSON.stringify(payload),
     }),
 
-  update: (templateId: string, id: string, payload: UpdateScoringCriterionPayload) =>
-    authRequest<ScoringCriterion>(`/scoring-templates/${templateId}/criteria/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+  update: (
+    templateId: string,
+    id: string,
+    payload: UpdateScoringCriterionPayload,
+  ) =>
+    authRequest<ScoringCriterion>(
+      `/scoring-templates/${templateId}/criteria/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    ),
 
   remove: (templateId: string, id: string) =>
     authRequest<void>(`/scoring-templates/${templateId}/criteria/${id}`, {
       method: "DELETE",
     }),
 
-  move: (templateId: string, id: string, payload: MoveScoringCriterionPayload) =>
-    authRequest<ScoringCriterion[]>(`/scoring-templates/${templateId}/criteria/${id}/move`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  move: (
+    templateId: string,
+    id: string,
+    payload: MoveScoringCriterionPayload,
+  ) =>
+    authRequest<ScoringCriterion[]>(
+      `/scoring-templates/${templateId}/criteria/${id}/move`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
 };
 
 export type SpecialJudgeRole = "legality_judge" | "head_judge";
@@ -786,7 +880,11 @@ export interface JudgingDay {
 
 export interface CriterionAssignmentsState {
   days: JudgingDay[];
-  criterionAssignments: Array<{ criterionId: string; resourceId: string; judgeIds: string[] }>;
+  criterionAssignments: Array<{
+    criterionId: string;
+    resourceId: string;
+    judgeIds: string[];
+  }>;
 }
 
 // Visão do jurado logado sobre a própria escala (ver JudgingService.
@@ -840,7 +938,10 @@ export const judgingApi = {
   ) =>
     authRequest<void>(
       `/events/${eventId}/judging/templates/${templateId}/criteria/${criterionId}/resources/${resourceId}/bulk-assign`,
-      { method: "POST", body: JSON.stringify({ judgeParticipationId, strategy }) },
+      {
+        method: "POST",
+        body: JSON.stringify({ judgeParticipationId, strategy }),
+      },
     ),
 
   setSpecialRoleJudges: (
@@ -849,18 +950,18 @@ export const judgingApi = {
     resourceId: string,
     judgeIds: string[],
   ) =>
-    authRequest<void>(`/events/${eventId}/judging/resources/${resourceId}/special-roles/${role}`, {
-      method: "PUT",
-      body: JSON.stringify({ judgeIds }),
-    }),
+    authRequest<void>(
+      `/events/${eventId}/judging/resources/${resourceId}/special-roles/${role}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ judgeIds }),
+      },
+    ),
 };
 
 export type RegulationDeductionMode = "iasf" | "custom";
 export type RegulationDocumentKind =
-  | "official_regulation"
-  | "safety_rules"
-  | "code_of_conduct"
-  | "additional";
+  "official_regulation" | "safety_rules" | "code_of_conduct" | "additional";
 export type DeductionType =
   | "athlete_fall"
   | "major_athlete_fall"
@@ -902,7 +1003,8 @@ export interface UpdateRegulationPayload {
 }
 
 export const regulationApi = {
-  get: (eventId: string) => authRequest<Regulation>(`/events/${eventId}/regulation`),
+  get: (eventId: string) =>
+    authRequest<Regulation>(`/events/${eventId}/regulation`),
 
   updateDeductions: (eventId: string, payload: UpdateRegulationPayload) =>
     authRequest<Regulation>(`/events/${eventId}/regulation`, {
@@ -920,7 +1022,10 @@ export const regulationApi = {
     formData.append("file", file);
     formData.append("kind", kind);
     if (name) formData.append("name", name);
-    return authUpload<Regulation>(`/events/${eventId}/regulation/documents`, formData);
+    return authUpload<Regulation>(
+      `/events/${eventId}/regulation/documents`,
+      formData,
+    );
   },
 
   deleteDocument: (eventId: string, documentId: string) =>
@@ -929,7 +1034,8 @@ export const regulationApi = {
     }),
 };
 
-export type ScheduleEntryType = "presentation" | "warmup" | "break" | "ceremony" | "award";
+export type ScheduleEntryType =
+  "presentation" | "warmup" | "break" | "ceremony" | "award";
 export type ScheduleDistributionStrategy = "balanced" | "sequential";
 
 export interface ScheduleEntry {
@@ -1038,12 +1144,19 @@ export interface AutoGenerateSchedulePayload {
 }
 
 export const scheduleApi = {
-  listDays: (eventId: string) => authRequest<ScheduleDay[]>(`/events/${eventId}/schedule/days`),
+  listDays: (eventId: string) =>
+    authRequest<ScheduleDay[]>(`/events/${eventId}/schedule/days`),
 
   addDay: (eventId: string) =>
-    authRequest<ScheduleDay>(`/events/${eventId}/schedule/days`, { method: "POST" }),
+    authRequest<ScheduleDay>(`/events/${eventId}/schedule/days`, {
+      method: "POST",
+    }),
 
-  updateDay: (eventId: string, dayId: string, payload: UpdateScheduleDayPayload) =>
+  updateDay: (
+    eventId: string,
+    dayId: string,
+    payload: UpdateScheduleDayPayload,
+  ) =>
     authRequest<ScheduleDay>(`/events/${eventId}/schedule/days/${dayId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -1055,13 +1168,22 @@ export const scheduleApi = {
     }),
 
   getUnscheduled: (eventId: string, dayId: string) =>
-    authRequest<UnscheduledPair[]>(`/events/${eventId}/schedule/days/${dayId}/unscheduled`),
+    authRequest<UnscheduledPair[]>(
+      `/events/${eventId}/schedule/days/${dayId}/unscheduled`,
+    ),
 
-  createResource: (eventId: string, dayId: string, payload: CreateScheduleResourcePayload) =>
-    authRequest<ScheduleResource>(`/events/${eventId}/schedule/days/${dayId}/resources`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  createResource: (
+    eventId: string,
+    dayId: string,
+    payload: CreateScheduleResourcePayload,
+  ) =>
+    authRequest<ScheduleResource>(
+      `/events/${eventId}/schedule/days/${dayId}/resources`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
 
   updateResource: (
     eventId: string,
@@ -1075,9 +1197,12 @@ export const scheduleApi = {
     ),
 
   removeResource: (eventId: string, dayId: string, resourceId: string) =>
-    authRequest<void>(`/events/${eventId}/schedule/days/${dayId}/resources/${resourceId}`, {
-      method: "DELETE",
-    }),
+    authRequest<void>(
+      `/events/${eventId}/schedule/days/${dayId}/resources/${resourceId}`,
+      {
+        method: "DELETE",
+      },
+    ),
 
   moveResource: (
     eventId: string,
@@ -1090,11 +1215,18 @@ export const scheduleApi = {
       { method: "PATCH", body: JSON.stringify(payload) },
     ),
 
-  createEntry: (eventId: string, dayId: string, payload: CreateScheduleEntryPayload) =>
-    authRequest<ScheduleEntry[]>(`/events/${eventId}/schedule/days/${dayId}/entries`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  createEntry: (
+    eventId: string,
+    dayId: string,
+    payload: CreateScheduleEntryPayload,
+  ) =>
+    authRequest<ScheduleEntry[]>(
+      `/events/${eventId}/schedule/days/${dayId}/entries`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
 
   moveEntry: (
     eventId: string,
@@ -1108,20 +1240,33 @@ export const scheduleApi = {
     ),
 
   removeEntry: (eventId: string, dayId: string, entryId: string) =>
-    authRequest<void>(`/events/${eventId}/schedule/days/${dayId}/entries/${entryId}`, {
-      method: "DELETE",
-    }),
+    authRequest<void>(
+      `/events/${eventId}/schedule/days/${dayId}/entries/${entryId}`,
+      {
+        method: "DELETE",
+      },
+    ),
 
-  autoGenerate: (eventId: string, dayId: string, payload: AutoGenerateSchedulePayload) =>
-    authRequest<ScheduleDay>(`/events/${eventId}/schedule/days/${dayId}/auto-generate`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  autoGenerate: (
+    eventId: string,
+    dayId: string,
+    payload: AutoGenerateSchedulePayload,
+  ) =>
+    authRequest<ScheduleDay>(
+      `/events/${eventId}/schedule/days/${dayId}/auto-generate`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
 
   replicateToAllDays: (eventId: string, sourceDayId: string) =>
-    authRequest<ScheduleDay[]>(`/events/${eventId}/schedule/days/${sourceDayId}/replicate`, {
-      method: "POST",
-    }),
+    authRequest<ScheduleDay[]>(
+      `/events/${eventId}/schedule/days/${sourceDayId}/replicate`,
+      {
+        method: "POST",
+      },
+    ),
 };
 
 // Tela de lançar notas — ver ScoringService no backend. `ScoreEvent` é
@@ -1379,10 +1524,14 @@ export interface EventResultsResponse {
 
 export const adminScoringApi = {
   getOverview: (eventId: string) =>
-    authRequest<AdminOverviewEntry[]>(`/events/${eventId}/scoring/admin/overview`),
+    authRequest<AdminOverviewEntry[]>(
+      `/events/${eventId}/scoring/admin/overview`,
+    ),
 
   getDetail: (eventId: string, scheduleEntryId: string) =>
-    authRequest<PresentationDetail>(`/events/${eventId}/scoring/admin/${scheduleEntryId}`),
+    authRequest<PresentationDetail>(
+      `/events/${eventId}/scoring/admin/${scheduleEntryId}`,
+    ),
 
   getRelease: (eventId: string) =>
     authRequest<ReleaseFlags>(`/events/${eventId}/scoring/admin/release`),
@@ -1401,15 +1550,22 @@ export const resultsApi = {
 
 export const teamScoringApi = {
   getOverview: (eventId: string) =>
-    authRequest<AdminOverviewEntry[]>(`/events/${eventId}/scoring/team/overview`),
+    authRequest<AdminOverviewEntry[]>(
+      `/events/${eventId}/scoring/team/overview`,
+    ),
 
   getDetail: (eventId: string, scheduleEntryId: string) =>
-    authRequest<PresentationDetail>(`/events/${eventId}/scoring/team/${scheduleEntryId}`),
+    authRequest<PresentationDetail>(
+      `/events/${eventId}/scoring/team/${scheduleEntryId}`,
+    ),
 
   contest: (eventId: string, scheduleEntryId: string) =>
-    authRequest<void>(`/events/${eventId}/scoring/team/${scheduleEntryId}/contest`, {
-      method: "POST",
-    }),
+    authRequest<void>(
+      `/events/${eventId}/scoring/team/${scheduleEntryId}/contest`,
+      {
+        method: "POST",
+      },
+    ),
 
   // Ids das próprias equipes neste evento — usado pelo cronograma
   // (EventLiveSchedulePage) pra decidir em quais linhas mostrar
@@ -1430,12 +1586,16 @@ export const athleteScoringApi = {
     ),
 
   getDetail: (eventId: string, scheduleEntryId: string) =>
-    authRequest<PresentationDetail>(`/events/${eventId}/scoring/athlete/${scheduleEntryId}`),
+    authRequest<PresentationDetail>(
+      `/events/${eventId}/scoring/athlete/${scheduleEntryId}`,
+    ),
 };
 
 export const scoringApi = {
   getSheet: (eventId: string, scheduleEntryId: string) =>
-    authRequest<ScoringSheet>(`/events/${eventId}/scoring/sheet/${scheduleEntryId}`),
+    authRequest<ScoringSheet>(
+      `/events/${eventId}/scoring/sheet/${scheduleEntryId}`,
+    ),
 
   // Ids das apresentações que o jurado logado já marcou como enviadas
   // (clicou "Lançar notas") — alimenta a badge "Concluída" da tela de
@@ -1446,9 +1606,12 @@ export const scoringApi = {
   // Jurado marca a contestação desta apresentação como resolvida — ver
   // ScoringService.resolveContestation.
   resolveContestation: (eventId: string, scheduleEntryId: string) =>
-    authRequest<void>(`/events/${eventId}/scoring/sheet/${scheduleEntryId}/resolve-contestation`, {
-      method: "POST",
-    }),
+    authRequest<void>(
+      `/events/${eventId}/scoring/sheet/${scheduleEntryId}/resolve-contestation`,
+      {
+        method: "POST",
+      },
+    ),
 
   // Horário real de início (primeiro TIMER_STARTED) de cada
   // apresentação já iniciada — usado pra calcular o atraso do evento
@@ -1481,10 +1644,13 @@ export const scoringApi = {
     scheduleEntryId: string,
     payload: { removeFromSchedule?: boolean },
   ) =>
-    authRequest<void>(`/events/${eventId}/scoring/entries/${scheduleEntryId}/withdraw`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    authRequest<void>(
+      `/events/${eventId}/scoring/entries/${scheduleEntryId}/withdraw`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
 
   headJudge: {
     getRoster: (eventId: string, scheduleEntryId: string) =>
@@ -1492,7 +1658,11 @@ export const scoringApi = {
         `/events/${eventId}/scoring/head-judge/${scheduleEntryId}/roster`,
       ),
 
-    getSheet: (eventId: string, scheduleEntryId: string, judgeParticipationId: string) =>
+    getSheet: (
+      eventId: string,
+      scheduleEntryId: string,
+      judgeParticipationId: string,
+    ) =>
       authRequest<HeadJudgeSheet>(
         `/events/${eventId}/scoring/head-judge/${scheduleEntryId}/judges/${judgeParticipationId}/sheet`,
       ),
@@ -1541,7 +1711,9 @@ export const notificationsApi = {
     ),
 
   markSeen: (eventId: string) =>
-    authRequest<void>(`/events/${eventId}/notifications/seen`, { method: "POST" }),
+    authRequest<void>(`/events/${eventId}/notifications/seen`, {
+      method: "POST",
+    }),
 };
 
 export const supportApi = {
