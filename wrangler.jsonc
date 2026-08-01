@@ -4,5 +4,9 @@
   "assets": {
     "directory": "./apps/web/dist",
     "not_found_handling": "single-page-application"
-  }
+  },
+  "routes": [
+    { "pattern": "cheercup.com.br", "custom_domain": true },
+    { "pattern": "www.cheercup.com.br", "custom_domain": true }
+  ]
 }
