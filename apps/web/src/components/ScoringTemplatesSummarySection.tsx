@@ -125,7 +125,7 @@ export function ScoringTemplatesSummarySection({
             3. Sistemas de pontuação
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Marque quais sistemas de pontuação vão poder ser usados nas categorias deste evento.
+            Marque quais sistemas de pontuação serão usados para avaliar as categorias do evento.
           </p>
         </div>
         <button
