@@ -304,12 +304,22 @@ export function MetricTile({
         <p className="truncate text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
       </div>
       {lines && lines.length > 0 ? (
-        <div className="mt-1 space-y-0.5">
-          {lines.map((line) => (
+        // Limitado a 3 linhas visíveis — um jurado escalado em muitas
+        // funções ao mesmo tempo (ex: cabeça-de-chave em várias
+        // categorias) faria o card crescer indefinidamente e quebrar o
+        // grid de 4 colunas das outras métricas, que têm altura fixa.
+        // Lista completa acessível via `title` (tooltip nativo).
+        <div className="mt-1 space-y-0.5" title={lines.length > 3 ? lines.join(", ") : undefined}>
+          {(lines.length > 3 ? lines.slice(0, 2) : lines).map((line) => (
             <p key={line} className="truncate text-sm font-bold text-foreground">
               {line}
             </p>
           ))}
+          {lines.length > 3 && (
+            <p className="truncate text-xs font-medium text-muted-foreground">
+              +{lines.length - 2} mais
+            </p>
+          )}
         </div>
       ) : (
         <>
