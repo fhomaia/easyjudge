@@ -5,6 +5,20 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cheer Cup</title>
+
+    <!-- Open Graph: é isso que WhatsApp/Facebook/etc leem pra montar a
+         pré-visualização ao compartilhar o link — precisa de URL
+         absoluta em og:image (não `/logo.png` relativo), o crawler não
+         executa JS então isso tem que estar direto no HTML estático. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cheer Cup" />
+    <meta property="og:title" content="Cheer Cup" />
+    <meta
+      property="og:description"
+      content="Gestão de notas e resultados em tempo real para competições de cheerleading."
+    />
+    <meta property="og:image" content="https://cheercup.com.br/logo.png" />
+    <meta property="og:url" content="https://cheercup.com.br" />
   </head>
   <body>
     <div id="root"></div>
