@@ -235,14 +235,16 @@ export class ScoringTemplatesService {
   }
 
   // Usado por CategoriesService antes de atribuir um template a uma
-  // categoria — só um template do próprio usuário e "completo" (soma
-  // dos critérios-raiz == targetScore E nenhum grupo sem item de
-  // avaliação descendente) pode ser usado.
+  // categoria — dono OU template de sistema (2026-08-02: pode ser
+  // atribuído direto ao evento sem clonar, só não pode ser editado —
+  // findOwnTemplateOrThrow já cuida disso separadamente, em qualquer
+  // tentativa de escrita), e "completo" (soma dos critérios-raiz ==
+  // targetScore E nenhum grupo sem item de avaliação descendente).
   async assertUsableTemplate(
     templateId: string,
     userId: string,
   ): Promise<ScoringTemplate> {
-    const template = await this.findOwnTemplateOrThrow(templateId, userId);
+    const template = await this.findViewableTemplateOrThrow(templateId, userId);
     const distributed = await this.getDistributedScore(templateId);
     if (distributed !== template.targetScore) {
       throw new ConflictException(

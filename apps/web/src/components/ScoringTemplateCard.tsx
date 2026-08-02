@@ -50,7 +50,7 @@ export function ScoringTemplateCard({
       className="flex cursor-pointer flex-col gap-3 rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <div
             style={{ backgroundColor: getAvatarColor(template.id) }}
             className="flex size-11 shrink-0 items-center justify-center rounded-full text-white"
@@ -61,21 +61,21 @@ export function ScoringTemplateCard({
           {template.isSystemTemplate ? (
             <span
               title={`Modelo oficial${template.source ? `. ${template.source}` : ""}. Não pode ser editado, mas pode ser clonado ao criar um novo template.`}
-              className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
+              className="flex max-w-[180px] items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
             >
-              <Award className="size-3" />
-              {template.source ?? "Modelo oficial"}
+              <Award className="size-3 shrink-0" />
+              <span className="truncate">{template.source ?? "Modelo oficial"}</span>
             </span>
           ) : null}
           {template.isSystemTemplate && template.year && (
-            <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+            <span className="flex shrink-0 items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
               {template.year}
             </span>
           )}
           {!template.isSystemTemplate && template.isLocked && (
             <span
               title="Em uso por um evento que já saiu da fase de configuração — não pode ser editado"
-              className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+              className="flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
             >
               <Lock className="size-3" />
               Travado
@@ -83,7 +83,7 @@ export function ScoringTemplateCard({
           )}
         </div>
         {(onEdit || onDelete) && (
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={

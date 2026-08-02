@@ -87,22 +87,28 @@ export function ScoringTemplatesListPage() {
                   <h2 className="text-sm font-semibold text-muted-foreground">
                     Meus sistemas de pontuação
                   </h2>
-                  <motion.div
-                    variants={listVariants}
-                    initial="hidden"
-                    animate="show"
-                    className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
-                  >
-                    {myTemplates.map((template) => (
-                      <ScoringTemplateCard
-                        key={template.id}
-                        template={template}
-                        onClick={() => navigate(`/scoring-templates/${template.id}`)}
-                        onEdit={setEditTarget}
-                        onDelete={setDeleteTarget}
-                      />
-                    ))}
-                  </motion.div>
+                  {/* Altura limitada com scroll próprio — sem isso, uma
+                      lista longa de templates (próprios ou pré-definidos)
+                      estica a página inteira, empurrando a outra seção
+                      pra muito longe e desformatando a tela. */}
+                  <div className="max-h-[560px] overflow-y-auto rounded-xl border border-border/40 p-1">
+                    <motion.div
+                      variants={listVariants}
+                      initial="hidden"
+                      animate="show"
+                      className="grid grid-cols-1 gap-4 p-2 sm:grid-cols-2 xl:grid-cols-3"
+                    >
+                      {myTemplates.map((template) => (
+                        <ScoringTemplateCard
+                          key={template.id}
+                          template={template}
+                          onClick={() => navigate(`/scoring-templates/${template.id}`)}
+                          onEdit={setEditTarget}
+                          onDelete={setDeleteTarget}
+                        />
+                      ))}
+                    </motion.div>
+                  </div>
                 </div>
               ) : (
                 systemTemplates.length === 0 && (
@@ -123,22 +129,24 @@ export function ScoringTemplatesListPage() {
                       Modelos oficiais de órgãos da comunidade cheer, prontos pra clonar e usar.
                     </p>
                   </div>
-                  <motion.div
-                    variants={listVariants}
-                    initial="hidden"
-                    animate="show"
-                    className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
-                  >
-                    {systemTemplates.map((template) => (
-                      <ScoringTemplateCard
-                        key={template.id}
-                        template={template}
-                        onClick={() => navigate(`/scoring-templates/${template.id}`)}
-                        onEdit={setEditTarget}
-                        onDelete={setDeleteTarget}
-                      />
-                    ))}
-                  </motion.div>
+                  <div className="max-h-[560px] overflow-y-auto rounded-xl border border-border/40 p-1">
+                    <motion.div
+                      variants={listVariants}
+                      initial="hidden"
+                      animate="show"
+                      className="grid grid-cols-1 gap-4 p-2 sm:grid-cols-2 xl:grid-cols-3"
+                    >
+                      {systemTemplates.map((template) => (
+                        <ScoringTemplateCard
+                          key={template.id}
+                          template={template}
+                          onClick={() => navigate(`/scoring-templates/${template.id}`)}
+                          onEdit={setEditTarget}
+                          onDelete={setDeleteTarget}
+                        />
+                      ))}
+                    </motion.div>
+                  </div>
                 </div>
               )}
             </div>
