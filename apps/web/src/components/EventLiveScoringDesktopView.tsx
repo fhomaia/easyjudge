@@ -326,7 +326,7 @@ export function EventLiveScoringDesktopView({
             <div className={sheet.isLegalityJudge ? "col-span-2" : "col-span-1"}>{commentsAndSketch}</div>
             {legalidadeBlock}
           </div>
-        ) : (
+        ) : sheet.isLegalityJudge ? (
           <>
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-2 space-y-3">
@@ -344,6 +344,29 @@ export function EventLiveScoringDesktopView({
               </div>
 
               {legalidadeBlock}
+            </div>
+
+            <div className="mt-4">{commentsAndSketch}</div>
+          </>
+        ) : (
+          <>
+            {/* Sem jurado de legalidade nesta pista, os grupos ocupam a
+                largura inteira (não sobra 1/3 vazio à direita) em 2
+                colunas por linha, em vez de empilhados numa coluna só —
+                a pedido do usuário, ao notar o espaço desperdiçado numa
+                súmula sem legalidade. */}
+            <div className="grid grid-cols-2 gap-4">
+              <ScoringCriteriaGroups
+                groups={sheet.groups}
+                scores={scores}
+                collapsedGroups={collapsedGroups}
+                onToggleGroup={onToggleGroup}
+                isGroupComplete={isGroupComplete}
+                onAdjustScore={onAdjustScore}
+                onSetScore={onSetScore}
+                variant="desktop"
+                showScoreBands
+              />
             </div>
 
             <div className="mt-4">{commentsAndSketch}</div>
