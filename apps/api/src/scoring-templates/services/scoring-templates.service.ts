@@ -88,6 +88,8 @@ export class ScoringTemplatesService {
         showInJudgingSheet: source.showInJudgingSheet,
         allowDecimalScoring: source.allowDecimalScoring,
         isRequired: source.isRequired,
+        useScoreBands: source.useScoreBands,
+        scoreBands: source.scoreBands,
       });
       const saved = await this.criteriaRepo.save(clone);
       idMap.set(source.id, saved.id);
