@@ -35,6 +35,12 @@ export const NAV_ITEMS: {
     label: "Sistemas de pontuação",
     icon: Calculator,
     mobile: false,
+    // Mesmo par de roles do guard do backend
+    // (ScoringTemplatesController, @Roles(JUDGE, ORGANIZATION)) —
+    // athlete (cobre espectador genérico também, que por trás é
+    // role: athlete) e program nunca conseguiam usar a tela mesmo
+    // antes, só não tinham o item escondido do menu (2026-08-02).
+    roles: ["judge", "organization"],
   },
   {
     href: "/athletes",
