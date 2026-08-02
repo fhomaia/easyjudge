@@ -71,9 +71,6 @@ export class ScoringCriterion {
   @Column({ name: 'max_score', type: 'float' })
   maxScore: number;
 
-  @Column({ type: 'float', default: 1 })
-  weight: number;
-
   // Posição entre irmãos (escopo: mesmo templateId + parentId).
   // Renumerado sequencialmente (0..n-1) a cada criação/exclusão/move.
   @Column({ type: 'int', default: 0 })

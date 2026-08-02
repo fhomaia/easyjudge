@@ -764,7 +764,6 @@ export interface ScoringCriterion {
   name: string;
   description: string | null;
   maxScore: number;
-  weight: number;
   order: number;
   showInJudgingSheet: boolean;
   allowDecimalScoring: boolean;
@@ -790,7 +789,6 @@ export interface CreateScoringCriterionPayload {
   name: string;
   description?: string;
   maxScore: number;
-  weight?: number;
   showInJudgingSheet?: boolean;
   allowDecimalScoring?: boolean;
   isRequired?: boolean;

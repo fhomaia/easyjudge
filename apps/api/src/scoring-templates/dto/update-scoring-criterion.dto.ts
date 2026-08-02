@@ -35,10 +35,6 @@ export class UpdateScoringCriterionDto {
   maxScore?: number;
 
   @IsOptional()
-  @IsNumber()
-  weight?: number;
-
-  @IsOptional()
   @IsBoolean()
   showInJudgingSheet?: boolean;
 

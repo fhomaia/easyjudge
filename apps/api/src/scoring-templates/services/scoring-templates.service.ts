@@ -84,7 +84,6 @@ export class ScoringTemplatesService {
         name: source.name,
         description: source.description,
         maxScore: source.maxScore,
-        weight: source.weight,
         order: source.order,
         showInJudgingSheet: source.showInJudgingSheet,
         allowDecimalScoring: source.allowDecimalScoring,
