@@ -2,7 +2,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResourceColorPicker } from "@/components/ResourceColorPicker";
-import { VIBRANT_COLORS } from "@/lib/avatarColor";
+import { PASTEL_BAND_COLORS } from "@/lib/avatarColor";
 import { validateScoreBands } from "@/lib/scoreBands";
 import type { ScoreBand } from "@/api/client";
 
@@ -31,7 +31,7 @@ export function ScoreBandsEditor({ bands, maxScore, onChange, disabled }: ScoreB
       {
         name: "",
         description: null,
-        color: VIBRANT_COLORS[bands.length % VIBRANT_COLORS.length],
+        color: PASTEL_BAND_COLORS[bands.length % PASTEL_BAND_COLORS.length],
         min: previousMax,
         max: previousMax,
       },
@@ -100,6 +100,7 @@ export function ScoreBandsEditor({ bands, maxScore, onChange, disabled }: ScoreB
             <ResourceColorPicker
               value={band.color}
               onChange={(color) => !disabled && updateBand(index, { color })}
+              colors={PASTEL_BAND_COLORS}
             />
           </div>
         ))}

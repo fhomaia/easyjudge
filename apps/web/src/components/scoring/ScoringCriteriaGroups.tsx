@@ -134,7 +134,14 @@ export function ScoringCriteriaGroups({
                 {group.criteria.map((criterion) => {
                   const bands = criterion.scoreBands;
                   const hasBands = showScoreBands && criterion.useScoreBands && !!bands && bands.length > 0;
-                  const showSlider = hasBands && !isMobile;
+                  // Critério sem faixa também ganha o slider no desktop
+                  // (só sem divisão colorida/rótulo — ScoreBandSlider já
+                  // lida bem com `bands` vazio: trilho neutro, sem
+                  // nome/descrição de faixa embaixo) — antes só quem
+                  // tinha faixa via slider, o resto ficava só com o
+                  // input numérico +/-, pedido do usuário pra
+                  // consistência visual entre critérios.
+                  const showSlider = showScoreBands && !isMobile;
                   const score = scores[criterion.id] ?? 0;
                   return (
                     <div key={criterion.id} className={cn(isMobile ? "py-4" : "py-3")}>
@@ -240,7 +247,7 @@ export function ScoringCriteriaGroups({
                       </div>
                       {showSlider && (
                         <ScoreBandSlider
-                          bands={bands!}
+                          bands={bands ?? []}
                           maxScore={criterion.maxScore}
                           allowDecimal={criterion.allowDecimalScoring}
                           value={score}

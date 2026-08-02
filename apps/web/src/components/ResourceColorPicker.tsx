@@ -4,12 +4,16 @@ import { cn } from "@/lib/utils";
 interface ResourceColorPickerProps {
   value: string;
   onChange: (color: string) => void;
+  // Paleta alternativa (ex: PASTEL_BAND_COLORS pra faixa de pontuação,
+  // ver ScoreBandsEditor) — default VIBRANT_COLORS, usado por pista de
+  // cronograma/outros seletores de cor genéricos.
+  colors?: string[];
 }
 
-export function ResourceColorPicker({ value, onChange }: ResourceColorPickerProps) {
+export function ResourceColorPicker({ value, onChange, colors = VIBRANT_COLORS }: ResourceColorPickerProps) {
   return (
     <div className="flex flex-wrap gap-2">
-      {VIBRANT_COLORS.map((color) => (
+      {colors.map((color) => (
         <button
           key={color}
           type="button"
