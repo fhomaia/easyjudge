@@ -284,8 +284,7 @@ export function ScoringTemplateBuilderPage() {
                   <p>
                     Modelo oficial{template.year ? ` ${template.year}` : ""}
                     {template.source ? `. Fonte: ${template.source}` : ""}. Não é de autoria da
-                    Cheer Cup e não pode ser editado, mas você pode cloná-lo a partir da tela de
-                    criação de um novo template.
+                    Cheer Cup.
                   </p>
                 </div>
               )}

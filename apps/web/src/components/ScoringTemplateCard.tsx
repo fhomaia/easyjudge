@@ -68,7 +68,7 @@ export function ScoringTemplateCard({
           <ScoringTemplateStatusBadge isComplete={template.isComplete ?? false} />
           {template.isSystemTemplate ? (
             <span
-              title={`Modelo oficial${template.source ? `. ${template.source}` : ""}. Não pode ser editado, mas pode ser clonado ao criar um novo template.`}
+              title={`Modelo oficial${template.source ? `. ${template.source}` : ""}`}
               className="flex max-w-[180px] items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
             >
               <Award className="size-3 shrink-0" />
@@ -128,7 +128,7 @@ export function ScoringTemplateCard({
                 aria-label="Editar dados do template"
                 title={
                   template.isSystemTemplate
-                    ? "Modelo oficial. Não pode ser editado, mas pode ser clonado ao criar um novo template"
+                    ? "Modelo oficial"
                     : template.isLocked
                       ? "Travado — em uso por um evento em andamento"
                       : undefined
