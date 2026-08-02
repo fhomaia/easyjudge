@@ -87,16 +87,16 @@ export function ScoringTemplatesListPage() {
                   <h2 className="text-sm font-semibold text-muted-foreground">
                     Meus sistemas de pontuação
                   </h2>
-                  {/* Linha única com scroll horizontal — sem isso, uma
+                  {/* Altura limitada com scroll próprio — sem isso, uma
                       lista longa de templates (próprios ou pré-definidos)
-                      empilha em várias linhas e estica a página inteira,
-                      desformatando a tela. */}
-                  <div className="overflow-x-auto pb-1">
+                      estica a página inteira, empurrando a outra seção
+                      pra muito longe e desformatando a tela. */}
+                  <div className="max-h-[560px] overflow-y-auto rounded-xl border border-border/40 p-1">
                     <motion.div
                       variants={listVariants}
                       initial="hidden"
                       animate="show"
-                      className="flex w-max gap-4"
+                      className="grid grid-cols-1 gap-4 p-2 sm:grid-cols-2 xl:grid-cols-3"
                     >
                       {myTemplates.map((template) => (
                         <ScoringTemplateCard
@@ -105,7 +105,6 @@ export function ScoringTemplatesListPage() {
                           onClick={() => navigate(`/scoring-templates/${template.id}`)}
                           onEdit={setEditTarget}
                           onDelete={setDeleteTarget}
-                          className="w-80 shrink-0"
                         />
                       ))}
                     </motion.div>
@@ -130,12 +129,12 @@ export function ScoringTemplatesListPage() {
                       Modelos oficiais de órgãos da comunidade cheer, prontos pra clonar e usar.
                     </p>
                   </div>
-                  <div className="overflow-x-auto pb-1">
+                  <div className="max-h-[560px] overflow-y-auto rounded-xl border border-border/40 p-1">
                     <motion.div
                       variants={listVariants}
                       initial="hidden"
                       animate="show"
-                      className="flex w-max gap-4"
+                      className="grid grid-cols-1 gap-4 p-2 sm:grid-cols-2 xl:grid-cols-3"
                     >
                       {systemTemplates.map((template) => (
                         <ScoringTemplateCard
@@ -144,7 +143,6 @@ export function ScoringTemplatesListPage() {
                           onClick={() => navigate(`/scoring-templates/${template.id}`)}
                           onEdit={setEditTarget}
                           onDelete={setDeleteTarget}
-                          className="w-80 shrink-0"
                         />
                       ))}
                     </motion.div>
