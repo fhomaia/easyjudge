@@ -17,18 +17,24 @@ import { eventsApi } from "@/api/client";
 // própria página, não aqui no guard — a rota fica acessível, só o
 // conteúdo é que aparece bloqueado). "spectator" (espectador genérico,
 // sem vínculo com equipe) deliberadamente NÃO entra aqui por padrão —
-// só quem passa `allowSpectator: true` libera. Hoje são duas exceções:
-// EventLiveResultsPage (resultado é uma tela "ao vivo" que espectador
-// genérico pode acessar desde sempre, a página decide se mostra o
-// conteúdo ou um aviso de "em breve" via `Event.resultsReleasedAt`,
-// ver ScoringService.getPublicEventResults) e, desde 2026-08-01,
-// EventLiveDashboardPage (Início) também — pedido do usuário pra ficar
-// disponível a todo tipo de usuário. Os endpoints que a Início consome
-// (member-counts, regulation, schedule/days, started/completed-
-// presentations) precisaram ganhar SPECTATOR nos próprios guards
-// também, senão a página deixava de redirecionar mas os cards
-// continuavam vindo vazios/errados (fetch 403 caindo no fallback
-// silencioso do frontend).
+// só quem passa `allowSpectator: true` libera. Exceções, uma por
+// página que já chama com `allowSpectator: true`: EventLiveResultsPage
+// (resultado é uma tela "ao vivo" que espectador genérico pode acessar
+// desde sempre, a página decide se mostra o conteúdo ou um aviso de
+// "em breve" via `Event.resultsReleasedAt`, ver
+// ScoringService.getPublicEventResults); EventLiveDashboardPage
+// (Início), desde 2026-08-01, pedido do usuário pra ficar disponível a
+// todo tipo de usuário; e, desde 2026-08-02 (bug reportado: atleta
+// removido pela equipe cai pra SPECTATOR, ver
+// AthletesService.revokeEventAccessForLink, e era redirecionado pra
+// Home ao clicar em Notas — mesmo problema valia pra qualquer
+// espectador genérico, não só atleta removido), EventLiveNotesPage,
+// EventLiveSchedulePage e EventLiveNotificationsPage. Cada endpoint
+// que essas páginas consomem precisa aceitar SPECTATOR no próprio
+// guard também (ex: EventTeamsController), senão a página deixa de
+// redirecionar mas fica com dado vazio/errado (fetch 403 caindo no
+// fallback silencioso do frontend) — checar isso é o primeiro passo
+// antes de liberar `allowSpectator` numa página nova.
 export function useEventLiveGuard(
   eventId: string | undefined,
   options?: { allowSpectator?: boolean },

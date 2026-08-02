@@ -141,7 +141,9 @@ export function EventLiveNotesDesktopView({
               <AthleteNotesOverview eventId={event.aliasId} />
             ) : (
               <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-                Você não está escalado como jurado neste evento.
+                {event.currentUserRoles.includes("spectator")
+                  ? "O conteúdo não está disponível para espectadores do evento."
+                  : "Você não está escalado como jurado neste evento."}
               </div>
             )
           ) : (

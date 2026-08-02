@@ -15,12 +15,22 @@ import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 // ali `:programId` é parte fixa do path.
 @Controller('events/:eventId/teams')
 @UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
-@Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
-@EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR)
 export class EventTeamsController {
   constructor(private readonly teamsService: TeamsService) {}
 
+  // Liberado pra SPECTATOR em 2026-08-02: a tela de Cronograma ao vivo
+  // (EventLiveSchedulePage) passou a ficar disponível pra espectador
+  // (mesmo motivo do Cronograma em si, ver schedule.controller.ts) e
+  // usa esta lista pra montar os filtros "Programas"/"Equipes" e a
+  // coluna "Programa" do PDF exportado — sem SPECTATOR aqui, esses dois
+  // ficavam quebrados em silêncio (o `.catch` engolia o 403).
   @Get()
+  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.SPECTATOR,
+  )
   findAll(@Param('eventId') eventId: string) {
     return this.teamsService.findAllForEvent(eventId);
   }

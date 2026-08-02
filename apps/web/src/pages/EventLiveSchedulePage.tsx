@@ -83,7 +83,7 @@ export function EventLiveSchedulePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  useEventLiveGuard(id);
+  useEventLiveGuard(id, { allowSpectator: true });
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);

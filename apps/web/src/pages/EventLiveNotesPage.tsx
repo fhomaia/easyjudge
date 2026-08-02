@@ -56,7 +56,7 @@ export function EventLiveNotesPage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 
-  useEventLiveGuard(id);
+  useEventLiveGuard(id, { allowSpectator: true });
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
@@ -164,6 +164,7 @@ export function EventLiveNotesPage() {
 
   const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
   const isAthlete = event.currentUserRoles.includes("athlete");
+  const isSpectator = event.currentUserRoles.includes("spectator");
   const functionLines = functionLabelsFor(assignment);
   const nowLabel = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
@@ -224,7 +225,9 @@ export function EventLiveNotesPage() {
               </div>
             ) : (
               <div className="m-4 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                Você não está escalado como jurado neste evento.
+                {isSpectator
+                  ? "O conteúdo não está disponível para espectadores do evento."
+                  : "Você não está escalado como jurado neste evento."}
               </div>
             )
           ) : (
