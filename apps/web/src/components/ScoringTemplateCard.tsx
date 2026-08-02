@@ -66,16 +66,20 @@ export function ScoringTemplateCard({
               <Award className="size-3" />
               {template.source ?? "Modelo oficial"}
             </span>
-          ) : (
-            template.isLocked && (
-              <span
-                title="Em uso por um evento que já saiu da fase de configuração — não pode ser editado"
-                className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
-              >
-                <Lock className="size-3" />
-                Travado
-              </span>
-            )
+          ) : null}
+          {template.isSystemTemplate && template.year && (
+            <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+              {template.year}
+            </span>
+          )}
+          {!template.isSystemTemplate && template.isLocked && (
+            <span
+              title="Em uso por um evento que já saiu da fase de configuração — não pode ser editado"
+              className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+            >
+              <Lock className="size-3" />
+              Travado
+            </span>
           )}
         </div>
         {(onEdit || onDelete) && (

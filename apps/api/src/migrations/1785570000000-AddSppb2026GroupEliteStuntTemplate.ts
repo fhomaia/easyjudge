@@ -9,7 +9,9 @@ import { SYSTEM_SCORING_TEMPLATES_OWNER_ID } from './1785560000000-AddSystemScor
 // categorias Group Stunt, Elite Stunt e Partner Stunt (mesma estrutura
 // de pontuação serve pras três — um template só, reutilizável ao
 // atribuir a categoria).
-const TEMPLATE_ID = '4f6a6e2e-2b8e-4b7a-9e0a-000000000001';
+export const SPPB_2026_GROUP_ELITE_STUNT_TEMPLATE_ID =
+  '4f6a6e2e-2b8e-4b7a-9e0a-000000000001';
+const TEMPLATE_ID = SPPB_2026_GROUP_ELITE_STUNT_TEMPLATE_ID;
 
 interface Band {
   name: string;

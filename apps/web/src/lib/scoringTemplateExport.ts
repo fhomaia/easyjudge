@@ -202,7 +202,8 @@ export function exportScoringTemplateToPdf(
   if (template.source) {
     doc.setFontSize(8);
     doc.setFont("helvetica", "italic");
-    doc.text(`Fonte: ${template.source}`, pageWidth / 2, MARGIN + 32, { align: "center" });
+    const sourceLine = template.year ? `Fonte: ${template.source} (${template.year})` : `Fonte: ${template.source}`;
+    doc.text(sourceLine, pageWidth / 2, MARGIN + 32, { align: "center" });
   }
   doc.setFontSize(9);
   doc.text(

@@ -56,6 +56,16 @@ export class ScoringTemplate {
   @Column({ type: 'varchar', nullable: true })
   source: string | null;
 
+  // Ano/temporada de vigência das regras (ex. 2026) — badge próprio ao
+  // lado do de `source`, já que órgãos oficiais costumam revisar o
+  // código anualmente e um mesmo órgão pode acabar tendo mais de um
+  // modelo de sistema (anos diferentes) na biblioteca ao mesmo tempo.
+  // Nulo pra todo template comum. Mesmo padrão de isSystemTemplate/
+  // source: fora de Create/UpdateScoringTemplateDto, só setável via
+  // migration.
+  @Column({ type: 'int', nullable: true })
+  year: number | null;
+
   @OneToMany(() => ScoringCriterion, (criterion) => criterion.template)
   criteria: ScoringCriterion[];
 

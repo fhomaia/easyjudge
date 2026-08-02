@@ -745,6 +745,7 @@ export interface ScoringTemplate {
   isLocked?: boolean;
   isSystemTemplate: boolean;
   source: string | null;
+  year: number | null;
 }
 
 export interface ScoreBand {
