@@ -45,20 +45,22 @@ export function ScoringTemplatesSummarySection({
           Nenhum sistema de pontuação criado ainda.
         </p>
       ) : (
-        <motion.div
-          variants={listVariants}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
-        >
-          {templates.map((template) => (
-            <ScoringTemplateCard
-              key={template.id}
-              template={template}
-              onClick={() => navigate(`/scoring-templates/${template.id}`)}
-            />
-          ))}
-        </motion.div>
+        // Linha única com scroll horizontal — em vez de um grid que
+        // empilha em várias linhas e estica o card do regulamento
+        // conforme a quantidade de templates cresce (pedido do
+        // usuário, 2026-08-02).
+        <div className="overflow-x-auto pb-1">
+          <motion.div variants={listVariants} initial="hidden" animate="show" className="flex w-max gap-4">
+            {templates.map((template) => (
+              <ScoringTemplateCard
+                key={template.id}
+                template={template}
+                onClick={() => navigate(`/scoring-templates/${template.id}`)}
+                className="w-80 shrink-0"
+              />
+            ))}
+          </motion.div>
+        </div>
       )}
 
       <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2.5 text-sm text-muted-foreground">

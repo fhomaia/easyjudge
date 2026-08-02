@@ -9,9 +9,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { listItemVariants } from "@/lib/motionVariants";
-import { formatDateTime } from "@/lib/formatDate";
 import { getAvatarColor } from "@/lib/avatarColor";
 import { exportScoringTemplateToExcel, exportScoringTemplateToPdf } from "@/lib/scoringTemplateExport";
+import { cn } from "@/lib/utils";
 import { scoringCriteriaApi, type ScoringTemplate } from "@/api/client";
 
 interface ScoringTemplateCardProps {
@@ -19,6 +19,10 @@ interface ScoringTemplateCardProps {
   onClick: () => void;
   onEdit?: (template: ScoringTemplate) => void;
   onDelete?: (template: ScoringTemplate) => void;
+  // Pra encaixar em layouts fora do grid padrão (ex: linha única com
+  // scroll horizontal em ScoringTemplatesSummarySection, que precisa
+  // de largura fixa por card).
+  className?: string;
 }
 
 export function ScoringTemplateCard({
@@ -26,6 +30,7 @@ export function ScoringTemplateCard({
   onClick,
   onEdit,
   onDelete,
+  className,
 }: ScoringTemplateCardProps) {
   const [downloading, setDownloading] = useState(false);
 
@@ -47,7 +52,10 @@ export function ScoringTemplateCard({
       variants={listItemVariants}
       whileHover={{ y: -2 }}
       onClick={onClick}
-      className="flex cursor-pointer flex-col gap-3 rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:shadow-md"
+      className={cn(
+        "flex cursor-pointer flex-col gap-3 rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:shadow-md",
+        className,
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -156,9 +164,8 @@ export function ScoringTemplateCard({
         )}
       </div>
 
-      <div className="mt-auto flex items-center justify-between pt-1 text-xs text-muted-foreground">
+      <div className="mt-auto pt-1 text-xs text-muted-foreground">
         <span>{template.criteriaCount ?? 0} critérios</span>
-        <span>Atualizado {formatDateTime(template.updatedAt)}</span>
       </div>
     </motion.div>
   );
