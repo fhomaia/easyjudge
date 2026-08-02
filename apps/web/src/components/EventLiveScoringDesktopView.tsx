@@ -21,7 +21,6 @@ interface EventLiveScoringDesktopViewProps {
   deductions: DeductionLogEntry[];
   comment: string;
   sketchDataUrl: string | null;
-  collapsedGroups: Set<string>;
   pendingCount: number;
   lastSyncedAt: Date | null;
   submitting: boolean;
@@ -35,7 +34,6 @@ interface EventLiveScoringDesktopViewProps {
   onStartOrRestartTimer: () => void;
   onResumeTimer: () => void;
   onStopTimer: () => void;
-  onToggleGroup: (groupId: string) => void;
   isGroupComplete: (criteriaIds: string[]) => boolean;
   onAdjustScore: (criterionId: string, maxScore: number, allowDecimal: boolean, direction: 1 | -1) => void;
   onSetScore: (criterionId: string, maxScore: number, allowDecimal: boolean, rawValue: number) => void;
@@ -57,7 +55,6 @@ export function EventLiveScoringDesktopView({
   deductions,
   comment,
   sketchDataUrl,
-  collapsedGroups,
   pendingCount,
   lastSyncedAt,
   submitting,
@@ -71,7 +68,6 @@ export function EventLiveScoringDesktopView({
   onStartOrRestartTimer,
   onResumeTimer,
   onStopTimer,
-  onToggleGroup,
   isGroupComplete,
   onAdjustScore,
   onSetScore,
@@ -333,8 +329,6 @@ export function EventLiveScoringDesktopView({
                 <ScoringCriteriaGroups
                   groups={sheet.groups}
                   scores={scores}
-                  collapsedGroups={collapsedGroups}
-                  onToggleGroup={onToggleGroup}
                   isGroupComplete={isGroupComplete}
                   onAdjustScore={onAdjustScore}
                   onSetScore={onSetScore}
@@ -359,8 +353,6 @@ export function EventLiveScoringDesktopView({
               <ScoringCriteriaGroups
                 groups={sheet.groups}
                 scores={scores}
-                collapsedGroups={collapsedGroups}
-                onToggleGroup={onToggleGroup}
                 isGroupComplete={isGroupComplete}
                 onAdjustScore={onAdjustScore}
                 onSetScore={onSetScore}

@@ -72,7 +72,6 @@ export function EventLiveScoringPage() {
   const [deductions, setDeductions] = useState<DeductionLogEntry[]>([]);
   const [comment, setComment] = useState("");
   const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [activePanel, setActivePanel] = useState<"comments" | "sketch">("comments");
   const [supervisionOpen, setSupervisionOpen] = useState(false);
 
@@ -369,15 +368,6 @@ export function EventLiveScoringPage() {
     void emitEvent({ kind: "sketch_set", text: dataUrl });
   }
 
-  function toggleGroup(groupId: string) {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
-  }
-
   function isGroupComplete(criteriaIds: string[]): boolean {
     return criteriaIds.length > 0 && criteriaIds.every((id) => id in scores);
   }
@@ -620,8 +610,6 @@ export function EventLiveScoringPage() {
         <ScoringCriteriaGroups
           groups={sheet.groups}
           scores={scores}
-          collapsedGroups={collapsedGroups}
-          onToggleGroup={toggleGroup}
           isGroupComplete={isGroupComplete}
           onAdjustScore={adjustScore}
           onSetScore={setScoreDirect}
@@ -742,7 +730,6 @@ export function EventLiveScoringPage() {
         deductions={deductions}
         comment={comment}
         sketchDataUrl={sketchDataUrl}
-        collapsedGroups={collapsedGroups}
         pendingCount={pendingCount}
         lastSyncedAt={lastSyncedAt}
         submitting={submitting}
@@ -758,7 +745,6 @@ export function EventLiveScoringPage() {
         onStopTimer={stopTimer}
         onEditDeductionTime={editDeductionTime}
         onSetDeductionCode={setDeductionCode}
-        onToggleGroup={toggleGroup}
         isGroupComplete={isGroupComplete}
         onAdjustScore={adjustScore}
         onSetScore={setScoreDirect}

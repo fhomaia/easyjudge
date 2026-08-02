@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronLeft, Loader2, Send } from "lucide-react";
 import { ScoringCriteriaGroups } from "@/components/scoring/ScoringCriteriaGroups";
 import { LegalityDeductionsPanel } from "@/components/scoring/LegalityDeductionsPanel";
@@ -33,8 +32,6 @@ export function HeadJudgeJudgeSheet({
   canWrite,
   onBack,
 }: HeadJudgeJudgeSheetProps) {
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-
   const {
     sheet,
     hydrated,
@@ -51,15 +48,6 @@ export function HeadJudgeJudgeSheet({
     setDeductionCode,
     handleSubmit,
   } = useHeadJudgeSheet(eventId, scheduleEntryId, judgeParticipationId, canWrite);
-
-  function toggleGroup(groupId: string) {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
-  }
 
   function isGroupComplete(criteriaIds: string[]): boolean {
     return criteriaIds.length > 0 && criteriaIds.every((id) => id in scores);
@@ -123,8 +111,6 @@ export function HeadJudgeJudgeSheet({
             <ScoringCriteriaGroups
               groups={sheet.groups}
               scores={scores}
-              collapsedGroups={collapsedGroups}
-              onToggleGroup={toggleGroup}
               isGroupComplete={isGroupComplete}
               onAdjustScore={adjustScore}
               onSetScore={setScoreDirect}
