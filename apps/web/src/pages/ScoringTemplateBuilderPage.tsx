@@ -282,7 +282,7 @@ export function ScoringTemplateBuilderPage() {
                 <div className="flex items-start gap-3 rounded-lg border border-blue-300 bg-blue-50 p-4 text-sm text-blue-900">
                   <Award className="mt-0.5 size-4 shrink-0" />
                   <p>
-                    Modelo oficial{template.source ? ` — Fonte: ${template.source}` : ""}. Não é
+                    Modelo oficial{template.source ? `. Fonte: ${template.source}` : ""}. Não é
                     de autoria da Cheer Cup e não pode ser editado, mas você pode cloná-lo a
                     partir da tela de criação de um novo template.
                   </p>
