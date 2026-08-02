@@ -10,7 +10,7 @@ import { SYSTEM_SCORING_TEMPLATES_OWNER_ID } from './1785560000000-AddSystemScor
 // cada sequência tem um nome próprio (Standing/Running/Livre), não
 // "Primeira/Segunda/Terceira" genérico.
 export const SPPB_2026_BEST_TUMBLER_TEMPLATE_ID =
-  '7c9d9f5f-5e1f-4eab-c13d-000000000001';
+  '7c9d9f5f-5e1f-4eab-a13d-000000000001';
 const TEMPLATE_ID = SPPB_2026_BEST_TUMBLER_TEMPLATE_ID;
 
 interface Band {

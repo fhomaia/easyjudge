@@ -53,7 +53,8 @@ export function ScoringTemplatesListPage() {
     setTemplates((prev) => prev?.filter((t) => t.id !== id) ?? prev);
   }
 
-  const hasAnyTemplates = (templates?.length ?? 0) > 0;
+  const myTemplates = templates?.filter((t) => !t.isSystemTemplate) ?? [];
+  const systemTemplates = templates?.filter((t) => t.isSystemTemplate) ?? [];
 
   return (
     <div className="flex h-svh bg-background">
@@ -81,29 +82,63 @@ export function ScoringTemplatesListPage() {
                 </Button>
               </div>
 
-              {hasAnyTemplates ? (
-                <motion.div
-                  variants={listVariants}
-                  initial="hidden"
-                  animate="show"
-                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
-                >
-                  {templates.map((template) => (
-                    <ScoringTemplateCard
-                      key={template.id}
-                      template={template}
-                      onClick={() => navigate(`/scoring-templates/${template.id}`)}
-                      onEdit={setEditTarget}
-                      onDelete={setDeleteTarget}
-                    />
-                  ))}
-                </motion.div>
+              {myTemplates.length > 0 ? (
+                <div className="grid gap-3">
+                  <h2 className="text-sm font-semibold text-muted-foreground">
+                    Meus sistemas de pontuação
+                  </h2>
+                  <motion.div
+                    variants={listVariants}
+                    initial="hidden"
+                    animate="show"
+                    className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                  >
+                    {myTemplates.map((template) => (
+                      <ScoringTemplateCard
+                        key={template.id}
+                        template={template}
+                        onClick={() => navigate(`/scoring-templates/${template.id}`)}
+                        onEdit={setEditTarget}
+                        onDelete={setDeleteTarget}
+                      />
+                    ))}
+                  </motion.div>
+                </div>
               ) : (
-                <div className="flex min-h-[40vh] items-center justify-center">
-                  <Button size="lg" onClick={() => setCreateOpen(true)}>
-                    <Plus data-icon="inline-start" />
-                    Novo template
-                  </Button>
+                systemTemplates.length === 0 && (
+                  <div className="flex min-h-[40vh] items-center justify-center">
+                    <Button size="lg" onClick={() => setCreateOpen(true)}>
+                      <Plus data-icon="inline-start" />
+                      Novo template
+                    </Button>
+                  </div>
+                )
+              )}
+
+              {systemTemplates.length > 0 && (
+                <div className="grid gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-muted-foreground">Pré-definidos</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Modelos oficiais de órgãos da comunidade cheer, prontos pra clonar e usar.
+                    </p>
+                  </div>
+                  <motion.div
+                    variants={listVariants}
+                    initial="hidden"
+                    animate="show"
+                    className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                  >
+                    {systemTemplates.map((template) => (
+                      <ScoringTemplateCard
+                        key={template.id}
+                        template={template}
+                        onClick={() => navigate(`/scoring-templates/${template.id}`)}
+                        onEdit={setEditTarget}
+                        onDelete={setDeleteTarget}
+                      />
+                    ))}
+                  </motion.div>
                 </div>
               )}
             </div>

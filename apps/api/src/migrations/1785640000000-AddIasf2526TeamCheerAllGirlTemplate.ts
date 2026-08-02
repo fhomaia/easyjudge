@@ -35,7 +35,7 @@ import { SYSTEM_SCORING_TEMPLATES_OWNER_ID } from './1785560000000-AddSystemScor
 // ganharam um nome curto derivado do próprio texto da faixa (não é
 // conteúdo novo, só um rótulo pro dropdown/slider).
 export const IASF_2526_TEAM_CHEER_ALL_GIRL_TEMPLATE_ID =
-  '9e1f1f7f-7003-4f1d-e35f-000000000001';
+  '9e1f1f7f-7003-4f1d-a35f-000000000001';
 const TEMPLATE_ID = IASF_2526_TEAM_CHEER_ALL_GIRL_TEMPLATE_ID;
 
 interface Band {

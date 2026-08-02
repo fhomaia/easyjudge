@@ -22,7 +22,7 @@ import { SYSTEM_SCORING_TEMPLATES_OWNER_ID } from './1785560000000-AddSystemScor
 // Jumps"/"Execução de Tumbling" apareciam duplicadas no arquivo
 // (texto idêntico duas vezes) — usada só uma ocorrência de cada.
 export const SPPB_2026_BEST_CHEER_TEMPLATE_ID =
-  '8d0e0f6f-6f2f-4fbc-d24e-000000000001';
+  '8d0e0f6f-6f2f-4fbc-a24e-000000000001';
 const TEMPLATE_ID = SPPB_2026_BEST_CHEER_TEMPLATE_ID;
 
 interface Band {

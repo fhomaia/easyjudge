@@ -11,7 +11,7 @@ import { SYSTEM_SCORING_TEMPLATES_OWNER_ID } from './1785560000000-AddSystemScor
 // skill) — todo o resto (Pyramid/Toss/Tumbling/Jump/Dance/Creativity/
 // Formations/Performance) é idêntico ao template All Girl.
 export const IASF_2526_TEAM_CHEER_COED_TEMPLATE_ID =
-  'af202080-8114-4f2e-f46f-000000000001';
+  'af202080-8114-4f2e-a46f-000000000001';
 const TEMPLATE_ID = IASF_2526_TEAM_CHEER_COED_TEMPLATE_ID;
 
 interface Band {
