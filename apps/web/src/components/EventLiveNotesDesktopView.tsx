@@ -40,6 +40,7 @@ interface EventLiveNotesDesktopViewProps {
   isoToday: string;
   nowLabel: string;
   todayPercent: number;
+  onOpenFunctions: () => void;
 }
 
 export function EventLiveNotesDesktopView({
@@ -58,6 +59,7 @@ export function EventLiveNotesDesktopView({
   isoToday,
   nowLabel,
   todayPercent,
+  onOpenFunctions,
 }: EventLiveNotesDesktopViewProps) {
   const navigate = useNavigate();
   // Separada em destaque (card próprio) além de aparecer na lista com a
@@ -119,6 +121,7 @@ export function EventLiveNotesDesktopView({
                     iconClassName="bg-emerald-500/10 text-emerald-600"
                     label="Funções"
                     lines={functionLines.length > 0 ? functionLines : ["—"]}
+                    onExpand={onOpenFunctions}
                   />
                   <MetricTile
                     icon={Percent}

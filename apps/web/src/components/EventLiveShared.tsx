@@ -285,6 +285,7 @@ export function MetricTile({
   value,
   sub,
   lines,
+  onExpand,
 }: {
   icon: typeof CalendarDays;
   iconClassName: string;
@@ -294,9 +295,33 @@ export function MetricTile({
   // horário atual) — só usado no modo `value`, não em `lines`.
   sub?: string;
   lines?: string[];
+  // Chamado ao clicar no card quando `lines` estoura o limite visível
+  // (ver abaixo) — pra abrir um popup com a lista completa (mesmo
+  // padrão de JudgesSummaryDialog/ProgramsSummaryDialog, "clicar pra
+  // ver todos"). Sem efeito se `lines` couber sem truncar.
+  onExpand?: () => void;
 }) {
+  const expandable = !!onExpand && !!lines && lines.length > 3;
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
+    <div
+      role={expandable ? "button" : undefined}
+      tabIndex={expandable ? 0 : undefined}
+      onClick={expandable ? onExpand : undefined}
+      onKeyDown={
+        expandable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onExpand!();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        "rounded-xl border border-border bg-card p-3",
+        expandable && "cursor-pointer transition-colors hover:bg-muted/50",
+      )}
+    >
       <div className="flex items-center gap-1.5">
         <div className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", iconClassName)}>
           <Icon className="size-3.5" />
@@ -308,7 +333,8 @@ export function MetricTile({
         // funções ao mesmo tempo (ex: cabeça-de-chave em várias
         // categorias) faria o card crescer indefinidamente e quebrar o
         // grid de 4 colunas das outras métricas, que têm altura fixa.
-        // Lista completa acessível via `title` (tooltip nativo).
+        // Lista completa acessível clicando o card (`onExpand`, quando
+        // passado) ou via `title` (tooltip nativo) como reforço.
         <div className="mt-1 space-y-0.5" title={lines.length > 3 ? lines.join(", ") : undefined}>
           {(lines.length > 3 ? lines.slice(0, 2) : lines).map((line) => (
             <p key={line} className="truncate text-sm font-bold text-foreground">
@@ -316,7 +342,7 @@ export function MetricTile({
             </p>
           ))}
           {lines.length > 3 && (
-            <p className="truncate text-xs font-medium text-muted-foreground">
+            <p className={cn("truncate text-xs font-medium", expandable ? "text-primary" : "text-muted-foreground")}>
               +{lines.length - 2} mais
             </p>
           )}

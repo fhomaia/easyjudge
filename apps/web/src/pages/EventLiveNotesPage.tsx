@@ -15,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { MobileNavSheet } from "@/components/MobileNavSheet";
+import { FunctionsSummaryDialog } from "@/components/FunctionsSummaryDialog";
 import { EventLiveNotesDesktopView } from "@/components/EventLiveNotesDesktopView";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
@@ -67,6 +68,7 @@ export function EventLiveNotesPage() {
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [functionsDialogOpen, setFunctionsDialogOpen] = useState(false);
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -252,6 +254,7 @@ export function EventLiveNotesPage() {
                   iconClassName="bg-emerald-500/10 text-emerald-600"
                   label="Funções"
                   lines={functionLines.length > 0 ? functionLines : ["—"]}
+                  onExpand={() => setFunctionsDialogOpen(true)}
                 />
                 <MetricTile
                   icon={Percent}
@@ -441,6 +444,13 @@ export function EventLiveNotesPage() {
       isoToday={isoToday}
       nowLabel={nowLabel}
       todayPercent={todayPercent}
+      onOpenFunctions={() => setFunctionsDialogOpen(true)}
+    />
+
+    <FunctionsSummaryDialog
+      open={functionsDialogOpen}
+      onOpenChange={setFunctionsDialogOpen}
+      functions={functionLines}
     />
     </>
   );
