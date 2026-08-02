@@ -26,7 +26,10 @@ export interface SetupStep {
 }
 
 // Montado em EventSetupPage a partir de regulationApi.get(id) (docs) +
-// scoringTemplatesApi.list() (template completo) — ver RegulationPage.
+// eventScoringTemplatesApi.list(id) (2026-08-02: hasCompleteTemplate
+// passou a exigir pelo menos um sistema de pontuação SELECIONADO pra
+// este evento — ver ScoringTemplatesSummarySection — completo, não só
+// existir em algum lugar da biblioteca do usuário) — ver RegulationPage.
 export interface RegulationSummary {
   hasOfficialRegulation: boolean;
   hasSafetyRules: boolean;

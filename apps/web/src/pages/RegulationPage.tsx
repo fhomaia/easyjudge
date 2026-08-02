@@ -140,6 +140,7 @@ export function RegulationPage() {
                 />
 
                 <ScoringTemplatesSummarySection
+                  eventId={id!}
                   templates={templates}
                   onCreated={handleTemplateCreated}
                 />

@@ -828,6 +828,24 @@ export const scoringTemplatesApi = {
     authRequest<void>(`/scoring-templates/${id}`, { method: "DELETE" }),
 };
 
+// Curadoria de "quais sistemas de pontuação valem pra este evento"
+// (tela de Regulamento) — filtra o seletor de categoria.
+export const eventScoringTemplatesApi = {
+  list: (eventId: string) =>
+    authRequest<ScoringTemplate[]>(`/events/${eventId}/scoring-templates`),
+
+  add: (eventId: string, templateId: string) =>
+    authRequest<void>(`/events/${eventId}/scoring-templates`, {
+      method: "POST",
+      body: JSON.stringify({ templateId }),
+    }),
+
+  remove: (eventId: string, templateId: string) =>
+    authRequest<void>(`/events/${eventId}/scoring-templates/${templateId}`, {
+      method: "DELETE",
+    }),
+};
+
 export const scoringCriteriaApi = {
   list: (templateId: string) =>
     authRequest<ScoringCriterion[]>(

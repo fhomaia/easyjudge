@@ -19,12 +19,12 @@ import {
 import {
   ApiError,
   categoriesApi,
+  eventScoringTemplatesApi,
   eventsApi,
   judgesApi,
   judgingApi,
   regulationApi,
   scheduleApi,
-  scoringTemplatesApi,
   usersApi,
   type Category,
   type Event,
@@ -75,7 +75,7 @@ export function EventSetupPage() {
         ),
       );
     regulationApi.get(id).then(setRegulation).catch(() => setRegulation(null));
-    scoringTemplatesApi.list().then(setTemplates).catch(() => setTemplates([]));
+    eventScoringTemplatesApi.list(id).then(setTemplates).catch(() => setTemplates([]));
     categoriesApi.list(id).then(setCategories).catch(() => setCategories([]));
     judgesApi
       .list(id)

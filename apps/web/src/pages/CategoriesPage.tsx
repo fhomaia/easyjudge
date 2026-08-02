@@ -28,6 +28,7 @@ import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import {
   ApiError,
   categoriesApi,
+  eventScoringTemplatesApi,
   eventsApi,
   scoringTemplatesApi,
   teamsApi,
@@ -99,8 +100,8 @@ export function CategoriesPage() {
           err instanceof ApiError ? err.message : "Não foi possível carregar as categorias.",
         ),
       );
-    scoringTemplatesApi
-      .list()
+    eventScoringTemplatesApi
+      .list(id)
       .then((templates) =>
         setScoringTemplates(templates.filter((t) => t.isComplete)),
       )
@@ -110,6 +111,34 @@ export function CategoriesPage() {
       .then(setTeams)
       .catch(() => setTeams([]));
   }, [id]);
+
+  // Uma categoria já criada pode usar um template que foi removido da
+  // seleção do evento depois (ver ScoringTemplatesSummarySection) — a
+  // seleção é só um filtro pra NOVAS atribuições, não desfaz as já
+  // feitas. Sem isso, o seletor de "Sistema de pontuação" no editar
+  // mostraria em branco pra essa categoria, mesmo com um id válido
+  // salvo. Roda de novo sempre que `categories`/`scoringTemplates`
+  // mudam, mas estabiliza sozinho (na segunda vez não acha mais nada
+  // faltando).
+  useEffect(() => {
+    if (!categories) return;
+    const knownIds = new Set(scoringTemplates.map((t) => t.id));
+    const missingIds = [
+      ...new Set(
+        categories
+          .map((c) => c.scoringTemplateId)
+          .filter((templateId): templateId is string => !!templateId && !knownIds.has(templateId)),
+      ),
+    ];
+    if (missingIds.length === 0) return;
+    Promise.all(missingIds.map((templateId) => scoringTemplatesApi.get(templateId).catch(() => null))).then(
+      (fetched) => {
+        const found = fetched.filter((t): t is ScoringTemplate => t !== null);
+        if (found.length === 0) return;
+        setScoringTemplates((prev) => [...prev, ...found]);
+      },
+    );
+  }, [categories, scoringTemplates]);
 
   useEffect(() => {
     setPage(1);

@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ScoringTemplate } from '../entities/scoring-template.entity';
 import { ScoreBand, ScoringCriterion } from '../entities/scoring-criterion.entity';
+import { EventScoringTemplate } from '../entities/event-scoring-template.entity';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 import { CreateScoringTemplateDto } from '../dto/create-scoring-template.dto';
 import { UpdateScoringTemplateDto } from '../dto/update-scoring-template.dto';
@@ -27,6 +28,8 @@ export class ScoringTemplatesService {
     private readonly categoriesRepo: Repository<Category>,
     @InjectRepository(Event)
     private readonly eventsRepo: Repository<Event>,
+    @InjectRepository(EventScoringTemplate)
+    private readonly eventScoringTemplatesRepo: Repository<EventScoringTemplate>,
   ) {}
 
   async create(
@@ -103,7 +106,65 @@ export class ScoringTemplatesService {
       .where('template.createdById = :userId OR template.isSystemTemplate = true', { userId })
       .orderBy('template.updatedAt', 'DESC')
       .getMany();
+    return this.hydrateTemplates(templates);
+  }
 
+  // Templates selecionados pra este evento (curadoria da tela de
+  // Regulamento, ver EventScoringTemplate) — só os visíveis pro
+  // usuário atual (dono OU sistema, mesma regra de
+  // findViewableTemplateOrThrow). Um template PRÓPRIO de outro membro
+  // da equipe do evento pode estar selecionado sem estar visível
+  // aqui — continua funcionando igual já vale hoje pra qualquer outra
+  // leitura, a seleção é compartilhada mas o uso continua por dono.
+  async listSelectedForEvent(
+    aliasId: string,
+    userId: string,
+  ): Promise<ScoringTemplate[]> {
+    const templates = await this.templatesRepo
+      .createQueryBuilder('template')
+      .innerJoin(
+        EventScoringTemplate,
+        'selection',
+        'selection.templateId = template.id AND selection.aliasId = :aliasId',
+        { aliasId },
+      )
+      .loadRelationCountAndMap('template.criteriaCount', 'template.criteria')
+      .where('template.createdById = :userId OR template.isSystemTemplate = true', { userId })
+      .orderBy('template.updatedAt', 'DESC')
+      .getMany();
+    return this.hydrateTemplates(templates);
+  }
+
+  async addToEventSelection(
+    aliasId: string,
+    templateId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.findViewableTemplateOrThrow(templateId, userId);
+    await this.eventScoringTemplatesRepo
+      .createQueryBuilder()
+      .insert()
+      .into(EventScoringTemplate)
+      .values({ aliasId, templateId })
+      .orIgnore()
+      .execute();
+  }
+
+  async removeFromEventSelection(
+    aliasId: string,
+    templateId: string,
+  ): Promise<void> {
+    await this.eventScoringTemplatesRepo.delete({ aliasId, templateId });
+  }
+
+  // Preenche os campos computados (criteriaCount já vem da query
+  // chamadora via loadRelationCountAndMap) — distributedScore/
+  // isComplete/isLocked, compartilhado entre findAllForUser e
+  // listSelectedForEvent pra não duplicar a lógica de
+  // hasEmptyGroup/hasStaleScoreBands/getLockedTemplateIds.
+  private async hydrateTemplates(
+    templates: ScoringTemplate[],
+  ): Promise<ScoringTemplate[]> {
     if (templates.length === 0) return templates;
 
     const templateIds = templates.map((t) => t.id);
