@@ -17,7 +17,14 @@
       property="og:description"
       content="Sistema completo para organização de competições de cheerleading. Gerencie categorias, regulamentos, equipes, jurados, cronogramas e resultados em um só lugar."
     />
-    <meta property="og:image" content="https://cheercup.com.br/logo.png" />
+    <!-- Versão comprimida separada do logo.png usado no resto do app
+         (og-image.jpg, ~110KB) — o crawler do WhatsApp costuma ser bem
+         mais rígido que o do Facebook Debugger com imagem pesada, o
+         logo.png original (1254x1254, 1.27MB) arriscava falhar
+         silenciosamente ("sem imagem") mesmo com o Debugger passando. -->
+    <meta property="og:image" content="https://cheercup.com.br/og-image.jpg" />
+    <meta property="og:image:width" content="1000" />
+    <meta property="og:image:height" content="1000" />
     <meta property="og:url" content="https://cheercup.com.br" />
   </head>
   <body>
