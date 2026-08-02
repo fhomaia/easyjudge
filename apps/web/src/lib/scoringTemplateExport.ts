@@ -199,6 +199,11 @@ export function exportScoringTemplateToPdf(
   doc.text(template.name, pageWidth / 2, MARGIN + 18, { align: "center" });
 
   let cursorY = MARGIN + 42;
+  if (template.source) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.text(`Fonte: ${template.source}`, pageWidth / 2, MARGIN + 32, { align: "center" });
+  }
   doc.setFontSize(9);
   doc.text(
     "Campeonato: ________________________________________________________________",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, FileText, Lock, Pencil } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Award, CheckCircle2, Download, FileSpreadsheet, FileText, Lock, Pencil } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ScoringStatCards } from "@/components/ScoringStatCards";
@@ -193,6 +193,12 @@ export function ScoringTemplateBuilderPage() {
     : false;
   const deleteDescendantCount = deleteTarget ? countDescendants(deleteTarget.id) : 0;
   const isLocked = template?.isLocked ?? false;
+  const isSystemTemplate = template?.isSystemTemplate ?? false;
+  // Modelo de sistema também é somente-leitura, pelo mesmo motivo de
+  // isLocked (edição/exclusão já é barrada no backend por ownership,
+  // ver findOwnTemplateOrThrow) — reusa toda a UI de readOnly já
+  // existente pra isLocked.
+  const readOnly = isLocked || isSystemTemplate;
   const staleScoreBands = criteria ? hasStaleScoreBands(criteria) : false;
 
   return (
@@ -246,7 +252,7 @@ export function ScoringTemplateBuilderPage() {
           {template && criteria !== null && (
             <div className="mt-4 grid gap-6">
               <div>
-                {editingName && !isLocked ? (
+                {editingName && !readOnly ? (
                   <Input
                     autoFocus
                     value={nameDraft}
@@ -257,12 +263,12 @@ export function ScoringTemplateBuilderPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => !isLocked && setEditingName(true)}
-                    disabled={isLocked}
+                    onClick={() => !readOnly && setEditingName(true)}
+                    disabled={readOnly}
                     className="group flex items-center gap-2 text-2xl font-semibold text-foreground disabled:cursor-not-allowed"
                   >
                     {template.name}
-                    {!isLocked && (
+                    {!readOnly && (
                       <Pencil className="size-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                     )}
                   </button>
@@ -271,6 +277,17 @@ export function ScoringTemplateBuilderPage() {
                   Crie e organize os critérios que irão compor a pontuação das categorias.
                 </p>
               </div>
+
+              {isSystemTemplate && (
+                <div className="flex items-start gap-3 rounded-lg border border-blue-300 bg-blue-50 p-4 text-sm text-blue-900">
+                  <Award className="mt-0.5 size-4 shrink-0" />
+                  <p>
+                    Modelo oficial{template.source ? ` — Fonte: ${template.source}` : ""}. Não é
+                    de autoria da Cheer Cup e não pode ser editado, mas você pode cloná-lo a
+                    partir da tela de criação de um novo template.
+                  </p>
+                </div>
+              )}
 
               {isLocked && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -283,7 +300,7 @@ export function ScoringTemplateBuilderPage() {
                 </div>
               )}
 
-              {!isLocked && staleScoreBands && (
+              {!readOnly && staleScoreBands && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <p>
@@ -316,7 +333,7 @@ export function ScoringTemplateBuilderPage() {
                     onAddChild={handleAddChild}
                     onDelete={setDeleteTarget}
                     onMove={handleMove}
-                    readOnly={isLocked}
+                    readOnly={readOnly}
                   />
                 </div>
                 <EditCriterionPanel
@@ -326,7 +343,7 @@ export function ScoringTemplateBuilderPage() {
                   hasChildren={selectedHasChildren}
                   onUpdated={handleCriterionUpdated}
                   onRequestDelete={setDeleteTarget}
-                  readOnly={isLocked}
+                  readOnly={readOnly}
                 />
               </div>
 

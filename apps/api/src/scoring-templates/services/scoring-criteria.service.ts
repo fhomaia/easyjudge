@@ -118,7 +118,9 @@ export class ScoringCriteriaService {
     templateId: string,
     userId: string,
   ): Promise<ScoringCriterion[]> {
-    await this.templatesService.findOwnTemplateOrThrow(templateId, userId);
+    // Leitura, não escrita — precisa liberar modelo de sistema também
+    // (builder em modo somente-leitura, botão "Baixar súmula" do card).
+    await this.templatesService.findViewableTemplateOrThrow(templateId, userId);
     return this.criteriaRepo.find({
       where: { templateId },
       order: { order: 'ASC' },

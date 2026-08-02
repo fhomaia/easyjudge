@@ -35,7 +35,10 @@ export class ScoringTemplatesService {
   ): Promise<ScoringTemplate> {
     const { cloneFromId, ...templateData } = dto;
     if (cloneFromId) {
-      await this.findOwnTemplateOrThrow(cloneFromId, createdById);
+      // Clonar de um template de sistema (não só dos próprios) é o
+      // caminho pretendido pra usar um modelo oficial — ver
+      // findViewableTemplateOrThrow.
+      await this.findViewableTemplateOrThrow(cloneFromId, createdById);
     }
 
     const template = this.templatesRepo.create({
@@ -96,7 +99,7 @@ export class ScoringTemplatesService {
     const templates = await this.templatesRepo
       .createQueryBuilder('template')
       .loadRelationCountAndMap('template.criteriaCount', 'template.criteria')
-      .where('template.createdById = :userId', { userId })
+      .where('template.createdById = :userId OR template.isSystemTemplate = true', { userId })
       .orderBy('template.updatedAt', 'DESC')
       .getMany();
 
@@ -141,7 +144,7 @@ export class ScoringTemplatesService {
   }
 
   async findOneForUser(id: string, userId: string): Promise<ScoringTemplate> {
-    const template = await this.findOwnTemplateOrThrow(id, userId);
+    const template = await this.findViewableTemplateOrThrow(id, userId);
     const lockedTemplateIds = await this.getLockedTemplateIds([id]);
     template.isLocked = lockedTemplateIds.has(id);
     return template;
@@ -180,6 +183,27 @@ export class ScoringTemplatesService {
     const template = await this.templatesRepo.findOneBy({ id });
     if (!template) throw new NotFoundException('Template não encontrado');
     if (template.createdById !== userId) {
+      throw new ForbiddenException('Você não tem acesso a este template');
+    }
+    return template;
+  }
+
+  // Dono OU modelo de sistema (isSystemTemplate) — usado nos pontos de
+  // LEITURA que qualquer usuário precisa alcançar num template de
+  // sistema (ver o carimbo/comentário de findOwnTemplateOrThrow):
+  // buscar pra visualizar/baixar súmula (findOneForUser) e validar
+  // `cloneFromId` no create() (clonar um modelo de sistema pra biblioteca
+  // própria). NUNCA usado pelos métodos de escrita (update/remove/
+  // critérios) — esses continuam em findOwnTemplateOrThrow de propósito,
+  // é o que barra edição/exclusão de um modelo de sistema por qualquer
+  // usuário real.
+  async findViewableTemplateOrThrow(
+    id: string,
+    userId: string,
+  ): Promise<ScoringTemplate> {
+    const template = await this.templatesRepo.findOneBy({ id });
+    if (!template) throw new NotFoundException('Template não encontrado');
+    if (template.createdById !== userId && !template.isSystemTemplate) {
       throw new ForbiddenException('Você não tem acesso a este template');
     }
     return template;

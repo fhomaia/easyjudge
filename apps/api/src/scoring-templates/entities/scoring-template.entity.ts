@@ -39,6 +39,23 @@ export class ScoringTemplate {
   @JoinColumn({ name: 'created_by_id' })
   createdBy: User;
 
+  // Modelo de sistema (2026-08-02): pertence a uma conta reservada, não
+  // a um usuário real — ver SYSTEM_SCORING_TEMPLATES_OWNER_ID na
+  // migration AddSystemScoringTemplates. Nunca editável/excluível por
+  // ninguém (createdById aponta pra essa conta, que ninguém loga),
+  // visível/clonável por qualquer usuário (ScoringTemplatesService.
+  // findAllForUser/findViewableTemplateOrThrow). Não faz parte de
+  // Create/UpdateScoringTemplateDto — só setável via migration.
+  @Column({ name: 'is_system_template', default: false })
+  isSystemTemplate: boolean;
+
+  // Nome do órgão de origem (ex. "International Cheer Union") — os
+  // modelos de sistema são de autoria de órgãos oficiais da comunidade
+  // cheer, não da Cheer Cup; mostrado no badge do card e no banner de
+  // atribuição do builder/PDF exportado. Nulo pra todo template comum.
+  @Column({ type: 'varchar', nullable: true })
+  source: string | null;
+
   @OneToMany(() => ScoringCriterion, (criterion) => criterion.template)
   criteria: ScoringCriterion[];
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Calculator, Download, FileSpreadsheet, FileText, Lock, Settings, Trash2 } from "lucide-react";
+import { Award, Calculator, Download, FileSpreadsheet, FileText, Lock, Settings, Trash2 } from "lucide-react";
 import { ScoringTemplateStatusBadge } from "@/components/ScoringTemplateStatusBadge";
 import {
   DropdownMenu,
@@ -58,14 +58,24 @@ export function ScoringTemplateCard({
             <Calculator className="size-5" />
           </div>
           <ScoringTemplateStatusBadge isComplete={template.isComplete ?? false} />
-          {template.isLocked && (
+          {template.isSystemTemplate ? (
             <span
-              title="Em uso por um evento que já saiu da fase de configuração — não pode ser editado"
-              className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+              title={`Modelo oficial${template.source ? ` — ${template.source}` : ""}. Não pode ser editado, mas pode ser clonado ao criar um novo template.`}
+              className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
             >
-              <Lock className="size-3" />
-              Travado
+              <Award className="size-3" />
+              {template.source ?? "Modelo oficial"}
             </span>
+          ) : (
+            template.isLocked && (
+              <span
+                title="Em uso por um evento que já saiu da fase de configuração — não pode ser editado"
+                className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+              >
+                <Lock className="size-3" />
+                Travado
+              </span>
+            )
           )}
         </div>
         {(onEdit || onDelete) && (
@@ -100,17 +110,23 @@ export function ScoringTemplateCard({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!template.isLocked) onEdit(template);
+                  if (!template.isLocked && !template.isSystemTemplate) onEdit(template);
                 }}
-                disabled={template.isLocked}
+                disabled={template.isLocked || template.isSystemTemplate}
                 aria-label="Editar dados do template"
-                title={template.isLocked ? "Travado — em uso por um evento em andamento" : undefined}
+                title={
+                  template.isSystemTemplate
+                    ? "Modelo oficial — não pode ser editado, mas pode ser clonado ao criar um novo template"
+                    : template.isLocked
+                      ? "Travado — em uso por um evento em andamento"
+                      : undefined
+                }
                 className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <Settings className="size-4" />
               </button>
             )}
-            {onDelete && (
+            {onDelete && !template.isSystemTemplate && (
               <button
                 type="button"
                 onClick={(e) => {

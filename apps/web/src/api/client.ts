@@ -743,6 +743,8 @@ export interface ScoringTemplate {
   distributedScore?: number;
   isComplete?: boolean;
   isLocked?: boolean;
+  isSystemTemplate: boolean;
+  source: string | null;
 }
 
 export interface ScoreBand {
