@@ -219,7 +219,14 @@ export function ScheduleTimeline({
   for (let m = day.startMinutes; m <= day.endMinutes; m += 5) ticks.push(m);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto rounded-xl border border-border/60 bg-card">
+    // min-h-72 (18rem = 288px) garante o suficiente pra mostrar pelo
+    // menos 4 recursos (cabeçalho de 32px + 4 linhas de min-h-16/64px
+    // cada, ver ResourceRow abaixo) mesmo em telas de tablet onde o
+    // ancestor `min-h-[70vh]` (SchedulePage) acaba sobrando pouco
+    // espaço pra esta timeline depois do resto do layout — sem esse
+    // piso explícito, `min-h-0` deixava a timeline encolher livremente
+    // até quase sumir nesses casos.
+    <div className="flex min-h-72 min-w-0 flex-1 flex-col overflow-auto rounded-xl border border-border/60 bg-card">
       <div className="flex flex-1 flex-col" style={{ width: totalWidth + 144 }}>
         <div className="flex shrink-0 border-b border-border/60">
           <div className="sticky left-0 z-20 w-36 shrink-0 border-r border-border/40 bg-card" />

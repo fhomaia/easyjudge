@@ -66,6 +66,19 @@ export class UsersService {
       .getOne();
   }
 
+  // Mesmo raciocínio de findByEmailWithPassword (select:false na
+  // entidade exige addSelect explícito), combinado com a comparação
+  // sem diferenciar maiúsculas/minúsculas de findByEmailInsensitive —
+  // usado por AuthService.forgotPassword pra checar se a conta já tem
+  // senha definida (cadastro concluído).
+  async findByEmailInsensitiveWithPassword(email: string): Promise<User | null> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('LOWER(user.email) = LOWER(:email)', { email })
+      .getOne();
+  }
+
   // Usado no login: precisa trazer o passwordHash mesmo com select:false na entidade.
   async findByEmailWithPassword(email: string): Promise<User | null> {
     return this.usersRepository

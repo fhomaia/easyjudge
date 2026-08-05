@@ -49,10 +49,11 @@ export class MailService {
       subject: redirected
         ? `[teste: ${email}] Seu código de verificação Cheer Cup`
         : 'Seu código de verificação Cheer Cup',
-      html: buildVerificationEmailHtml(
-        code,
-        redirected ? email : null,
-      ),
+      html: buildVerificationEmailHtml(code, redirected ? email : null, {
+        heading: 'Confirme seu cadastro',
+        description:
+          'Use o código abaixo para confirmar seu email e continuar seu cadastro na Cheer Cup.',
+      }),
     });
 
     if (error) {
@@ -66,6 +67,45 @@ export class MailService {
       redirected
         ? `Código de verificação enviado para ${recipient} (cadastro de ${email})`
         : `Código de verificação enviado para ${recipient}`,
+    );
+  }
+
+  // Código de redefinição de senha — mesmo template visual do código de
+  // verificação de cadastro (ver buildVerificationEmailHtml), só muda o
+  // texto de cabeçalho/descrição.
+  async sendPasswordResetCode(email: string, code: string): Promise<void> {
+    if (!this.resend) {
+      this.logger.log(`[STUB] Enviando código de redefinição ${code} para ${email}`);
+      return;
+    }
+
+    const recipient = this.overrideTo ?? email;
+    const redirected = recipient !== email;
+
+    const { error } = await this.resend.emails.send({
+      from: this.fromAddress,
+      to: recipient,
+      subject: redirected
+        ? `[teste: ${email}] Redefinição de senha Cheer Cup`
+        : 'Redefinição de senha Cheer Cup',
+      html: buildVerificationEmailHtml(code, redirected ? email : null, {
+        heading: 'Redefinir sua senha',
+        description:
+          'Use o código abaixo para confirmar que é você e escolher uma nova senha na Cheer Cup.',
+      }),
+    });
+
+    if (error) {
+      this.logger.error(
+        `Falha ao enviar email de redefinição para ${recipient}: ${error.message}`,
+      );
+      throw new Error('Não foi possível enviar o email de redefinição de senha.');
+    }
+
+    this.logger.log(
+      redirected
+        ? `Código de redefinição enviado para ${recipient} (conta de ${email})`
+        : `Código de redefinição enviado para ${recipient}`,
     );
   }
 
@@ -134,6 +174,7 @@ function escapeHtml(value: string): string {
 function buildVerificationEmailHtml(
   code: string,
   testRecipientEmail: string | null,
+  copy: { heading: string; description: string },
 ): string {
   const testBanner = testRecipientEmail
     ? `<tr><td style="padding:0 40px;">
@@ -160,9 +201,9 @@ function buildVerificationEmailHtml(
             ${testBanner}
             <tr>
               <td style="padding:40px 40px 8px;text-align:center;">
-                <h1 style="margin:0 0 12px;font-size:20px;color:#14293d;">Confirme seu cadastro</h1>
+                <h1 style="margin:0 0 12px;font-size:20px;color:#14293d;">${escapeHtml(copy.heading)}</h1>
                 <p style="margin:0;font-size:14px;line-height:1.5;color:#3d6485;">
-                  Use o código abaixo para confirmar seu email e continuar seu cadastro na Cheer Cup.
+                  ${escapeHtml(copy.description)}
                 </p>
               </td>
             </tr>

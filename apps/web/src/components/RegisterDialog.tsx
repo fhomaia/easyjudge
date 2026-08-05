@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Progress } from "@/components/ui/progress";
 import { FormError } from "@/components/FormError";
+import { PasswordInput } from "@/components/PasswordInput";
 import { DatePicker } from "@/components/DatePicker";
 import { BrandBackdrop } from "@/components/BrandBackdrop";
 import {
@@ -23,6 +24,7 @@ import {
 import { useAuthStore } from "@/store/auth";
 import { formatCpf, formatCnpj } from "@/lib/masks";
 import { getMaxBirthDate } from "@/lib/birthDate";
+import { PASSWORD_RULES, isPasswordStrong } from "@/lib/passwordRules";
 import {
   ROLE_LABELS,
   SIGNUP_ROLE_LABELS,
@@ -96,28 +98,6 @@ function isOptionalCpfOnlyRole(role: SignupRole): boolean {
 }
 
 const LOCKED_STEPS: StepKey[] = ["verify", "password"];
-
-// Mesma regra do backend (common/validators/strong-password.validator.ts)
-// — validada em tempo real aqui pra o usuário ver o erro assim que
-// termina de digitar, sem precisar tentar enviar primeiro.
-const PASSWORD_RULES: {
-  key: string;
-  label: string;
-  test: (v: string) => boolean;
-}[] = [
-  { key: "length", label: "Mínimo 8 caracteres", test: (v) => v.length >= 8 },
-  { key: "upper", label: "Uma letra maiúscula", test: (v) => /[A-Z]/.test(v) },
-  { key: "number", label: "Um número", test: (v) => /\d/.test(v) },
-  {
-    key: "special",
-    label: "Um caractere especial",
-    test: (v) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(v),
-  },
-];
-
-function isPasswordStrong(value: string): boolean {
-  return PASSWORD_RULES.every((rule) => rule.test(value));
-}
 
 // Opção de seleção única em formato "caixa ampla" (estilo Typeform):
 // todas as opções visíveis ao mesmo tempo, sem dropdown escondendo nada.
@@ -848,10 +828,9 @@ export function RegisterDialog({
                     </h3>
 
                     <div className="grid gap-2.5">
-                      <Input
+                      <PasswordInput
                         autoFocus
                         aria-label="Senha"
-                        type="password"
                         value={form.password}
                         onChange={(e) => update("password", e.target.value)}
                         required
@@ -882,9 +861,8 @@ export function RegisterDialog({
                     </div>
 
                     <div className="grid gap-2.5">
-                      <Input
+                      <PasswordInput
                         aria-label="Confirmar senha"
-                        type="password"
                         value={form.confirmPassword}
                         onChange={(e) =>
                           update("confirmPassword", e.target.value)

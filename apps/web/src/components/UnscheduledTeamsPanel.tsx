@@ -21,7 +21,12 @@ function UnscheduledItem({ pair }: { pair: UnscheduledPair }) {
           : undefined
       }
       className={cn(
-        "flex cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
+        // touch-none: sem isso, o navegador trata o toque inicial como
+        // scroll da lista (que já é `overflow-y-auto`) em vez de
+        // iniciar o arraste do dnd-kit — mesma classe que ScheduleEntryCard
+        // já usa pros cards dentro da timeline (por isso funcionava lá e
+        // não aqui).
+        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >

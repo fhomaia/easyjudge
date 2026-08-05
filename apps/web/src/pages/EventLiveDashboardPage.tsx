@@ -300,15 +300,18 @@ export function EventLiveDashboardPage() {
     return Math.round((latest.startedAt.getTime() - scheduledDate.getTime()) / 60_000);
   }, [days, startedPresentations]);
 
+  // "Atraso" negativo (apresentação começou adiantada) não é atraso de
+  // verdade — mostra "No horário" em vez de um número negativo (pedido
+  // do usuário).
+  const clampedDelayMinutes = delayMinutes === null ? null : Math.max(0, delayMinutes);
   const delayLabel =
-    delayMinutes === null
+    clampedDelayMinutes === null
       ? "—"
-      : delayMinutes > 0
-        ? `+${delayMinutes} min`
-        : delayMinutes < 0
-          ? `${delayMinutes} min`
-          : "No horário";
-  const delayProgress = delayMinutes === null ? 0 : Math.min(1, Math.max(0, delayMinutes / 30));
+      : clampedDelayMinutes > 0
+        ? `+${clampedDelayMinutes} min`
+        : "No horário";
+  const delayProgress =
+    clampedDelayMinutes === null ? 0 : Math.min(1, clampedDelayMinutes / 30);
 
   function handleLogout() {
     logout();

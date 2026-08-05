@@ -40,7 +40,10 @@ function ComponentBlock({ def }: { def: ComponentBlockDef }) {
           : undefined
       }
       className={cn(
-        "flex cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
+        // touch-none: mesmo raciocínio de UnscheduledTeamsPanel — sem
+        // isso o navegador intercepta o toque inicial como scroll em
+        // vez de deixar o dnd-kit iniciar o arraste.
+        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >

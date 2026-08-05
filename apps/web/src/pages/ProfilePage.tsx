@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/DatePicker";
 import { FormError } from "@/components/FormError";
+import { PasswordInput } from "@/components/PasswordInput";
 import { formatCpf, formatCnpj } from "@/lib/masks";
 import { getMaxBirthDate } from "@/lib/birthDate";
 import { getAccountLabel } from "@/lib/roleLabels";
@@ -564,9 +565,8 @@ function ChangePasswordDialog({
         <form onSubmit={handleSubmit} className="grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor="profile-current-password">Senha atual</Label>
-            <Input
+            <PasswordInput
               id="profile-current-password"
-              type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
@@ -574,9 +574,8 @@ function ChangePasswordDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="profile-new-password">Nova senha</Label>
-            <Input
+            <PasswordInput
               id="profile-new-password"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -586,9 +585,8 @@ function ChangePasswordDialog({
             <Label htmlFor="profile-confirm-password">
               Confirmar nova senha
             </Label>
-            <Input
+            <PasswordInput
               id="profile-confirm-password"
-              type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
@@ -729,9 +727,8 @@ function DeactivateAccountDialog({
         <form onSubmit={handleSubmit} className="grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor="deactivate-password">Senha atual</Label>
-            <Input
+            <PasswordInput
               id="deactivate-password"
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -805,9 +802,8 @@ function DeleteAccountDialog({
         <form onSubmit={handleSubmit} className="grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor="delete-account-password">Senha atual</Label>
-            <Input
+            <PasswordInput
               id="delete-account-password"
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

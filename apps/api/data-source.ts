@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import { config } from 'dotenv';
 import { User } from './src/users/entities/user.entity';
 import { EmailVerification } from './src/auth/entities/email-verification.entity';
+import { PasswordReset } from './src/auth/entities/password-reset.entity';
 import { Event } from './src/events/entities/event.entity';
 import { EventMember } from './src/events/entities/event-member.entity';
 import { Category } from './src/categories/entities/category.entity';
@@ -31,6 +32,7 @@ export default new DataSource({
   entities: [
     User,
     EmailVerification,
+    PasswordReset,
     Event,
     EventMember,
     Category,

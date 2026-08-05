@@ -367,20 +367,6 @@ export function EventLiveScoringDesktopView({
         </div>
       </main>
 
-      {(sheet.groups.length > 0 || sheet.isLegalityJudge) && (
-        <div className="bg-background px-6 py-3">
-          <ScoringSummary
-            totalScore={totalScore}
-            hasCriteria={sheet.groups.length > 0}
-            deductionsTotal={deductionsTotal}
-            isLegalityJudge={sheet.isLegalityJudge}
-            finalResult={finalResult}
-            maxScore={maxScore}
-            variant="desktop"
-          />
-        </div>
-      )}
-
       <footer className="flex items-center justify-between gap-3 border-t border-border bg-card px-6 py-4">
         <button
           type="button"
@@ -391,6 +377,19 @@ export function EventLiveScoringDesktopView({
           <ArrowLeft className="size-4" />
           Equipe anterior
         </button>
+
+        {(sheet.groups.length > 0 || sheet.isLegalityJudge) && (
+          <ScoringSummary
+            totalScore={totalScore}
+            hasCriteria={sheet.groups.length > 0}
+            deductionsTotal={deductionsTotal}
+            isLegalityJudge={sheet.isLegalityJudge}
+            finalResult={finalResult}
+            maxScore={maxScore}
+            variant="compact"
+          />
+        )}
+
         <div className="flex items-center gap-3">
           {!sheetComplete && canWrite && (
             <p className="text-xs font-medium text-amber-600">Faltam {missingParts.join(" e ")} pra lançar as notas.</p>

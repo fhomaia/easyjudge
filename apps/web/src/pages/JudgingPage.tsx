@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { SpecialRolesCard } from "@/components/SpecialRolesCard";
+import { SpecialRolesCard, ROLE_DROP_PREFIX } from "@/components/SpecialRolesCard";
 import { JudgingCriterionTree } from "@/components/JudgingCriterionTree";
 import { JudgeLibraryPanel } from "@/components/JudgeLibraryPanel";
 import { CreateJudgeDialog } from "@/components/CreateJudgeDialog";
@@ -398,11 +398,34 @@ export function JudgingPage() {
       });
   }
 
+  // Espelha o branch de "legality_judge substitui / head_judge acumula"
+  // já usado em handleToggleJudge (popup de clique) — arrastar um
+  // jurado é sempre uma ADIÇÃO (não tem como "desmarcar" arrastando).
+  function assignJudgeToRole(role: SpecialJudgeRole, resourceId: string, judgeId: string) {
+    if (!id) return;
+    const current = judgeIdsByRoleResource.get(assignmentKey(role, resourceId)) ?? [];
+    if (current.includes(judgeId)) return;
+    const next = role === "legality_judge" ? [judgeId] : [...current, judgeId];
+    patchRoleAssignments(role, resourceId, next);
+    judgingApi
+      .setSpecialRoleJudges(id, role, resourceId, next)
+      .catch(() => refetchSpecialRoles());
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
     const judgeId = String(active.id);
-    const parsed = parseAssignmentKey(String(over.id));
+    const overIdRaw = String(over.id);
+
+    if (overIdRaw.startsWith(ROLE_DROP_PREFIX)) {
+      const parsedRole = parseAssignmentKey(overIdRaw.slice(ROLE_DROP_PREFIX.length));
+      if (!parsedRole) return;
+      assignJudgeToRole(parsedRole.criterionId as SpecialJudgeRole, parsedRole.resourceId, judgeId);
+      return;
+    }
+
+    const parsed = parseAssignmentKey(overIdRaw);
     if (!parsed) return;
     const { criterionId, resourceId } = parsed;
     const criterion = criteria.find((c) => c.id === criterionId);

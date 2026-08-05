@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/FormError";
+import { PasswordInput } from "@/components/PasswordInput";
 import { RegisterDialog } from "@/components/RegisterDialog";
+import { ForgotPasswordDialog } from "@/components/ForgotPasswordDialog";
 import { BrandBackdrop } from "@/components/BrandBackdrop";
 import { consumePendingJoinCode } from "@/lib/pendingJoinCode";
 import { authApi, eventsApi, ApiError } from "@/api/client";
@@ -29,12 +31,17 @@ async function joinPendingEventIfAny() {
 export function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  // Setado pelo ForgotPasswordDialog ao concluir a redefinição com
+  // sucesso — dialog fecha e essa mensagem aparece na própria LoginPage
+  // (nunca há navegação de rota nesse fluxo, ver ForgotPasswordDialog).
+  const [passwordReset, setPasswordReset] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   // Token fica em espera aqui até a animação do raio terminar — só
   // então chama `login()` de verdade (ver comentário no JSX abaixo,
   // sobre por que essa ordem importa).
@@ -98,6 +105,11 @@ export function LoginPage() {
           <form onSubmit={handleSubmit}>
             <CardContent className="grid gap-4 pt-5 sm-tall:gap-6 sm-tall:pt-8 short:gap-2 short:pt-2">
               <FormError message={error} />
+              {passwordReset && (
+                <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                  Senha redefinida. Entre com sua nova senha.
+                </p>
+              )}
               <div className="grid gap-2.5 short:gap-1">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -111,10 +123,18 @@ export function LoginPage() {
                 />
               </div>
               <div className="grid gap-2.5 short:gap-1">
-                <Label htmlFor="password">Senha</Label>
-                <Input
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <button
+                    type="button"
+                    onClick={() => setForgotPasswordOpen(true)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Esqueceu sua senha?
+                  </button>
+                </div>
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -148,6 +168,12 @@ export function LoginPage() {
         onSuccess={() => {
           void joinPendingEventIfAny().then(() => navigate("/"));
         }}
+      />
+
+      <ForgotPasswordDialog
+        open={forgotPasswordOpen}
+        onOpenChange={setForgotPasswordOpen}
+        onResetSuccess={() => setPasswordReset(true)}
       />
     </div>
   );

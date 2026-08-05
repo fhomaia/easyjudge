@@ -1,3 +1,4 @@
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { Crown, Scale, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -5,6 +6,16 @@ import { getAvatarColor } from "@/lib/avatarColor";
 import { assignmentKey } from "@/lib/judgingAssignments";
 import { SPECIAL_JUDGE_ROLES } from "@/lib/specialJudgeRoles";
 import type { Judge, SpecialJudgeRole } from "@/api/client";
+
+// Prefixo dos ids soltáveis deste card — precisa ser distinto do
+// `assignmentKey` usado pela árvore de critérios (que também é
+// "a::b") pra JudgingPage.handleDragEnd saber rotear pro branch certo
+// (atribuir função especial em vez de atribuir critério).
+export const ROLE_DROP_PREFIX = "role:";
+
+export function roleDropId(role: SpecialJudgeRole, resourceId: string): string {
+  return `${ROLE_DROP_PREFIX}${assignmentKey(role, resourceId)}`;
+}
 
 function getJudgeInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -27,6 +38,64 @@ const ROLE_COLORS: Record<SpecialJudgeRole, string> = {
   legality_judge: "#3b82f6",
   head_judge: "#f59e0b",
 };
+
+// Uma célula por função×recurso — extraída em componente próprio (não
+// inline no `.map`) porque precisa chamar `useDroppable`/`useDndContext`,
+// e Hooks não podem ser chamados dentro de um callback de array. Mesmo
+// padrão de ResourceAssignmentCell em JudgingCriterionRow.tsx.
+function RoleAssignmentCell({
+  role,
+  resourceId,
+  judges,
+  selected,
+  onSelectCell,
+}: {
+  role: SpecialJudgeRole;
+  resourceId: string;
+  judges: Judge[];
+  selected: boolean;
+  onSelectCell: (role: SpecialJudgeRole, resourceId: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: roleDropId(role, resourceId) });
+  // Mesmo destaque de "área de soltura" da árvore de critérios: assim
+  // que QUALQUER arraste começa, toda célula válida já fica evidenciada
+  // (não só a que estiver embaixo do cursor no momento).
+  const { active } = useDndContext();
+  const isDragActive = active != null;
+  const visibleJudges = judges.slice(0, MAX_VISIBLE_CHIPS);
+  const overflowCount = judges.length - visibleJudges.length;
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={() => onSelectCell(role, resourceId)}
+      className={cn(
+        "flex min-h-9 items-center rounded-md px-1.5 transition-colors hover:bg-muted/40",
+        selected && "bg-primary/[0.06]",
+        isDragActive && !isOver && "bg-primary/5 ring-1 ring-inset ring-primary/20",
+        isOver && "bg-primary/10 ring-1 ring-inset ring-primary/40",
+      )}
+    >
+      {visibleJudges.map((judge) => (
+        <span
+          key={judge.id}
+          title={judge.name}
+          style={{ backgroundColor: getAvatarColor(judge.id) }}
+          className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-card first:ml-0"
+        >
+          {getJudgeInitials(judge.name)}
+        </span>
+      ))}
+      {overflowCount > 0 && (
+        <span className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground ring-2 ring-card">
+          +{overflowCount}
+        </span>
+      )}
+      {judges.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+    </button>
+  );
+}
 
 interface SpecialRolesCardProps {
   resources: Array<{ id: string; name: string }>;
@@ -55,7 +124,7 @@ export function SpecialRolesCard({
       <h2 className="text-sm font-semibold text-foreground">
         Funções especiais{" "}
         <span className="font-normal text-muted-foreground">
-          (clique no recurso para atribuir o jurado responsável)
+          (clique no recurso ou arraste um jurado para atribuir)
         </span>
       </h2>
 
@@ -110,39 +179,17 @@ export function SpecialRolesCard({
                 const judges = (judgeIdsByRoleResource.get(assignmentKey(role, resource.id)) ?? [])
                   .map((id) => judgesById.get(id))
                   .filter((j): j is Judge => !!j);
-                const visibleJudges = judges.slice(0, MAX_VISIBLE_CHIPS);
-                const overflowCount = judges.length - visibleJudges.length;
                 const selected = selectedRole === role && selectedResourceId === resource.id;
 
                 return (
-                  <button
+                  <RoleAssignmentCell
                     key={resource.id}
-                    type="button"
-                    onClick={() => onSelectCell(role, resource.id)}
-                    className={cn(
-                      "flex min-h-9 items-center rounded-md px-1.5 transition-colors hover:bg-muted/40",
-                      selected && "bg-primary/[0.06]",
-                    )}
-                  >
-                    {visibleJudges.map((judge) => (
-                      <span
-                        key={judge.id}
-                        title={judge.name}
-                        style={{ backgroundColor: getAvatarColor(judge.id) }}
-                        className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-card first:ml-0"
-                      >
-                        {getJudgeInitials(judge.name)}
-                      </span>
-                    ))}
-                    {overflowCount > 0 && (
-                      <span className="-ml-2 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground ring-2 ring-card">
-                        +{overflowCount}
-                      </span>
-                    )}
-                    {judges.length === 0 && (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </button>
+                    role={role}
+                    resourceId={resource.id}
+                    judges={judges}
+                    selected={selected}
+                    onSelectCell={onSelectCell}
+                  />
                 );
               })}
             </div>

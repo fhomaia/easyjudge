@@ -14,7 +14,11 @@ interface ScoringSummaryProps {
   isLegalityJudge: boolean;
   finalResult: number;
   maxScore: number;
-  variant?: "mobile" | "desktop";
+  // "compact": versão de uma linha só, sem card próprio — pensada pra
+  // caber dentro do rodapé de ação (entre "Equipe anterior" e o aviso
+  // de critérios faltando), a pedido do usuário (o card grande de
+  // antes ocupava espaço demais ali).
+  variant?: "mobile" | "desktop" | "compact";
   className?: string;
 }
 
@@ -35,6 +39,37 @@ export function ScoringSummary({
   // verdade (maxScore > 0); sem eles (jurado só de legalidade) fica
   // sem base de comparação, não mostra.
   const utilizationPercent = hasCriteria && maxScore > 0 ? (finalResult / maxScore) * 100 : null;
+
+  if (variant === "compact") {
+    return (
+      <div className={cn("flex items-center gap-4 text-center", className)}>
+        {hasCriteria && (
+          <div>
+            <p className="text-sm font-bold tabular-nums text-foreground">{totalScore.toFixed(1)}</p>
+            <p className="text-[10px] text-muted-foreground">Total</p>
+          </div>
+        )}
+        {isLegalityJudge && (
+          <div>
+            <p className="text-sm font-bold tabular-nums text-red-600">{deductionsTotal.toFixed(1)}</p>
+            <p className="text-[10px] text-muted-foreground">Deduções</p>
+          </div>
+        )}
+        <div>
+          <p className="text-sm font-bold tabular-nums text-primary">{finalResult.toFixed(1)}</p>
+          <p className="text-[10px] text-muted-foreground">Resultado</p>
+        </div>
+        {utilizationPercent !== null && (
+          <div>
+            <p className="text-sm font-bold tabular-nums text-foreground">
+              {utilizationPercent.toFixed(1)}%
+            </p>
+            <p className="text-[10px] text-muted-foreground">Aproveitamento</p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

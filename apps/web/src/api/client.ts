@@ -131,6 +131,26 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     }),
 
+  // Etapa 1 de "esqueci minha senha" — sempre resolve com um resetId,
+  // nunca revela se o email existe (ver AuthService.forgotPassword).
+  forgotPassword: (email: string) =>
+    request<{ resetId: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  verifyPasswordReset: (resetId: string, code: string) =>
+    request<{ ok: true }>("/auth/forgot-password/verify", {
+      method: "POST",
+      body: JSON.stringify({ resetId, code }),
+    }),
+
+  resetPassword: (resetId: string, password: string, confirmPassword: string) =>
+    request<{ ok: true }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ resetId, password, confirmPassword }),
+    }),
+
   // "Entrar como" outro usuário — restrito a uma única conta no
   // backend (ver AuthService.impersonate); autenticado, por isso usa
   // authRequest (não request como o resto deste objeto, que é

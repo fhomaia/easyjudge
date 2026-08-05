@@ -8,6 +8,7 @@ import { AuthController } from './controllers/auth.controller';
 import { AuthService } from './services/auth.service';
 import { MailService } from './services/mail.service';
 import { EmailVerification } from './entities/email-verification.entity';
+import { PasswordReset } from './entities/password-reset.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { ProgramsModule } from '../programs/programs.module';
@@ -22,7 +23,7 @@ import { AthletesModule } from '../athletes/athletes.module';
     JudgesModule,
     EventsModule,
     AthletesModule,
-    TypeOrmModule.forFeature([EmailVerification]),
+    TypeOrmModule.forFeature([EmailVerification, PasswordReset]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

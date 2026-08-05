@@ -490,18 +490,35 @@ export class ProgramsService {
       });
     }
 
-    const unclaimedOwnEntries: ProgramCatalogEntry[] = myParticipations
-      .filter((p) => !p.userId)
-      .map((p) => ({
-        source: 'own',
-        programId: p.id,
-        userId: null,
-        name: p.name,
-        email: p.email,
-        city: p.city,
-        state: p.state,
-        logoUrl: p.logoUrl,
-      }));
+    // Dedupe por nome+email (sem diferenciar maiúsculas/minúsculas) —
+    // sem isso, cadastrar o mesmo programa "solto" (sem conta própria)
+    // em mais de um evento deste produtor criava uma linha de
+    // `ProgramParticipation` por evento, e cada uma virava uma entrada
+    // separada aqui, aparecendo duplicada no select de "programa já
+    // conhecido" (bug real encontrado 2026-08-05). Mantém a
+    // participação mais recente de cada grupo (nome/cidade/estado mais
+    // atualizados).
+    const unclaimedByKey = new Map<string, ProgramParticipation>();
+    for (const p of myParticipations) {
+      if (p.userId) continue;
+      const key = `${p.name.toLowerCase()}::${p.email.toLowerCase()}`;
+      const existing = unclaimedByKey.get(key);
+      if (!existing || existing.createdAt < p.createdAt) {
+        unclaimedByKey.set(key, p);
+      }
+    }
+    const unclaimedOwnEntries: ProgramCatalogEntry[] = Array.from(
+      unclaimedByKey.values(),
+    ).map((p) => ({
+      source: 'own',
+      programId: p.id,
+      userId: null,
+      name: p.name,
+      email: p.email,
+      city: p.city,
+      state: p.state,
+      logoUrl: p.logoUrl,
+    }));
 
     return [...platformEntries, ...unclaimedOwnEntries];
   }

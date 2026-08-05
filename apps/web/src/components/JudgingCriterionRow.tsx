@@ -1,4 +1,4 @@
-import { useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { CheckCircle2, ChevronDown, ChevronRight, Circle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -72,6 +72,12 @@ function ResourceAssignmentCell({
   onSelect: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: assignmentKey(criterionId, resourceId) });
+  // Evidencia TODA célula soltável assim que um arraste começa (não só
+  // a que está embaixo do cursor no momento, isso já era `isOver`) —
+  // pedido do usuário: sem isso, não dava pra saber onde soltar até
+  // passar exatamente em cima de uma célula válida.
+  const { active } = useDndContext();
+  const isDragActive = active != null;
   const visibleJudges = judges.slice(0, MAX_VISIBLE_CHIPS);
   const overflowCount = judges.length - visibleJudges.length;
 
@@ -90,6 +96,7 @@ function ResourceAssignmentCell({
         "flex min-h-9 items-center rounded-md px-1.5 transition-colors",
         isLeaf && "cursor-pointer hover:bg-muted/40",
         selected && "bg-primary/[0.06]",
+        isDragActive && !isOver && "bg-primary/5 ring-1 ring-inset ring-primary/20",
         isOver && "bg-primary/10 ring-1 ring-inset ring-primary/40",
       )}
     >

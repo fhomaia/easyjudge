@@ -14,6 +14,9 @@ import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { SetPasswordDto } from '../dto/set-password.dto';
 import { LoginDto } from '../dto/login.dto';
 import { ImpersonateDto } from '../dto/impersonate.dto';
+import { ForgotPasswordDto } from '../dto/forgot-password.dto';
+import { VerifyPasswordResetDto } from '../dto/verify-password-reset.dto';
+import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
 
@@ -54,6 +57,27 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  // Tela "esqueci minha senha" -> etapa 1 (pede o email)
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  // Tela "esqueci minha senha" -> etapa 2 (digita o código)
+  @Post('forgot-password/verify')
+  @HttpCode(HttpStatus.OK)
+  verifyPasswordReset(@Body() dto: VerifyPasswordResetDto) {
+    return this.authService.verifyPasswordReset(dto);
+  }
+
+  // Tela "esqueci minha senha" -> etapa 3 (define a nova senha)
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   // "Entrar como" outro usuário — restrito a uma única conta, checado

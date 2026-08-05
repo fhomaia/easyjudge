@@ -21,11 +21,15 @@ import { DocumentType } from '../../common/enums/document-type.enum';
 import { IMPERSONATOR_EMAIL } from '../../common/constants/impersonation';
 import { MailService } from './mail.service';
 import { EmailVerification } from '../entities/email-verification.entity';
+import { PasswordReset } from '../entities/password-reset.entity';
 import { RegisterDto } from '../dto/register.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { SetPasswordDto } from '../dto/set-password.dto';
 import { LoginDto } from '../dto/login.dto';
 import { ImpersonateDto } from '../dto/impersonate.dto';
+import { ForgotPasswordDto } from '../dto/forgot-password.dto';
+import { VerifyPasswordResetDto } from '../dto/verify-password-reset.dto';
+import { ResetPasswordDto } from '../dto/reset-password.dto';
 
 const CODE_LENGTH = 6;
 const CODE_EXPIRATION_MINUTES = 15;
@@ -36,6 +40,8 @@ export class AuthService {
   constructor(
     @InjectRepository(EmailVerification)
     private readonly emailVerificationRepository: Repository<EmailVerification>,
+    @InjectRepository(PasswordReset)
+    private readonly passwordResetRepository: Repository<PasswordReset>,
     private readonly usersService: UsersService,
     private readonly programsService: ProgramsService,
     private readonly judgesService: JudgesService,
@@ -274,6 +280,123 @@ export class AuthService {
     }
 
     return this.buildAccessToken(user.id, user.role);
+  }
+
+  // Etapa 1 de "esqueci minha senha": retorna sempre { resetId }, na
+  // MESMA forma, nunca revelando se o email existe (mesmo raciocínio de
+  // login acima) — o frontend mostra "você vai receber um email se o
+  // cadastro for encontrado" independente do resultado real, e usa o
+  // resetId pra seguir pra tela de código. Quando o email não
+  // corresponde a ninguém, a linha criada não tem userId/code — o
+  // restante do fluxo (verify/reset) rejeita com "Código inválido." do
+  // mesmo jeito que rejeitaria um código errado numa linha real, sem
+  // nenhum branch sobre existir ou não.
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ resetId: string }> {
+    const user = await this.usersService.findByEmailInsensitiveWithPassword(
+      dto.email,
+    );
+
+    // Só faz sentido gerar/enviar código pra quem já concluiu o
+    // cadastro (tem senha definida) — conta pendente de verificação não
+    // tem senha pra redefinir ainda, segue o fluxo normal de cadastro.
+    if (user && user.passwordHash) {
+      // Throttle de 60s, mesmo padrão de resendVerificationCode — evita
+      // spam de email pra quem tem conta de verdade. Reaproveita a
+      // sessão de reset já em andamento (mesmo resetId/código) em vez
+      // de rejeitar, já que o código anterior ainda está na caixa de
+      // entrada e continua válido.
+      const lastReset = await this.passwordResetRepository.findOne({
+        where: { userId: user.id },
+        order: { createdAt: 'DESC' },
+      });
+      if (lastReset) {
+        const secondsSinceLast =
+          (Date.now() - lastReset.createdAt.getTime()) / 1000;
+        if (
+          secondsSinceLast < 60 &&
+          !lastReset.usedAt &&
+          lastReset.expiresAt > new Date()
+        ) {
+          return { resetId: lastReset.id };
+        }
+      }
+
+      const code = this.generateNumericCode(CODE_LENGTH);
+      const expiresAt = new Date(
+        Date.now() + CODE_EXPIRATION_MINUTES * 60 * 1000,
+      );
+      const reset = this.passwordResetRepository.create({
+        userId: user.id,
+        code,
+        expiresAt,
+        verifiedAt: null,
+        usedAt: null,
+      });
+      await this.passwordResetRepository.save(reset);
+      await this.mailService.sendPasswordResetCode(user.email, code);
+      return { resetId: reset.id };
+    }
+
+    const dummy = this.passwordResetRepository.create({
+      userId: null,
+      code: null,
+      expiresAt: new Date(Date.now() + CODE_EXPIRATION_MINUTES * 60 * 1000),
+      verifiedAt: null,
+      usedAt: null,
+    });
+    await this.passwordResetRepository.save(dummy);
+    return { resetId: dummy.id };
+  }
+
+  // Etapa 2: confirma o código. Não distingue "email não existia" de
+  // "código errado" — as duas caem em "Código inválido.", já que uma
+  // linha com userId null nunca vai ter código igual ao que o usuário
+  // digitou (código só é gerado quando o usuário existe, ver acima).
+  async verifyPasswordReset(dto: VerifyPasswordResetDto): Promise<{ ok: true }> {
+    const reset = await this.passwordResetRepository.findOne({
+      where: { id: dto.resetId },
+    });
+
+    if (!reset || !reset.code || reset.code !== dto.code) {
+      throw new BadRequestException('Código inválido.');
+    }
+    if (reset.usedAt) {
+      throw new BadRequestException('Código já utilizado.');
+    }
+    if (reset.expiresAt < new Date()) {
+      throw new BadRequestException('Código expirado.');
+    }
+
+    reset.verifiedAt = new Date();
+    await this.passwordResetRepository.save(reset);
+
+    return { ok: true };
+  }
+
+  // Etapa 3: define a nova senha. Exige que o código já tenha sido
+  // confirmado (verifiedAt) nesta mesma "sessão" de reset.
+  async resetPassword(dto: ResetPasswordDto): Promise<{ ok: true }> {
+    const reset = await this.passwordResetRepository.findOne({
+      where: { id: dto.resetId },
+    });
+
+    if (!reset || !reset.verifiedAt || !reset.userId) {
+      throw new BadRequestException('Código inválido.');
+    }
+    if (reset.usedAt) {
+      throw new BadRequestException('Código já utilizado.');
+    }
+    if (reset.expiresAt < new Date()) {
+      throw new BadRequestException('Código expirado.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
+    await this.usersService.setPasswordHash(reset.userId, passwordHash);
+
+    reset.usedAt = new Date();
+    await this.passwordResetRepository.save(reset);
+
+    return { ok: true };
   }
 
   // "Entrar como" qualquer usuário, restrito a uma única conta

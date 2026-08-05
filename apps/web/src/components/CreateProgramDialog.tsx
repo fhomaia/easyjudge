@@ -89,7 +89,7 @@ export function CreateProgramDialog({
           <ProgramFormFields form={form} onChange={update} />
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Criando..." : "Criar programa"}
+            {loading ? "Adicionando..." : "Adicionar programa"}
           </Button>
         </form>
       </DialogContent>

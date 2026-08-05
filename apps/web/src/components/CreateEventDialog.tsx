@@ -43,10 +43,15 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
 
   function handlePhotoChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // Reseta já aqui (não só no caminho de erro abaixo) — sem isso, o
+    // navegador não dispara `change` de novo se o usuário reabrir o
+    // seletor e escolher EXATAMENTE o mesmo arquivo (mesmo path), o que
+    // pareceria "preciso escolher a foto duas vezes" quando na
+    // verdade a segunda escolha nem chegava a chamar este handler.
+    e.target.value = "";
     if (!file) return;
     if (file.size > MAX_LOGO_SIZE_BYTES) {
       setError("A foto deve ter no máximo 5MB.");
-      e.target.value = "";
       return;
     }
     setError(null);
@@ -130,6 +135,13 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
               {photoPreview ? (
                 <div className="relative">
                   <img
+                    // key força o React a trocar o nó da imagem em vez
+                    // de só atualizar `src` num nó já existente — nó
+                    // novo sempre pinta, evita qualquer chance de ficar
+                    // "preso" num paint antigo enquanto o popup ainda
+                    // está no meio da animação de entrada (mesma classe
+                    // de bug de repaint do comentário abaixo).
+                    key={photoPreview}
                     src={photoPreview}
                     alt=""
                     className="size-16 rounded-lg object-cover"

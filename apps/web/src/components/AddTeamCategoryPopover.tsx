@@ -69,7 +69,13 @@ export function AddTeamCategoryPopover({
                 {(value: string) => availableCategories.find((c) => c.id === value)?.name}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            {/* alignItemWithTrigger (padrão do SelectContent) calcula
+                errado quando o Select fica aninhado dentro de outro
+                Popover — mesmo bug já corrigido em CalendarDropdown
+                (ver CLAUDE.md, "Bug no Select de mês/ano do
+                calendário"). Aqui o Select vive dentro do Popover de
+                adicionar categoria, então sofre do mesmo problema. */}
+            <SelectContent alignItemWithTrigger={false}>
               {availableCategories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>
                   {category.name}

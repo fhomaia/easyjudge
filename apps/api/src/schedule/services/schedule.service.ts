@@ -864,10 +864,36 @@ export class ScheduleService {
           );
         }
         lunchInserted = true;
+        // Depois do almoço, a próxima apresentação não deveria também
+        // levar o intervalo padrão "Intervalo entre apresentações" —
+        // o almoço já é, ele mesmo, um intervalo bem maior logo antes
+        // dela (bug real 2026-08-05: `matHasPresentation` continuava
+        // `true` através do almoço, então a apresentação seguinte
+        // ganhava um gap redundante colado depois do almoço).
+        matHasPresentation = false;
       };
 
       for (const pair of buckets[m]) {
-        if (day.startMinutes + matElapsed >= dto.lunchStartMinutes) {
+        // Olha pra FRENTE, não só pra trás: comparar só o `matElapsed`
+        // de quando a apresentação ANTERIOR terminou contra
+        // `dto.lunchStartMinutes` (como era antes) deixava passar uma
+        // apresentação inteira sempre que ela começasse um pouco antes
+        // do horário do almoço, mesmo terminando bem depois dele (bug
+        // real 2026-08-05: almoço configurado pra 08:35, apresentação
+        // anterior tinha terminado 08:33, e em vez do almoço entrar ali
+        // a próxima apresentação era encaixada na frente). Agora
+        // projeta o intervalo + duração desta apresentação (antes de
+        // criar qualquer coisa) e insere o almoço primeiro se isso for
+        // ultrapassar o horário configurado.
+        const prospectiveGapMinutes = matHasPresentation
+          ? day.defaultGapMinutes
+          : 0;
+        const prospectiveEndMinutes =
+          day.startMinutes +
+          matElapsed +
+          prospectiveGapMinutes +
+          pair.durationMinutes;
+        if (prospectiveEndMinutes > dto.lunchStartMinutes) {
           await insertLunchIfDue();
         }
 

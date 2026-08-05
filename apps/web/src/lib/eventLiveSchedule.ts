@@ -5,14 +5,18 @@ import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import { filterRemovedFromSchedule } from "@/lib/scheduleWithdrawal";
 
 // "Próxima apresentação"/"Depois disso"/cronograma do desktop mostram
-// qualquer componente real do cronograma (apresentação, intervalo,
-// cerimônia, premiação) — só "warmup" (sub-item de uma apresentação,
-// mostrado dentro do card dela) e os breaks AUTO-gerados ("Aguardando
-// aquecimento"/"Aguardando disponibilidade da equipe", ver
-// isAutoWaitBreak) ficam de fora.
+// qualquer componente real do cronograma (intervalo de verdade como
+// Almoço, cerimônia, premiação) — só "warmup" (sub-item de uma
+// apresentação, mostrado dentro do card dela), os breaks AUTO-gerados
+// ("Aguardando aquecimento"/"Aguardando disponibilidade da equipe", ver
+// isAutoWaitBreak) e o "Intervalo entre apresentações" (detalhe de
+// bastidor da escala, sem interesse pra quem só acompanha esta tela —
+// mesmo raciocínio já aplicado em computeResourceNextStatus, 2026-08-05,
+// pedido do usuário) ficam de fora.
 function isDisplayableEntry(entry: ScheduleEntry): boolean {
   if (entry.type === "warmup") return false;
   if (entry.type === "break" && isAutoWaitBreak(entry)) return false;
+  if (entry.type === "break" && entry.label === INTERVAL_BREAK_LABEL) return false;
   return true;
 }
 
