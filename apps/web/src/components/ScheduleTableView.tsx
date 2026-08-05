@@ -113,7 +113,12 @@ export function ScheduleTableView({
   );
 
   return (
-    <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-card">
+    // min-h-72: mesmo piso da ScheduleTimeline (ver comentário lá) —
+    // faltava aqui, então trocar pra "Tabela" no tablet reproduzia o
+    // mesmo encolhimento excessivo que a linha do tempo já tinha antes
+    // desse fix (bug real 2026-08-05, mesma causa: sem piso próprio,
+    // este container aceitava ser espremido pelo flex do mesmo jeito).
+    <div className="min-h-72 min-w-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-card">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border/60">

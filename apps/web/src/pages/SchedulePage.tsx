@@ -479,7 +479,7 @@ export function SchedulePage() {
                   }
                 />
 
-                <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="grid flex-1 grid-cols-1 gap-6 xl:min-h-0 xl:grid-cols-[minmax(0,1fr)_320px]">
                   {/* Abaixo de `xl` (cobre qualquer tablet, mesmo em
                       paisagem — a grade vira 1 coluna só) o grid não tem
                       mais uma linha "esticável" pra essa coluna se
@@ -493,7 +493,23 @@ export function SchedulePage() {
                       resultado é a página inteira (não só esta coluna)
                       precisar rolar pra ver o painel ao lado — trade-off
                       pedido pelo usuário (prefere conteúdo grande com
-                      scroll a tudo espremido pra caber sem rolar). */}
+                      scroll a tudo espremido pra caber sem rolar).
+
+                      O próprio grid (div acima) só ganha `min-h-0` a
+                      partir de `xl` também (bug real 2026-08-05,
+                      reportado em tablet paisagem): sem esse gate, o
+                      `min-h-0` incondicional deixava o algoritmo de
+                      flexbox encolher o grid pra caber no espaço
+                      restante do flex-col da página (que agora inclui o
+                      banner "Próxima etapa recomendada" abaixo) —
+                      encolhendo o grid pra MENOS que os 70vh exigidos
+                      por esta coluna, que então vazava (`overflow:
+                      visible`) pra fora do grid e sobrepunha o banner
+                      seguinte. Com `min-h-0` só em `xl` (mesmo gate já
+                      usado aqui do lado), o grid herda `min-height:
+                      auto` abaixo de `xl` — não encolhe além do que o
+                      conteúdo exige, e a página cresce/rola em vez de
+                      sobrepor. */}
                   <div className="flex min-h-[70vh] min-w-0 flex-col gap-6 xl:min-h-0">
                     <div className="flex items-center gap-1 self-start rounded-lg border border-border/60 bg-muted/30 p-1">
                       <Button
