@@ -42,7 +42,7 @@ export function SetupProgressSummary({ steps, published }: SetupProgressSummaryP
         </div>
       </div>
 
-      <div className="flex min-w-0 items-center justify-start overflow-x-auto">
+      <div className="scrollbar-none flex min-w-0 items-center justify-start overflow-x-auto">
         {steps.map((step, index) => {
           const state = computeStepState(steps, index);
           return (
