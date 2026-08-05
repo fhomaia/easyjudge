@@ -67,8 +67,15 @@ export function ProgramFormFields({ form, onChange }: ProgramFormFieldsProps) {
           </Label>
           <Select value={selectedKey || null} onValueChange={(v) => handleSelect(v as string)}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Cadastro manual (novo programa)">
-                {(value: string) => catalog.find((e) => catalogKey(e) === value)?.name}
+              {/* placeholder é ignorado pelo Base UI quando o filho é
+                  função — ver PresentationDetailsDialog.tsx pro detalhe
+                  do bug (2026-08-05). */}
+              <SelectValue>
+                {(value: string | null) =>
+                  value
+                    ? catalog.find((e) => catalogKey(e) === value)?.name
+                    : "Cadastro manual (novo programa)"
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>

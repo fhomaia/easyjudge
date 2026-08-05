@@ -20,6 +20,7 @@ import { MoveScheduleEntryDto } from '../dto/move-schedule-entry.dto';
 import { AutoGenerateScheduleDto } from '../dto/auto-generate-schedule.dto';
 import { Team } from '../../teams/entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
+import { CategoryFormat } from '../../categories/enums/category-format.enum';
 import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
 import { EventActivityLogService } from '../../events/services/event-activity-log.service';
@@ -52,8 +53,23 @@ export interface UnscheduledPairView {
   teamName: string;
   categoryId: string;
   categoryName: string;
+  categoryFormat: CategoryFormat;
+  level: number;
   durationMinutes: number;
 }
+
+// Ordem de preferência do "gerar automaticamente" (pedido do usuário,
+// 2026-08-05): Team Cheer primeiro, depois Group Stunt, Coed/Elite
+// Stunt, Partner Stunt e por último os demais formatos (Custom) — mesma
+// ordem já usada em CATEGORY_FORMAT_LABELS/o próprio enum. Dentro de
+// cada formato, nível crescente.
+const AUTO_GENERATE_FORMAT_PRIORITY: Record<CategoryFormat, number> = {
+  [CategoryFormat.TEAM_CHEER]: 0,
+  [CategoryFormat.GROUP_STUNT]: 1,
+  [CategoryFormat.COED]: 2,
+  [CategoryFormat.PARTNER]: 3,
+  [CategoryFormat.CUSTOM]: 4,
+};
 
 const DEFAULT_COMPONENT_DURATION_MINUTES = 15;
 
@@ -445,6 +461,8 @@ export class ScheduleService {
           teamName: team.name,
           categoryId: category.id,
           categoryName: category.name,
+          categoryFormat: category.categoryFormat,
+          level: category.level,
           durationMinutes: this.presentationDurationMinutes(category),
         });
       }
@@ -791,7 +809,20 @@ export class ScheduleService {
       await this.entriesRepo.delete({ resourceId: In(dayResourceIds) });
     }
 
-    const unscheduled = await this.getUnscheduled(eventId, day.id);
+    // Ordena por formato (Team Cheer > Group Stunt > Coed/Elite Stunt >
+    // Partner Stunt > demais) e, dentro do mesmo formato, por nível
+    // crescente — antes de distribuir nos buckets abaixo, então as
+    // duas estratégias de distribuição (SEQUENTIAL e round-robin)
+    // herdam a preferência automaticamente.
+    const unscheduled = [...(await this.getUnscheduled(eventId, day.id))].sort(
+      (a, b) => {
+        const formatDiff =
+          AUTO_GENERATE_FORMAT_PRIORITY[a.categoryFormat] -
+          AUTO_GENERATE_FORMAT_PRIORITY[b.categoryFormat];
+        if (formatDiff !== 0) return formatDiff;
+        return a.level - b.level;
+      },
+    );
     const buckets: UnscheduledPairView[][] = mats.map(() => []);
 
     if (dto.distribution === ScheduleDistributionStrategy.SEQUENTIAL) {

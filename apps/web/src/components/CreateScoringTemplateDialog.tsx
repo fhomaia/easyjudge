@@ -121,8 +121,13 @@ export function CreateScoringTemplateDialog({
                 onValueChange={(value) => updateCloneFromId(value as string)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Começar em branco">
-                    {(value: string) => templates.find((t) => t.id === value)?.name}
+                  {/* placeholder é ignorado pelo Base UI quando o filho é
+                      função — ver PresentationDetailsDialog.tsx pro
+                      detalhe do bug (2026-08-05). */}
+                  <SelectValue>
+                    {(value: string | null) =>
+                      value ? templates.find((t) => t.id === value)?.name : "Começar em branco"
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>

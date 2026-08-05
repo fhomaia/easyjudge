@@ -38,14 +38,32 @@ export class EventStaffService {
     private readonly activityLogService: EventActivityLogService,
   ) {}
 
+  // Roles "de gestão" — as únicas que este roster manual lista/edita.
+  // PROGRAM/ATHLETE/SPECTATOR são concedidas automaticamente por outros
+  // fluxos (vínculo de programa/atleta, código+QR do evento — ver
+  // EventMemberRole) e não fazem sentido aparecer aqui: um evento
+  // grande teria centenas de espectadores/atletas poluindo a tela de
+  // "Gerenciar acessos", que é pra quem AJUDA A ORGANIZAR o evento
+  // (pedido do usuário, 2026-08-05, depois que o fluxo de
+  // compartilhamento por código/QR tornou convite manual de espectador
+  // redundante).
+  private static readonly STAFF_ROLES = [
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+  ];
+
   async list(eventId: string): Promise<EventStaffMemberView[]> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const members = await this.membersRepo.find({
       where: { aliasId: event.aliasId },
       order: { createdAt: 'ASC' },
     });
+    const staffMembers = members.filter((member) =>
+      member.roles.some((role) => EventStaffService.STAFF_ROLES.includes(role)),
+    );
     return Promise.all(
-      members.map((member) => this.toStaffView(member, event.createdById)),
+      staffMembers.map((member) => this.toStaffView(member, event.createdById)),
     );
   }
 

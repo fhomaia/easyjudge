@@ -46,6 +46,7 @@ interface ResourceRowProps {
   times: Map<string, { startMinutes: number; endMinutes: number }>;
   conflicts: Map<string, string[]>;
   onRemoveEntry: (entryId: string) => void;
+  onOpenDetails: (entryId: string) => void;
   onEditResource: (resourceId: string) => void;
   peerDrag: { entryId: string; x: number; y: number } | null;
 }
@@ -57,6 +58,7 @@ function ResourceRow({
   times,
   conflicts,
   onRemoveEntry,
+  onOpenDetails,
   onEditResource,
   peerDrag,
 }: ResourceRowProps) {
@@ -156,6 +158,7 @@ function ResourceRow({
                 labelMaxWidth={labelMaxWidth}
                 conflictReasons={conflicts.get(entry.id) ?? []}
                 onRemove={() => onRemoveEntry(entry.id)}
+                onOpenDetails={onOpenDetails}
                 peerDrag={peerDrag && peerDrag.entryId === entry.id ? peerDrag : null}
               />
             );
@@ -193,6 +196,7 @@ interface ScheduleTimelineProps {
   day: ScheduleDay;
   conflicts: Map<string, string[]>;
   onRemoveEntry: (entryId: string) => void;
+  onOpenDetails: (entryId: string) => void;
   onAddResource: () => void;
   onEditResource: (resourceId: string) => void;
   // Enquanto o usuário arrasta uma apresentação, o aquecimento
@@ -206,6 +210,7 @@ export function ScheduleTimeline({
   day,
   conflicts,
   onRemoveEntry,
+  onOpenDetails,
   onAddResource,
   onEditResource,
   peerDrag = null,
@@ -226,7 +231,7 @@ export function ScheduleTimeline({
     // espaço pra esta timeline depois do resto do layout — sem esse
     // piso explícito, `min-h-0` deixava a timeline encolher livremente
     // até quase sumir nesses casos.
-    <div className="flex min-h-72 min-w-0 flex-1 flex-col overflow-auto rounded-xl border border-border/60 bg-card">
+    <div className="scrollbar-none flex min-h-72 min-w-0 flex-1 flex-col overflow-auto rounded-xl border border-border/60 bg-card">
       <div className="flex flex-1 flex-col" style={{ width: totalWidth + 144 }}>
         <div className="flex shrink-0 border-b border-border/60">
           <div className="sticky left-0 z-20 w-36 shrink-0 border-r border-border/40 bg-card" />
@@ -265,6 +270,7 @@ export function ScheduleTimeline({
             times={times}
             conflicts={conflicts}
             onRemoveEntry={onRemoveEntry}
+            onOpenDetails={onOpenDetails}
             onEditResource={onEditResource}
             peerDrag={peerDrag}
           />

@@ -22,6 +22,12 @@ interface ScheduleEntryCardProps {
   // qual conflito era.
   conflictReasons: string[];
   onRemove: () => void;
+  // Só chamado pra entries type==="presentation" (ver uso abaixo) —
+  // abre o PresentationDetailsDialog com dados completos + ações de
+  // mover/remover. Aquecimento/intervalo/etc. continuam só
+  // arrastáveis+removíveis, sem painel de detalhes (pedido do usuário
+  // era especificamente sobre "apresentação").
+  onOpenDetails: (entryId: string) => void;
   // Setado quando ESTE card não é o que o usuário está arrastando,
   // mas sim o aquecimento vinculado à apresentação que está sendo
   // arrastada — espelha o deslocamento do drag ativo (ver
@@ -41,6 +47,7 @@ export function ScheduleEntryCard({
   labelMaxWidth,
   conflictReasons,
   onRemove,
+  onOpenDetails,
   peerDrag,
 }: ScheduleEntryCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -62,6 +69,12 @@ export function ScheduleEntryCard({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      onClick={() => {
+        // dnd-kit só ativa o drag de verdade depois de 5px de
+        // deslocamento (activationConstraint, ver SchedulePage) — um
+        // clique sem arrastar chega aqui normalmente.
+        if (entry.type === "presentation") onOpenDetails(entry.id);
+      }}
       style={{
         position: "absolute",
         left,

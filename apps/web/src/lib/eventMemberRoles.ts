@@ -28,9 +28,13 @@ export const EVENT_MEMBER_ROLE_DESCRIPTIONS: Record<EventMemberRole, string> = {
 // "program"/"athlete" ficam de fora — são concedidos automaticamente
 // (ver ProgramsService/AthletesService), não são papéis que o admin
 // atribui manualmente pelo roster de acessos (EventStaffPage).
+// "spectator" saiu de propósito (2026-08-05): virou redundante desde o
+// fluxo de compartilhamento por código/QR (ShareEventDialog/
+// JoinByCodeDialog) — convidar espectador manualmente aqui não faz mais
+// sentido, e o roster de acessos passou a listar só quem de fato ajuda
+// a organizar o evento (ver EventStaffService.STAFF_ROLES, backend).
 export const EVENT_MEMBER_ROLES_ORDER: EventMemberRole[] = [
   "admin",
   "assessor",
   "judge",
-  "spectator",
 ];

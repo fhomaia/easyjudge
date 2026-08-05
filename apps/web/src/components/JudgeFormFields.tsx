@@ -59,8 +59,15 @@ export function JudgeFormFields({ form, onChange }: JudgeFormFieldsProps) {
           </Label>
           <Select value={selectedKey || null} onValueChange={(v) => handleSelect(v as string)}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Cadastro manual (novo jurado)">
-                {(value: string) => catalog.find((e) => catalogKey(e) === value)?.name}
+              {/* placeholder é ignorado pelo Base UI quando o filho é
+                  função — ver PresentationDetailsDialog.tsx pro detalhe
+                  do bug (2026-08-05). */}
+              <SelectValue>
+                {(value: string | null) =>
+                  value
+                    ? catalog.find((e) => catalogKey(e) === value)?.name
+                    : "Cadastro manual (novo jurado)"
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>

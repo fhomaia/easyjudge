@@ -150,8 +150,15 @@ export function CategoryFormFields({
           onValueChange={(value) => onChange("scoringTemplateId", value as string)}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Selecione um sistema de pontuação">
-              {(value: string) => scoringTemplates.find((t) => t.id === value)?.name}
+            {/* placeholder é ignorado pelo Base UI quando o filho é
+                função — ver PresentationDetailsDialog.tsx pro detalhe do
+                bug (2026-08-05). */}
+            <SelectValue>
+              {(value: string | null) =>
+                value
+                  ? scoringTemplates.find((t) => t.id === value)?.name
+                  : "Selecione um sistema de pontuação"
+              }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>

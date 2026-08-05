@@ -65,8 +65,18 @@ export function AddTeamCategoryPopover({
           <Label>Categoria</Label>
           <Select value={categoryId || null} onValueChange={(v) => setCategoryId(v as string)}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione uma categoria">
-                {(value: string) => availableCategories.find((c) => c.id === value)?.name}
+              {/* `placeholder` é ignorado pelo Base UI quando o filho é
+                  uma função (SelectValue só cai nele quando NÃO há
+                  children) — bug real encontrado 2026-08-05 durante outro
+                  Select com o mesmo padrão: sem esse `if`, o trigger
+                  ficava vazio em vez de mostrar o placeholder antes de
+                  escolher uma categoria. */}
+              <SelectValue>
+                {(value: string | null) =>
+                  value
+                    ? availableCategories.find((c) => c.id === value)?.name
+                    : "Selecione uma categoria"
+                }
               </SelectValue>
             </SelectTrigger>
             {/* alignItemWithTrigger (padrão do SelectContent) calcula
