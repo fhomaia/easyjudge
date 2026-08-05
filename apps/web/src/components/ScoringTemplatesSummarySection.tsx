@@ -14,42 +14,35 @@ interface ScoringTemplatesSummarySectionProps {
   onCreated: (template: ScoringTemplate) => void;
 }
 
-// Card com uma checkbox própria no canto (não é um prop do
-// ScoringTemplateCard em si — fica por fora, sobreposto) pra marcar/
-// desmarcar o template na seleção deste evento, sem disparar a
-// navegação do card ao clicar nela.
+// Card inteiro clicável pra marcar/desmarcar o template na seleção
+// deste evento (a checkbox no canto é só o indicativo visual do
+// estado — clicar nela também funciona, mas não é mais o único jeito).
+// Não navega pra página do template: essa lista é sobre COMPOR o
+// evento, não sobre editar um template específico (quem quiser
+// ver/editar o template vai por "Ir para Sistemas de Pontuação").
 function SelectableTemplateCard({
   template,
   selected,
   onToggle,
-  onClick,
 }: {
   template: ScoringTemplate;
   selected: boolean;
   onToggle: () => void;
-  onClick: () => void;
 }) {
   return (
     <div className="relative w-80 shrink-0">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        aria-pressed={selected}
-        aria-label={selected ? "Remover da seleção do evento" : "Usar neste evento"}
-        title={selected ? "Usado neste evento — clique pra remover" : "Usar neste evento"}
+      <span
+        aria-hidden="true"
         className={cn(
-          "absolute top-3 right-3 z-10 flex size-6 items-center justify-center rounded-full border-2 transition-colors",
+          "pointer-events-none absolute top-3 right-3 z-10 flex size-6 items-center justify-center rounded-full border-2 transition-colors",
           selected
             ? "border-primary bg-primary text-primary-foreground"
-            : "border-border bg-card text-transparent hover:border-primary/50",
+            : "border-border bg-card text-transparent",
         )}
       >
         <Check className="size-3.5" />
-      </button>
-      <ScoringTemplateCard template={template} onClick={onClick} className="w-80" />
+      </span>
+      <ScoringTemplateCard template={template} onClick={onToggle} className="w-80" />
     </div>
   );
 }
@@ -109,7 +102,6 @@ export function ScoringTemplatesSummarySection({
               template={template}
               selected={selectedIds?.has(template.id) ?? false}
               onToggle={() => toggle(template.id)}
-              onClick={() => navigate(`/scoring-templates/${template.id}`)}
             />
           ))}
         </motion.div>

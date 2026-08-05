@@ -367,10 +367,35 @@ export function JudgingPage() {
     strategy: "unassigned_only" | "replace" | "add",
   ) {
     if (!id || !selectedTemplateId) return;
+    // Otimista — antes só atualizava via `refetchAssignments` DEPOIS
+    // da resposta do backend, o que deixava um delay visível entre
+    // soltar o jurado e ele aparecer atribuído (bug real,
+    // 2026-08-05), e enquanto esse delay durava, `judgeIdsByCriterion`
+    // ficava desatualizado — um segundo drop nesse intervalo calculava
+    // `hasExisting` (ver handleDragEnd) com dado velho e podia deixar
+    // de mostrar o popup de substituir/adicionar quando devia. Mesma
+    // lógica por estratégia do backend (JudgingService.bulkAssign),
+    // aplicada localmente pra cada folha antes da chamada de rede.
+    const leafIds = getDescendantLeafIds(criteria, groupCriterionId);
+    for (const leafId of leafIds) {
+      const current = judgeIdsByCriterion.get(assignmentKey(leafId, resourceId)) ?? [];
+      let next: string[];
+      if (strategy === "unassigned_only") {
+        next = current.length === 0 ? [judgeParticipationId] : current;
+      } else if (strategy === "replace") {
+        next = [judgeParticipationId];
+      } else {
+        next = current.includes(judgeParticipationId) ? current : [...current, judgeParticipationId];
+      }
+      patchCriterionAssignments(leafId, resourceId, next);
+    }
     judgingApi
       .bulkAssign(id, selectedTemplateId, groupCriterionId, resourceId, judgeParticipationId, strategy)
       .then(refetchAssignments)
-      .catch(() => setError("Não foi possível aplicar a atribuição em massa. Tente novamente."));
+      .catch(() => {
+        setError("Não foi possível aplicar a atribuição em massa. Tente novamente.");
+        refetchAssignments();
+      });
   }
 
   function handleDragEnd(event: DragEndEvent) {

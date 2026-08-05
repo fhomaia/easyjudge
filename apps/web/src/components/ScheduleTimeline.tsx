@@ -98,7 +98,7 @@ function ResourceRow({
             : undefined
         }
         className={cn(
-          "group sticky left-0 z-20 flex w-36 shrink-0 cursor-grab flex-col justify-center border-r border-border/40 bg-card px-3 py-2 text-left transition-colors hover:bg-muted/60 active:cursor-grabbing",
+          "group sticky left-0 z-20 flex w-36 shrink-0 touch-none cursor-grab flex-col justify-center border-r border-border/40 bg-card px-3 py-2 text-left transition-colors hover:bg-muted/60 active:cursor-grabbing",
           isHandleOver && "bg-primary/10",
         )}
       >

@@ -20,7 +20,7 @@ import {
   CategoryFormFields,
   type CategorySharedFormValues,
 } from "@/components/CategoryFormFields";
-import { STATUS_LABELS, isAlwaysNonTumbling } from "@/lib/categoryLabels";
+import { STATUS_LABELS, buildCategoryName, isAlwaysNonTumbling } from "@/lib/categoryLabels";
 import { normalizeDecimalInput } from "@/lib/normalizeDecimalInput";
 import {
   getDefaultPresentationTimeSeconds,
@@ -94,6 +94,22 @@ export function EditCategoryDialog({
       const next = { ...f, [key]: value };
       if (key === "categoryFormat" && isAlwaysNonTumbling(value as CategoryFormat)) {
         next.nonTumbling = true;
+      }
+      // Nome segue o mesmo padrão automático do cadastro em lote
+      // (buildCategoryName) — trocar o formato desatualiza o nome
+      // (ex.: "Team Cheer All Star COED Nível 3" continuando com esse
+      // nome depois de virar Group Stunt), então recalcula junto.
+      // Só no formato (não modalidade/divisão/nível): esse já era o
+      // único gatilho pedido, e mexer nos outros arriscaria sobrescrever
+      // um nome que o usuário customizou de propósito depois de criar.
+      if (key === "categoryFormat") {
+        next.name = buildCategoryName(
+          value as CategoryFormat,
+          next.modality,
+          next.division,
+          Number(f.level),
+          next.customFormatLabel,
+        );
       }
       if (key === "categoryFormat" || key === "modality") {
         const defaultTime = secondsToMinutesAndSeconds(

@@ -832,35 +832,43 @@ export class ScheduleService {
       // cada pista (`m`), já que cada uma tem sua própria fila.
       let matHasPresentation = false;
 
+      // Extraído do corpo do loop (2026-08-05) — precisa ser chamável
+      // também DEPOIS do loop (ver comentário logo abaixo dele): uma
+      // pista com poucas apresentações podia esvaziar o bucket sem
+      // nunca ter alcançado `dto.lunchStartMinutes` durante a
+      // iteração, e o almoço configurado simplesmente sumia daquela
+      // pista (bug real). Arrow function (não method/function comum)
+      // pra manter o `this` da classe.
+      const insertLunchIfDue = async (): Promise<void> => {
+        if (lunchInserted || dto.lunchDurationMinutes <= 0) return;
+        await this.insertIntoResource(mat.id, matOrder++, {
+          type: ScheduleEntryType.BREAK,
+          durationMinutes: dto.lunchDurationMinutes,
+          label: 'Almoço',
+        });
+        matElapsed += dto.lunchDurationMinutes;
+        for (const warmupResource of warmupCandidates) {
+          await this.insertIntoResource(
+            warmupResource.id,
+            Number.MAX_SAFE_INTEGER,
+            {
+              type: ScheduleEntryType.BREAK,
+              durationMinutes: dto.lunchDurationMinutes,
+              label: 'Almoço',
+            },
+          );
+          warmupElapsedByResource.set(
+            warmupResource.id,
+            (warmupElapsedByResource.get(warmupResource.id) ?? 0) +
+              dto.lunchDurationMinutes,
+          );
+        }
+        lunchInserted = true;
+      };
+
       for (const pair of buckets[m]) {
-        if (
-          !lunchInserted &&
-          dto.lunchDurationMinutes > 0 &&
-          day.startMinutes + matElapsed >= dto.lunchStartMinutes
-        ) {
-          await this.insertIntoResource(mat.id, matOrder++, {
-            type: ScheduleEntryType.BREAK,
-            durationMinutes: dto.lunchDurationMinutes,
-            label: 'Almoço',
-          });
-          matElapsed += dto.lunchDurationMinutes;
-          for (const warmupResource of warmupCandidates) {
-            await this.insertIntoResource(
-              warmupResource.id,
-              Number.MAX_SAFE_INTEGER,
-              {
-                type: ScheduleEntryType.BREAK,
-                durationMinutes: dto.lunchDurationMinutes,
-                label: 'Almoço',
-              },
-            );
-            warmupElapsedByResource.set(
-              warmupResource.id,
-              (warmupElapsedByResource.get(warmupResource.id) ?? 0) +
-                dto.lunchDurationMinutes,
-            );
-          }
-          lunchInserted = true;
+        if (day.startMinutes + matElapsed >= dto.lunchStartMinutes) {
+          await insertLunchIfDue();
         }
 
         let chosenWarmupId = warmupCandidates[0].id;
@@ -983,6 +991,14 @@ export class ScheduleService {
           chosenElapsed + dto.warmupMinutes,
         );
       }
+
+      // Pista com poucas apresentações — terminou o bucket sem nunca
+      // ter cruzado `dto.lunchStartMinutes` dentro do loop acima. Ainda
+      // assim insere o almoço configurado (logo após a última
+      // apresentação desta pista, já que não sobrou mais nada
+      // depois pra ancorar um horário melhor — ver comentário de
+      // `insertLunchIfDue`), em vez de simplesmente omitir o intervalo.
+      await insertLunchIfDue();
     }
 
     const [hydrated] = await this.hydrateDays([day]);

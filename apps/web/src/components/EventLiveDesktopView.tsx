@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   MoreVertical,
   Play,
+  Share2,
   Trophy,
   UserRound,
   Users,
@@ -20,6 +21,7 @@ import {
 import { AppSidebar } from "@/components/AppSidebar";
 import { BlinkingDot } from "@/components/BlinkingDot";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ShareEventDialog } from "@/components/ShareEventDialog";
 import { EventStatusBadge } from "@/components/EventStatusBadge";
 import {
   DropdownMenu,
@@ -132,6 +134,7 @@ export function EventLiveDesktopView({
 }: EventLiveDesktopViewProps) {
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Só dá pra reverter uma publicação (published -> created) — evento
   // "started" não tem esse caminho de volta ainda (decisão consciente,
@@ -231,6 +234,22 @@ export function EventLiveDesktopView({
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Ao lado do "⋯", não dentro dele (pedido explícito do
+                usuário — na Home o compartilhar fica dentro do menu de
+                ações do card, mas aqui é ação frequente o bastante pra
+                merecer o próprio botão). */}
+            {isAdminOrAssessor && (
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                aria-label="Compartilhar evento"
+                title="Compartilhar evento"
+                className="flex size-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted"
+              >
+                <Share2 className="size-4" />
+              </button>
+            )}
+
             {canRevert ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -315,7 +334,7 @@ export function EventLiveDesktopView({
                 <p className="mt-2 text-2xl font-bold text-violet-600">{formatMinutes(live.next.start)}</p>
                 <p className="mt-1 truncate text-base font-semibold text-foreground">{nextDisplay?.title}</p>
                 {nextDisplay?.subtitle && (
-                  <p className="truncate text-sm text-muted-foreground">{nextDisplay.subtitle}</p>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">{nextDisplay.subtitle}</p>
                 )}
                 <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <MapPin className="size-3.5" />
@@ -363,7 +382,7 @@ export function EventLiveDesktopView({
                   {live.nextWarmup.teamName}
                 </p>
                 {live.nextWarmup.categoryName && (
-                  <p className="truncate text-sm text-muted-foreground">{live.nextWarmup.categoryName}</p>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">{live.nextWarmup.categoryName}</p>
                 )}
                 {live.nextWarmup.presentationResourceName && (
                   <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -407,12 +426,15 @@ export function EventLiveDesktopView({
                           )}
                         </div>
                         {resource.next ? (
-                          <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-                            {Icon && <Icon className="size-3 shrink-0" />}
-                            {resource.next.subtitle
-                              ? `${resource.next.title} · ${resource.next.subtitle}`
-                              : resource.next.title}
-                          </p>
+                          <div className="mt-0.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+                            {Icon && <Icon className="mt-0.5 size-3 shrink-0" />}
+                            <div className="min-w-0">
+                              <p className="truncate">{resource.next.title}</p>
+                              {resource.next.subtitle && (
+                                <p className="line-clamp-2">{resource.next.subtitle}</p>
+                              )}
+                            </div>
+                          </div>
                         ) : (
                           <p className="mt-0.5 truncate text-xs text-muted-foreground">
                             Sem mais atividades agendadas.
@@ -654,6 +676,11 @@ export function EventLiveDesktopView({
       confirmLabel="Reverter"
       confirmingLabel="Revertendo..."
       onConfirm={onRevert}
+    />
+
+    <ShareEventDialog
+      event={shareOpen ? event : null}
+      onOpenChange={(open) => !open && setShareOpen(false)}
     />
     </>
   );

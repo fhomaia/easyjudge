@@ -24,7 +24,7 @@ export function SetupProgressSummary({ steps, published }: SetupProgressSummaryP
       : "not_started";
 
   return (
-    <div className="flex flex-col gap-6 rounded-xl border border-border/60 bg-card p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex min-w-0 flex-col gap-6 rounded-xl border border-border/60 bg-card p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
       <div className="flex shrink-0 items-center gap-4">
         <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Calendar className="size-5" />

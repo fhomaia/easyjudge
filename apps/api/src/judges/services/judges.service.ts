@@ -25,6 +25,14 @@ interface JudgeUserInfo {
   lastName: string;
 }
 
+// Conta interna (role organization) criada só pra ser dona dos
+// templates de pontuação do sistema (FK `createdById` precisa de um
+// usuário de verdade — ver migration AddSystemScoringTemplates) — não
+// é uma pessoa de verdade, nunca deveria aparecer como opção de jurado
+// (findCatalogForUser inclui qualquer role != PROGRAM de propósito,
+// então essa conta entrava sem essa exclusão explícita).
+const SYSTEM_TEMPLATES_OWNER_EMAIL = 'templates@cheercup.com.br';
+
 // `JudgeParticipation.name` é um campo único (nome digitado livre pelo
 // organizador), mas o roster de acessos (`EventMember`) guarda
 // firstName/lastName separados (mesmo formato de CreateEventStaffMemberDto).
@@ -378,9 +386,9 @@ export class JudgesService {
   // apareceriam no primeiro grupo). Mesmo padrão de
   // ProgramsService.findCatalogForUser, mas sem restringir por role.
   async findCatalogForUser(createdById: string): Promise<JudgeCatalogEntry[]> {
-    const judgeUsers = await this.usersService.findAllExceptRole(
-      UserRole.PROGRAM,
-    );
+    const judgeUsers = (
+      await this.usersService.findAllExceptRole(UserRole.PROGRAM)
+    ).filter((user) => user.email !== SYSTEM_TEMPLATES_OWNER_EMAIL);
     const myParticipations = await this.participationsRepo.find({
       where: { createdById },
     });

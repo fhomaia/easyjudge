@@ -51,18 +51,24 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
     }
     setError(null);
     setPhoto(file);
-    setPhotoPreview(URL.createObjectURL(file));
+    // data: URL, não `URL.createObjectURL` — o Safari/iOS tem um bug
+    // conhecido onde a blob: URL às vezes não pinta no <img> logo após
+    // selecionar o arquivo (fica quebrada até algo forçar um reflow,
+    // ex. a navegação pra listagem depois de criar o evento, que já usa
+    // a URL definitiva do servidor). data: URL não depende desse
+    // registro interno do navegador, então não sofre esse problema.
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
   }
 
   function removePhoto() {
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhoto(null);
     setPhotoPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function resetForm() {
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
     setForm(initialForm);
     setPhoto(null);
     setPhotoPreview(null);

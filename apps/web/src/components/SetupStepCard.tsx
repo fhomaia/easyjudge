@@ -32,8 +32,13 @@ interface SetupStepCardProps {
 export function SetupStepCard({ step, stepNumber, recommended }: SetupStepCardProps) {
   const Icon = STEP_ICONS[step.key];
 
-  return (
-    <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card p-6 shadow-sm">
+  const cardClassName = cn(
+    "flex flex-col gap-4 rounded-xl border border-border/60 bg-card p-6 shadow-sm transition-colors",
+    step.href && "hover:border-primary/40 hover:shadow-md",
+  );
+
+  const content = (
+    <>
       <div className="flex items-center gap-2">
         <span
           className={cn(
@@ -103,25 +108,36 @@ export function SetupStepCard({ step, stepNumber, recommended }: SetupStepCardPr
         </p>
       )}
 
-      {step.href ? (
-        <Link
-          to={step.href}
-          className="mt-auto flex items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
-        >
-          {step.completed && <Pencil className="size-4" />}
-          {step.actionLabel}
-        </Link>
-      ) : (
-        <button
-          type="button"
-          disabled
-          title="Disponível em breve"
-          className="mt-auto flex items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary opacity-50"
-        >
-          {step.completed && <Pencil className="size-4" />}
-          {step.actionLabel}
-        </button>
-      )}
+      {/* Só um indicador visual do que o clique no card faz — o clique
+          em si é tratado pelo wrapper (Link ou div) do card inteiro,
+          não por este elemento (senão seria um <a> dentro de outro
+          <a>, HTML inválido). */}
+      <span
+        className={cn(
+          "mt-auto flex items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary",
+          !step.href && "opacity-50",
+        )}
+      >
+        {step.completed && <Pencil className="size-4" />}
+        {step.actionLabel}
+      </span>
+    </>
+  );
+
+  // Card inteiro clicável (não só o "botão" no rodapé) — só quando a
+  // etapa já tem tela própria (`step.href`); as "em breve" continuam
+  // num <div> normal, não clicável.
+  if (step.href) {
+    return (
+      <Link to={step.href} className={cardClassName}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div title="Disponível em breve" className={cardClassName}>
+      {content}
     </div>
   );
 }

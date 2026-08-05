@@ -87,7 +87,12 @@ export class ProgramsService {
       eligibleUser = await this.findEligibleProgramUserByEmail(dto.email);
       userId = eligibleUser?.id ?? null;
     }
-    await this.assertNoDuplicateInCatalog(createdById, dto.name, dto.email);
+    await this.assertNoDuplicateInCatalog(
+      createdById,
+      event.aliasId,
+      dto.name,
+      dto.email,
+    );
     if (userId) {
       // Nome/email vêm da conta REAL (mesma fonte de verdade de
       // linkUnclaimedProgramsByEmail) — cidade/estado não existem no
@@ -199,6 +204,7 @@ export class ProgramsService {
     if (dto.name || dto.email) {
       await this.assertNoDuplicateInCatalog(
         participation.createdById,
+        participation.aliasId,
         dto.name ?? participation.name,
         dto.email ?? participation.email,
         participation.id,
@@ -274,8 +280,18 @@ export class ProgramsService {
   // próprio catálogo (mesmo nome OU mesmo email, mas dados diferentes)
   // — reaproveitar o mesmo nome+email exatos (pra usar em outro
   // evento) continua permitido, só isso não conta como duplicidade.
+  // `aliasId` é o evento em que este programa está sendo criado/editado
+  // — um match EXATO (mesmo nome E mesmo email) só é permitido quando o
+  // conflito está num evento DIFERENTE (reaproveitar o mesmo programa
+  // real do catálogo em outro evento, o caso de uso original deste
+  // método). Dentro do MESMO evento, exato ou não, é duplicata de
+  // verdade — bug real encontrado 2026-08-05: sem essa distinção, dava
+  // pra cadastrar o mesmo programa duas vezes no mesmo evento, porque o
+  // "match exato" liberava o passo sem checar se o conflito era com uma
+  // linha do próprio evento atual.
   private async assertNoDuplicateInCatalog(
     createdById: string,
+    aliasId: string,
     name: string,
     email: string,
     excludeId?: string,
@@ -292,6 +308,12 @@ export class ProgramsService {
     }
     const conflicting = await qb.getOne();
     if (!conflicting) return;
+
+    if (conflicting.aliasId === aliasId) {
+      throw new ConflictException(
+        'Este evento já tem um programa cadastrado com esse nome ou email.',
+      );
+    }
 
     const isExactMatch =
       conflicting.name.toLowerCase() === name.toLowerCase() &&

@@ -109,7 +109,13 @@ export function ShareEventDialog({ event, onOpenChange }: ShareEventDialogProps)
               </Button>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* 1 coluna no mobile — 2 colunas (era sempre `grid-cols-2`)
+                deixava pouco menos de 130px por botão num celular
+                comum, e o texto do botão nunca quebra linha
+                (`whitespace-nowrap`, ver ui/button.tsx) — "Copiar
+                código" estourava a borda do próprio botão em vez de
+                truncar ou quebrar. */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Button type="button" variant="outline" onClick={handleCopy}>
                 {copied ? (
                   <Check data-icon="inline-start" />

@@ -8,12 +8,21 @@
    altura, não orientação, porque monitor de desktop também é "paisagem"
    e não deve entrar nessa regra. */
 @custom-variant short (@media (max-height: 560px));
-/* Contrário de "short", pro caso onde as duas condições concorreriam
-   (ex. celular em paisagem: largura >= sm E altura curta ao mesmo
-   tempo) — usado quando um componente precisa de um valor "maior" só
-   em telas largas E altas, sem competir por especificidade/ordem
-   contra "short:" (que precisa sempre vencer nesse cenário). */
-@custom-variant sm-tall (@media (min-width: 640px) and (min-height: 561px));
+/* Contrário de "short", mas com folga própria: o espaçamento generoso
+   deste variant só deve entrar quando sobra altura de verdade pra ele.
+   min-height 700 (não 561, logo acima do corte de "short") — o gap
+   561-699 fica com o espaçamento BASE (sem modificador nenhum), que é
+   o que efetivamente cobre tablet em paisagem (ex. iPad clássico:
+   altura nativa 768, mas a barra de endereço/abas do Safari reduz a
+   altura útil pra ~660-690, caindo bem nesse gap). Bug real encontrado
+   2026-08-04: com o corte antigo em 561, esse gap herdava o
+   espaçamento GENEROSO (sm-tall, pensado pra telas de verdade altas) e
+   o card não cabia — ganhava scroll na tela de login em tablet
+   paisagem. Confirmado via Chrome headless controlado por CDP
+   (screenshot não bastava sozinho — precisou medir
+   `document.documentElement.scrollHeight` vs `window.innerHeight` pra
+   achar a faixa exata: 561-679 estourava, 680+ cabia). */
+@custom-variant sm-tall (@media (min-width: 640px) and (min-height: 700px));
 
 /* Esconde a barra de rolagem mantendo o scroll funcional — usado nos
    carrosséis horizontais do mobile (ex. KPIs da Home). */

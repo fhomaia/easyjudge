@@ -321,7 +321,7 @@ export function EventLiveSchedulePage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} eventNavItems={eventNavTabs} />
 
-      <main className="flex flex-1 flex-col overflow-hidden pt-14 sm:pt-0">
+      <main className="flex flex-1 flex-col overflow-x-hidden overflow-y-auto pt-14 sm:pt-0">
         <header className="border-b border-border bg-card px-4 py-5 sm:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600">
@@ -349,7 +349,20 @@ export function EventLiveSchedulePage() {
           </div>
         </header>
 
-        <div className="flex w-full flex-1 flex-col overflow-hidden px-4 py-4 sm:px-8 sm:py-6">
+        {/* Antes era `flex-1 overflow-hidden` com só a lista abaixo
+            rolando por dentro (`min-h-0 flex-1 overflow-y-auto`) —
+            cabeçalho fixo + lista com scroll próprio. Bug real em
+            produção (2026-08-05, evento com nome/filtros grandes o
+            bastante num celular pequeno): o cabeçalho (título+filtros+
+            "acontecendo agora") sozinho já podia consumir a viewport
+            inteira, sobrando 0px pra lista — como tudo ao redor tinha
+            `overflow-hidden`, o resto do cronograma ficava
+            inacessível, sem scroll nenhum pra alcançar. Trocado pra
+            fluxo normal (`main` com `overflow-y-auto`, sem `flex-1`/
+            `overflow-hidden` aninhados) — a página inteira rola junto,
+            perde o "cabeçalho fixo" mas garante que dá sempre pra
+            chegar no resto do conteúdo. */}
+        <div className="flex w-full flex-col px-4 py-4 sm:px-8 sm:py-6">
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-lg font-bold text-foreground">Cronograma completo</h2>
 
@@ -484,7 +497,7 @@ export function EventLiveSchedulePage() {
             </div>
           )}
 
-          <div className="mt-6 min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="mt-6">
             {groupedByDay.length === 0 ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
                 {fullSchedule.length === 0
@@ -492,9 +505,9 @@ export function EventLiveSchedulePage() {
                   : "Nenhum item encontrado com esses filtros."}
               </p>
             ) : (
-              <div className="grid gap-6">
+              <div className="grid min-w-0 gap-6">
                 {groupedByDay.map(([dayDate, items]) => (
-                  <div key={dayDate}>
+                  <div key={dayDate} className="min-w-0">
                     <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground">
                       {formatDate(dayDate).toUpperCase()}
                     </p>

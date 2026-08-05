@@ -50,7 +50,11 @@ export function ProgramFormFields({ form, onChange }: ProgramFormFieldsProps) {
     onChange("name", entry.name);
     onChange("email", entry.email);
     onChange("city", entry.city ?? "");
-    onChange("state", entry.state ?? "");
+    // `maxLength` do input só trava digitação manual — um registro
+    // antigo do catálogo (de antes da validação de 2 caracteres
+    // existir) poderia ter um `state` mais longo, então precisa do
+    // mesmo corte aqui também.
+    onChange("state", (entry.state ?? "").slice(0, 2).toUpperCase());
   }
 
   return (

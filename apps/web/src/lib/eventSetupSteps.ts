@@ -58,6 +58,34 @@ export interface ScheduleSummary {
   updatedAt: string | null;
 }
 
+// Montado em EventSetupPage a partir de programsApi.list(id) +
+// teamsApi.listForEvent(id) (todas as equipes do evento, com
+// `categories` já carregado — ver EventTeamsController). A etapa só
+// conta como concluída com as 3 condições ao mesmo tempo (2026-08-05,
+// a pedido do usuário — antes bastava `programsCount > 0`, o que
+// deixava passar evento com programa/equipe "órfã", sem categoria
+// nenhuma vinculada):
+// 1. `hasAnyTeamInCategory` — pelo menos uma equipe, de algum
+//    programa, já está vinculada a uma categoria (senão a etapa nem
+//    começou de verdade).
+// 2. `allProgramsHaveTeams` — nenhum programa cadastrado está sem
+//    NENHUMA equipe.
+// 3. `allTeamsInCategory` — nenhuma equipe cadastrada está sem
+//    NENHUMA categoria vinculada.
+// (1) fica redundante com (2)+(3) na prática (se todo programa tem
+// equipe e toda equipe tem categoria, e há pelo menos um programa,
+// então (1) já é verdade) — mantido explícito mesmo assim porque é
+// exatamente a condição pedida, e protege contra o dia em que (2)/(3)
+// mudarem de regra separadamente.
+export interface ProgramsSummary {
+  programsCount: number;
+  teamsCount: number;
+  hasAnyTeamInCategory: boolean;
+  allProgramsHaveTeams: boolean;
+  allTeamsInCategory: boolean;
+  updatedAt: string | null;
+}
+
 // Escala de arbitragem só conta como concluída com as duas condições
 // atendidas — mensagem precisa conforme o que ainda falta.
 function judgePanelDetail(hasLegalityJudge: boolean, allTemplatesJudgingComplete: boolean): string {
@@ -71,6 +99,22 @@ function judgePanelDetail(hasLegalityJudge: boolean, allTemplatesJudgingComplete
     return "Pendente: definir o Jurado de Legalidade";
   }
   return "Pendente: concluir todos os sistemas de pontuação";
+}
+
+function programsDetail(summary: ProgramsSummary, completed: boolean): string {
+  if (summary.programsCount === 0) return "Nenhum programa cadastrado";
+  if (completed) {
+    const programWord = summary.programsCount === 1 ? "programa" : "programas";
+    const teamWord = summary.teamsCount === 1 ? "equipe" : "equipes";
+    return `${summary.programsCount} ${programWord} e ${summary.teamsCount} ${teamWord}, todos participando de alguma categoria`;
+  }
+  if (!summary.allProgramsHaveTeams) {
+    return "Pendente: há programa cadastrado sem nenhuma equipe";
+  }
+  if (!summary.allTeamsInCategory) {
+    return "Pendente: há equipe cadastrada sem categoria vinculada";
+  }
+  return "Pendente: vincule ao menos uma equipe a uma categoria";
 }
 
 function scheduleDetail(
@@ -92,10 +136,12 @@ export function buildSetupSteps(
   allTemplatesJudgingComplete: boolean,
   hasAnyJudge: boolean,
   schedule: ScheduleSummary,
+  programs: ProgramsSummary,
 ): SetupStep[] {
   const categoriesCount = event.categoriesCount ?? 0;
-  const programsCount = event.programsCount ?? 0;
   const judgePanelCompleted = hasLegalityJudge && allTemplatesJudgingComplete;
+  const programsCompleted =
+    programs.hasAnyTeamInCategory && programs.allProgramsHaveTeams && programs.allTeamsInCategory;
   const regulationCompleted =
     !!regulation &&
     regulation.hasOfficialRegulation &&
@@ -138,13 +184,11 @@ export function buildSetupSteps(
       title: "Programas e equipes",
       shortTitle: "Programas e equipes",
       description: "Cadastre os programas e as equipes que vão participar do evento.",
-      completed: programsCount > 0,
-      detail:
-        programsCount > 0
-          ? `${programsCount} ${programsCount === 1 ? "programa cadastrado" : "programas cadastrados"}`
-          : "Nenhum programa cadastrado",
-      updatedAt: event.programsUpdatedAt,
-      actionLabel: programsCount > 0 ? "Editar programas" : "Iniciar cadastro",
+      completed: programsCompleted,
+      inProgress: !programsCompleted && programs.programsCount > 0,
+      detail: programsDetail(programs, programsCompleted),
+      updatedAt: programs.updatedAt,
+      actionLabel: programs.programsCount > 0 ? "Editar programas" : "Iniciar cadastro",
       href: `/events/${event.aliasId}/programs`,
     },
     {

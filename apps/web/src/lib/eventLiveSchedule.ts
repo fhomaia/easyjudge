@@ -1,6 +1,6 @@
 import type { ScheduleDay, ScheduleEntry, ScheduleEntryType, ScheduleResource } from "@/api/client";
 import { computeResourceTimes } from "@/lib/scheduleTime";
-import { isAutoWaitBreak } from "@/lib/scheduleEntryKind";
+import { INTERVAL_BREAK_LABEL, isAutoWaitBreak } from "@/lib/scheduleEntryKind";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import { filterRemovedFromSchedule } from "@/lib/scheduleWithdrawal";
 
@@ -119,6 +119,13 @@ export function computeResourceNextStatus(
 
       for (const entry of resource.entries) {
         if (entry.type === "warmup") continue;
+        // "Intervalo entre apresentações" é um detalhe de bastidor da
+        // escala (visível/editável nas telas de gestão do cronograma,
+        // ver isAutoWaitBreak) — não faz sentido virar o "agora"/
+        // "próximo" de uma pista pro público que só olha esta tela,
+        // então pula direto pro próximo item de verdade (2026-08-05,
+        // pedido do usuário).
+        if (entry.type === "break" && entry.label === INTERVAL_BREAK_LABEL) continue;
         const t = times.get(entry.id);
         if (!t) continue;
         if (doneEntryIds.has(entry.id)) continue;

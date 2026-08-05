@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { CircleHelp, Eye, LogOut, Menu, UserCog } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CircleHelp,
+  Eye,
+  LogOut,
+  Menu,
+  UserCog,
+} from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getAccountLabel } from "@/lib/roleLabels";
@@ -13,6 +21,7 @@ import {
 import { ImpersonateDialog } from "@/components/ImpersonateDialog";
 import { HelpDialog } from "@/components/HelpDialog";
 import { useAuthStore } from "@/store/auth";
+import { useSidebarCollapseStore } from "@/store/sidebarCollapse";
 import type { UserProfile } from "@/api/client";
 
 interface AppSidebarProps {
@@ -36,19 +45,25 @@ function NavLinks({
   profile,
   onNavigate,
   eventNavItems,
+  collapsed,
 }: {
   profile: UserProfile | null;
   onNavigate: (href: string) => void;
   eventNavItems?: EventNavItem[];
+  collapsed: boolean;
 }) {
   const location = useLocation();
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
       {eventNavItems && eventNavItems.length > 0 && (
         <>
-          <p className="px-3 pt-1 pb-1.5 text-xs font-semibold tracking-wide text-white/40">
-            NESTE EVENTO
-          </p>
+          {collapsed ? (
+            <div className="mx-1 my-1 border-t border-white/10" />
+          ) : (
+            <p className="px-3 pt-1 pb-1.5 text-xs font-semibold tracking-wide text-white/40">
+              NESTE EVENTO
+            </p>
+          )}
           {eventNavItems.map(
             ({ key, label, icon: Icon, current, badge, onClick }) => (
               <button
@@ -56,8 +71,10 @@ function NavLinks({
                 type="button"
                 disabled={!onClick}
                 onClick={onClick}
+                title={collapsed ? label : undefined}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                  collapsed && "justify-center px-0",
                   current
                     ? "bg-white/10 text-white"
                     : onClick
@@ -73,7 +90,7 @@ function NavLinks({
                     </span>
                   ) : null}
                 </span>
-                {label}
+                {!collapsed && label}
               </button>
             ),
           )}
@@ -88,15 +105,17 @@ function NavLinks({
           key={href}
           type="button"
           onClick={() => onNavigate(href)}
+          title={collapsed ? label : undefined}
           className={cn(
             "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
+            collapsed && "justify-center px-0",
             isNavItemActive(location.pathname, href)
               ? "bg-white/10 text-white"
               : "text-white/60 hover:bg-white/5 hover:text-white",
           )}
         >
           <Icon className="size-4" />
-          {label}
+          {!collapsed && label}
         </button>
       ))}
     </nav>
@@ -106,9 +125,11 @@ function NavLinks({
 function ProfileFooter({
   profile,
   onLogout,
+  collapsed,
 }: {
   profile: UserProfile | null;
   onLogout: () => void;
+  collapsed: boolean;
 }) {
   const navigate = useNavigate();
   const [impersonateOpen, setImpersonateOpen] = useState(false);
@@ -133,28 +154,56 @@ function ProfileFooter({
           indicador de impersonation nenhum, aceitável por ser uma
           ferramenta de uso do próprio dono da conta). */}
       {impersonatorToken && (
-        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-amber-500/15 px-2.5 py-2">
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-amber-300">
-            <Eye className="size-3.5 shrink-0" />
-            <span className="truncate">
-              Vendo como{" "}
-              <span className="font-semibold">{impersonatingLabel}</span>
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleStopImpersonation}
-            className="shrink-0 text-xs font-medium text-amber-200 hover:underline"
-          >
-            Voltar
-          </button>
+        <div
+          className={cn(
+            "mb-2 flex items-center gap-2 rounded-lg bg-amber-500/15 px-2.5 py-2",
+            collapsed ? "justify-center" : "justify-between",
+          )}
+          title={collapsed ? `Vendo como ${impersonatingLabel}` : undefined}
+        >
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={handleStopImpersonation}
+              aria-label="Voltar pra sua conta"
+              className="shrink-0 text-amber-300"
+            >
+              <Eye className="size-4" />
+            </button>
+          ) : (
+            <>
+              <div className="flex min-w-0 items-center gap-1.5 text-xs text-amber-300">
+                <Eye className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  Vendo como{" "}
+                  <span className="font-semibold">{impersonatingLabel}</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleStopImpersonation}
+                className="shrink-0 text-xs font-medium text-amber-200 hover:underline"
+              >
+                Voltar
+              </button>
+            </>
+          )}
         </div>
       )}
-      <div className="flex items-center justify-between gap-2">
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          collapsed ? "flex-col" : "justify-between",
+        )}
+      >
         <button
           type="button"
           onClick={() => navigate("/profile")}
-          className="flex min-w-0 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-white/5"
+          title={collapsed ? "Meu perfil" : undefined}
+          className={cn(
+            "flex min-w-0 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-white/5",
+            collapsed && "justify-center",
+          )}
         >
           <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-yellow text-sm font-semibold text-brand-navy">
             {profile?.avatarUrl ? (
@@ -169,18 +218,25 @@ function ProfileFooter({
               "…"
             )}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-white">
-              {profile
-                ? `${profile.firstName} ${profile.lastName}`.trim()
-                : "Carregando..."}
-            </p>
-            <p className="truncate text-xs text-white/50">
-              {profile ? getAccountLabel(profile) : ""}
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-white">
+                {profile
+                  ? `${profile.firstName} ${profile.lastName}`.trim()
+                  : "Carregando..."}
+              </p>
+              <p className="truncate text-xs text-white/50">
+                {profile ? getAccountLabel(profile) : ""}
+              </p>
+            </div>
+          )}
         </button>
-        <div className="flex shrink-0 items-center gap-1">
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-1",
+            collapsed && "flex-col",
+          )}
+        >
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
@@ -229,6 +285,8 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const collapsed = useSidebarCollapseStore((s) => s.collapsed);
+  const toggleCollapsed = useSidebarCollapseStore((s) => s.toggle);
 
   return (
     <>
@@ -258,18 +316,51 @@ export function AppSidebar({
         eventNavItems={eventNavItems}
       />
 
-      {/* Desktop: sidebar fixa como antes. */}
-      <aside className="hidden h-svh w-72 shrink-0 flex-col bg-brand-navy text-white sm:flex">
-        <div className="flex items-center gap-3 border-b border-white/10 p-6">
-          <BrandMark />
+      {/* Desktop: sidebar fixa, largura controlada por
+          useSidebarCollapseStore (persistida — ver comentário no
+          store). `relative` no <aside> pra ancorar o botão de
+          colapsar, que fica meio pra fora da borda direita (padrão
+          comum desse tipo de controle). */}
+      <aside
+        className={cn(
+          "relative hidden h-svh shrink-0 flex-col bg-brand-navy text-white transition-[width] duration-200 sm:flex",
+          collapsed ? "w-20" : "w-72",
+        )}
+      >
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expandir menu" : "Colapsar menu"}
+          title={collapsed ? "Expandir menu" : "Colapsar menu"}
+          className="absolute top-6 -right-3 z-10 flex size-6 items-center justify-center rounded-full border border-white/10 bg-brand-navy text-white/70 shadow-md transition-colors hover:bg-white/10 hover:text-white"
+        >
+          {collapsed ? (
+            <ChevronRight className="size-3.5" />
+          ) : (
+            <ChevronLeft className="size-3.5" />
+          )}
+        </button>
+
+        <div
+          className={cn(
+            "flex items-center gap-3 border-b border-white/10 p-6",
+            collapsed && "justify-center px-3",
+          )}
+        >
+          {collapsed ? (
+            <img src="/favicon.png" alt="" className="size-7 shrink-0 rounded-md" />
+          ) : (
+            <BrandMark />
+          )}
         </div>
 
         <NavLinks
           profile={profile}
           onNavigate={navigate}
           eventNavItems={eventNavItems}
+          collapsed={collapsed}
         />
-        <ProfileFooter profile={profile} onLogout={onLogout} />
+        <ProfileFooter profile={profile} onLogout={onLogout} collapsed={collapsed} />
       </aside>
     </>
   );

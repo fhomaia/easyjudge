@@ -74,7 +74,7 @@ export function ScheduleEntryCard({
         zIndex: isDragging || peerDrag ? 50 : 10,
       }}
       className={cn(
-        "group flex cursor-grab flex-col justify-center overflow-visible rounded-md border px-2 py-1 text-xs shadow-sm transition-opacity active:cursor-grabbing",
+        "group flex touch-none cursor-grab flex-col justify-center overflow-visible rounded-md border px-2 py-1 text-xs shadow-sm transition-opacity active:cursor-grabbing",
         style.bg,
         style.border,
         style.text,
@@ -84,6 +84,10 @@ export function ScheduleEntryCard({
       title={tooltip}
     >
       {!isWaitBreak && (
+        // Sempre visível, não só no hover do card (era `hidden
+        // group-hover:block`) — hover não existe em touch/tablet, então
+        // esse botão nunca aparecia lá, sem outro jeito de excluir uma
+        // apresentação já agendada.
         <button
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
@@ -91,7 +95,7 @@ export function ScheduleEntryCard({
             e.stopPropagation();
             onRemove();
           }}
-          className="absolute right-1 top-1 hidden rounded-full bg-black/10 p-0.5 group-hover:block hover:bg-black/20"
+          className="absolute right-1 top-1 touch-none rounded-full bg-black/10 p-0.5 hover:bg-black/20"
         >
           <X className="size-3" />
         </button>

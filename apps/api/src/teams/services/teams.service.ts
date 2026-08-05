@@ -41,6 +41,12 @@ export class TeamsService {
       EventActivityAction.TEAM_CREATED,
       saved.name,
     );
+    // `save()` não carrega relations — uma equipe recém-criada nunca
+    // tem categoria vinculada ainda, então não precisa de round-trip
+    // no banco pra saber disso. Sem isso, `categories` vem `undefined`
+    // na resposta e o frontend (que sempre espera um array, ver
+    // `Team.categories.map` em ProgramsPage) quebra o render inteiro.
+    saved.categories = [];
     return saved;
   }
 
@@ -88,7 +94,12 @@ export class TeamsService {
       EventActivityAction.TEAM_UPDATED,
       saved.name,
     );
-    return saved;
+    // Mesmo motivo do `create()`: `findTeamOrThrow` não carrega
+    // `categories` (só usa `findOneBy`), então sem isso a resposta
+    // some com as categorias já vinculadas — o frontend substitui o
+    // team inteiro (ver `handleTeamUpdated` em ProgramsPage) e quebra
+    // no próximo render.
+    return this.findTeamWithCategories(saved.id);
   }
 
   async remove(

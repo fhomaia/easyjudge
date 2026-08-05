@@ -10,7 +10,12 @@ import { SetupStepCard } from "@/components/SetupStepCard";
 import { SetupRecommendedBanner } from "@/components/SetupRecommendedBanner";
 import { PublishEventCard } from "@/components/PublishEventCard";
 import { EventCelebrationOverlay } from "@/components/EventCelebrationOverlay";
-import { buildSetupSteps, type RegulationSummary, type ScheduleSummary } from "@/lib/eventSetupSteps";
+import {
+  buildSetupSteps,
+  type ProgramsSummary,
+  type RegulationSummary,
+  type ScheduleSummary,
+} from "@/lib/eventSetupSteps";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import {
   fetchTemplateJudgingStats,
@@ -23,14 +28,18 @@ import {
   eventsApi,
   judgesApi,
   judgingApi,
+  programsApi,
   regulationApi,
   scheduleApi,
+  teamsApi,
   usersApi,
   type Category,
   type Event,
+  type Program,
   type Regulation,
   type ScheduleDay,
   type ScoringTemplate,
+  type TeamWithProgram,
   type UnscheduledPair,
   type UserProfile,
 } from "@/api/client";
@@ -48,6 +57,8 @@ export function EventSetupPage() {
   const [regulation, setRegulation] = useState<Regulation | null>(null);
   const [templates, setTemplates] = useState<ScoringTemplate[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [eventTeams, setEventTeams] = useState<TeamWithProgram[]>([]);
   const [hasLegalityJudge, setHasLegalityJudge] = useState(false);
   const [hasAnyJudge, setHasAnyJudge] = useState(false);
   const [scheduleDays, setScheduleDays] = useState<ScheduleDay[]>([]);
@@ -77,6 +88,8 @@ export function EventSetupPage() {
     regulationApi.get(id).then(setRegulation).catch(() => setRegulation(null));
     eventScoringTemplatesApi.list(id).then(setTemplates).catch(() => setTemplates([]));
     categoriesApi.list(id).then(setCategories).catch(() => setCategories([]));
+    programsApi.list(id).then(setPrograms).catch(() => setPrograms([]));
+    teamsApi.listForEvent(id).then(setEventTeams).catch(() => setEventTeams([]));
     judgesApi
       .list(id)
       .then((judges) => setHasAnyJudge(judges.length > 0))
@@ -255,6 +268,27 @@ export function EventSetupPage() {
     };
   }, [scheduleDays, unscheduledByDay]);
 
+  const programsSummary: ProgramsSummary = useMemo(() => {
+    let latestUpdatedAt: string | null = null;
+    for (const program of programs) {
+      if (!latestUpdatedAt || program.updatedAt > latestUpdatedAt) latestUpdatedAt = program.updatedAt;
+    }
+    for (const team of eventTeams) {
+      if (!latestUpdatedAt || team.updatedAt > latestUpdatedAt) latestUpdatedAt = team.updatedAt;
+    }
+    return {
+      programsCount: programs.length,
+      teamsCount: eventTeams.length,
+      hasAnyTeamInCategory: eventTeams.some((t) => t.categories.length > 0),
+      allProgramsHaveTeams:
+        programs.length > 0 &&
+        programs.every((p) => eventTeams.some((t) => t.programId === p.id)),
+      allTeamsInCategory:
+        eventTeams.length > 0 && eventTeams.every((t) => t.categories.length > 0),
+      updatedAt: latestUpdatedAt,
+    };
+  }, [programs, eventTeams]);
+
   function handleLogout() {
     logout();
     navigate("/login");
@@ -279,6 +313,7 @@ export function EventSetupPage() {
         allTemplatesJudgingComplete,
         hasAnyJudge,
         scheduleSummary,
+        programsSummary,
       )
     : [];
   const firstIncomplete = steps.find((s) => !s.completed);
@@ -347,10 +382,24 @@ export function EventSetupPage() {
                   event={event}
                   stepNumber={steps.length + 1}
                   allStepsCompleted={allStepsCompleted}
-                  onPublished={(updated) => {
-                    setEvent(updated);
-                    setPublishCelebrationOpen(true);
-                  }}
+                  // De propósito NÃO chama `setEvent(updated)` aqui —
+                  // bug real (2026-08-05): fazer isso atualiza
+                  // `event.status` pra "published" na hora, e o efeito
+                  // logo abaixo ("Setup só faz sentido pra evento ainda
+                  // não publicado") reage a essa mudança IMEDIATAMENTE,
+                  // disparando o `navigate(...replace...)` pra `/live`
+                  // antes da animação do EventCelebrationOverlay sequer
+                  // começar a rodar — a página de Setup era desmontada
+                  // (levando a animação junto) no mesmo instante em que
+                  // `publishCelebrationOpen` virava `true`. Mesma causa
+                  // raiz do bug já corrigido no fluxo de login/cadastro
+                  // (ver BrandBackdrop/LoginPage): navegar/mudar estado
+                  // que dispara navegação cedo demais compete com a
+                  // animação. Como o botão do overlay já leva pra Home
+                  // (não precisa do `event` atualizado pra nada antes
+                  // disso), simplesmente não atualiza esse estado local
+                  // — a página é abandonada de qualquer forma.
+                  onPublished={() => setPublishCelebrationOpen(true)}
                 />
               </div>
 

@@ -262,7 +262,7 @@ function TableEntryCell({
         zIndex: isDragging || peerDrag ? 50 : undefined,
       }}
       className={cn(
-        "group relative min-w-40 cursor-grab border-r border-l border-border/30 px-3 py-2 align-top text-xs transition-opacity last:border-r-0 active:cursor-grabbing",
+        "group relative min-w-40 touch-none cursor-grab border-r border-l border-border/30 px-3 py-2 align-top text-xs transition-opacity last:border-r-0 active:cursor-grabbing",
         style.bg,
         style.text,
         hasConflict && "bg-destructive/15 text-destructive",
@@ -270,6 +270,8 @@ function TableEntryCell({
         isOver && "ring-2 ring-inset ring-primary/40",
       )}
     >
+      {/* Sempre visível, não só no hover (era `hidden group-hover:block`)
+          — sem hover em touch/tablet, esse botão nunca aparecia lá. */}
       <button
         type="button"
         onPointerDown={(e) => e.stopPropagation()}
@@ -277,7 +279,7 @@ function TableEntryCell({
           e.stopPropagation();
           onRemove();
         }}
-        className="absolute right-1 top-1 hidden rounded-full bg-black/10 p-0.5 group-hover:block hover:bg-black/20"
+        className="absolute right-1 top-1 touch-none rounded-full bg-black/10 p-0.5 hover:bg-black/20"
       >
         <X className="size-3" />
       </button>

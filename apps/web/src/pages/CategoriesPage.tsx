@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, CalendarDays, MapPin, Plus } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, MapPin, Plus, Star } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
@@ -333,6 +333,29 @@ export function CategoriesPage() {
                   </Button>
                 </div>
               )}
+
+              <div className="flex flex-col gap-4 rounded-xl border border-amber-300/60 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-400/20 dark:bg-amber-500/10">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-600 dark:text-amber-400">
+                    <Star className="size-5" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Próxima etapa recomendada</p>
+                    <p className="text-sm text-muted-foreground">
+                      Agora cadastre os programas e as equipes do evento. Durante esse processo
+                      você vincula cada equipe às categorias em que ela vai competir.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/events/${id}/programs`)}
+                  className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                >
+                  Ir para programas e equipes
+                  <ArrowRight className="size-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
