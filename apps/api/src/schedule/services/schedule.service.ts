@@ -1961,7 +1961,11 @@ export class ScheduleService {
     const mat = await this.resourcesRepo.save(
       this.resourcesRepo.create({
         scheduleDayId: day.id,
-        name: 'Pista 1',
+        // "Palco 1" (era "Pista 1", 2026-08-05, pedido do usuário) — só
+        // o nome padrão sugerido; o organizador renomeia livremente
+        // depois via CRUD de recursos, isso não afeta nada mais (nome
+        // é `varchar` livre, não um enum/tipo fixo).
+        name: 'Palco 1',
         supportsPresentations: true,
         order: 0,
       }),

@@ -1189,6 +1189,150 @@ Duas coisas pequenas e independentes, mesma sessão.
     "escrita 1 ok, escrita 2 falha depois, sem transação cobrindo as
     duas" já documentado antes neste arquivo pra `EventActivityAction`).
 
+## "Esqueci minha senha" (popup) + mostrar senha + rodada de correções de UX (2026-08-05)
+
+Sessão que ficou pra trás no dia anterior (PC desligou no meio) foi
+retomada do zero: todo o trabalho em andamento (não commitado) estava
+intacto no working tree, nada se perdeu. Cobre duas rodadas grandes de
+pedidos do usuário, todas já commitadas, deployadas (Render + Cloudflare
+Workers, sem migration pendente exceto a nota abaixo) e testadas com
+contas/eventos descartáveis (Postgres local, sempre apagados ao final).
+
+- **"Esqueci minha senha"**: fluxo em 3 etapas (email → código de 6
+  dígitos → nova senha), nova tabela `password_resets` (migration
+  `AddPasswordResets`, `PasswordReset` entity — sempre cria uma linha,
+  mesmo quando o email não existe, pra nunca revelar isso na resposta;
+  ver `AuthService.forgotPassword/verifyPasswordReset/resetPassword`).
+  **Decisão de UX** (pedido do usuário depois de eu ter implementado
+  como rota `/forgot-password` separada): virou `ForgotPasswordDialog`,
+  popup sobre a própria `LoginPage` (mesmo padrão do `RegisterDialog`,
+  mesmo fundo `BrandBackdrop`) — sem rota própria, sem fundo escuro
+  "flutuando sem contexto".
+- **Botão de mostrar/ocultar senha**: `PasswordInput.tsx` novo
+  (wrapper de `Input` com ícone de olho, `@/lib/passwordRules.ts`
+  extraído do `RegisterDialog` pra ser compartilhado) — usado em
+  `LoginPage`, `RegisterDialog`, `ForgotPasswordDialog` e `ProfilePage`
+  (troca de senha/desativar/excluir conta).
+- **Bug sistêmico achado e corrigido em 6 lugares**: `SelectValue` do
+  shadcn/Base UI **ignora completamente a prop `placeholder` quando o
+  filho é uma função** (só cai no placeholder quando NÃO há
+  `children`) — todo lugar que já usava o padrão
+  `<SelectValue placeholder="x">{(v) => LABELS[v]}</SelectValue>`
+  (documentado antes neste arquivo como a forma CORRETA de mostrar o
+  label em vez do value bruto) tinha o trigger vazio antes de escolher
+  algo. Corrigido tratando `!value` DENTRO da própria função em vez de
+  confiar no `placeholder`: `AddTeamCategoryPopover`,
+  `CreateScoringTemplateDialog`, `JudgingPage`, `ProgramFormFields`,
+  `CategoryFormFields`, `JudgeFormFields`. Ver gotcha correspondente
+  mais abaixo.
+- **Gerenciar acessos (`event-staff`) só lista quem administra**:
+  `EventStaffService.list` agora filtra por `STAFF_ROLES` (admin/
+  assessor/judge) — programa/atleta/espectador (concedidos
+  automaticamente, ver `EventMemberRole`) não aparecem mais no roster
+  manual, e "Espectador" saiu do `EVENT_MEMBER_ROLES_ORDER` (checkbox
+  de editar papéis / popup de adicionar pessoa) — redundante desde o
+  fluxo de compartilhamento por código/QR.
+- **Cronograma — painel de detalhes da apresentação**: clicar numa
+  apresentação (só apresentação, não aquecimento/intervalo) na timeline
+  abre `PresentationDetailsDialog` — dados completos (pista, horário,
+  duração, conflitos) + mover (início da pista / fim da pista / antes
+  de outra apresentação, com seletor) + remover, tudo num só lugar.
+  **Bug real pego testando**: `movePresentationWithWarmup` remove a
+  apresentação (e qualquer intervalo "Aguardando aquecimento" vinculado
+  a ela) ANTES de renumerar e reinserir — então o `order` de uma
+  apresentação de referência lido ANTES dessa remoção fica errado se a
+  removida estava antes dela na mesma pista (some um intervalo do
+  meio). Corrigido calculando o índice de inserção no CLIENTE já
+  simulando essa remoção (filtrando a entry sendo movida + qualquer
+  entry com `linkedEntryId` apontando pra ela, da lista COMPLETA da
+  pista de destino — não só as apresentações) antes de achar a posição
+  da referência.
+- **Gerar automaticamente**: prioriza Team Cheer > Group Stunt >
+  Coed/Elite Stunt > Partner Stunt > demais formatos, nível crescente
+  dentro do mesmo formato (`AUTO_GENERATE_FORMAT_PRIORITY` em
+  `ScheduleService`, ordena `unscheduled` antes de distribuir nos
+  buckets — vale pras duas estratégias de distribuição).
+- **Banner "Próxima etapa recomendada" sobrepondo a timeline —
+  precisou de DUAS rodadas pra resolver de vez.** 1ª rodada: reportado
+  em tablet retrato, corrigido gateando `min-h-0` do grid da coluna
+  (timeline+painel lateral) pra só valer a partir de `xl` — sem isso o
+  flexbox encolhia o grid abaixo do `min-h-[70vh]` que a coluna exige
+  em telas abaixo de `xl`, e a timeline "vazava" (`overflow: visible`)
+  por cima do banner. 2ª rodada: usuário reportou de novo em tablet
+  PAISAGEM (width cruza `xl`, então cai no caminho de 2 colunas) — o
+  MESMO tipo de bug, só que agora causado pelo `min-h-72` incondicional
+  da própria `ScheduleTimeline` (garante 4 recursos visíveis, ver
+  histórico anterior) colidindo com o `xl:min-h-0` que eu tinha
+  deixado no grid de propósito pra desktop encolher/preencher a
+  viewport. Fix final: **removido `min-h-0` do grid em QUALQUER
+  breakpoint** — sem ele, o grid nunca encolhe além do que o conteúdo
+  exige (`flex-1` ainda deixa crescer quando há espaço de sobra,
+  visual idêntico em telas confortáveis), e a página cresce/rola em
+  vez de sobrepor quando não há espaço. Testado programaticamente
+  (Puppeteer, medindo `getBoundingClientRect`) em 13 combinações de
+  largura/altura, incluindo as que reproduziam os dois bugs.
+  `ScheduleTableView` recebeu o mesmo piso `min-h-72` que a
+  `ScheduleTimeline` já tinha (também ficava "minúscula", mesma causa).
+- **Drag-and-drop do cronograma, dois bugs de UX + um bug real de
+  clipping**: (1) área de soltura evidenciada assim que QUALQUER
+  arraste começa (não só embaixo do cursor), mesmo padrão já usado em
+  `JudgingCriterionRow`/`SpecialRolesCard` — só que a primeira tentativa
+  ficou invisível porque o `style` INLINE de tonalidade do recurso
+  sempre vencia a classe Tailwind pro mesmo `background-color` (corrigido
+  limpando o inline style também quando `isDragActive`, não só quando
+  `isOver`). (2) **Bug real, reportado como "o card some quando meu
+  dedo sai da seção de equipes não agendadas"**: os 4 tipos de arraste
+  (equipe não agendada, componente do evento, apresentação já agendada,
+  reordenar pista) moviam o elemento original via CSS `transform`, mas
+  ele continuava fisicamente dentro do painel de origem — que tem
+  `overflow-y-auto`/`max-h-64` próprio. Assim que o `transform` empurra
+  o elemento além dessa borda, o `overflow` clipa, mesmo com o
+  drag ainda ativo. Corrigido adotando `DragOverlay` do dnd-kit em
+  todos os 4 (`data: {...}` em cada `useDraggable` carrega o payload
+  pro `DragOverlay`, centralizado em `SchedulePage`, desenhar uma
+  prévia fiel; elemento original só esmaece via `opacity`, não se move
+  mais) — o `DragOverlay` renderiza num portal (`document.body`),
+  imune a qualquer `overflow` de ancestral. `peerDrag` (aquecimento
+  espelhando visualmente o delta da apresentação vinculada arrastada)
+  continua usando transform manual — não é o próprio drag deste
+  elemento, é só sincronismo visual entre dois cards.
+- **Indicador de "salvando" — também precisou de duas tentativas.**
+  1ª: texto pequeno "Salvando..." perto do toggle Linha do
+  tempo/Tabela — usuário reportou que quase não via. 2ª: overlay de
+  TELA CHEIA (`fixed inset-0`, `bg-background/70 backdrop-blur-sm`,
+  `pointer-events-none`) com spinner centralizado, cobrindo mover/criar
+  (drag-and-drop) E remover uma apresentação — sem isso, o delay real
+  de rede (mais perceptível em produção, Render+Neon, que localmente)
+  entre soltar/remover e o card aparecer/desaparecer de verdade parecia
+  falha silenciosa.
+- **Ajustes menores**: mensagem de erro do cronograma movida do topo da
+  página pra logo abaixo da linha do tempo/tabela (onde o usuário
+  realmente está olhando ao montar o cronograma); intervalo padrão
+  entre apresentações de um dia novo, 0 → 5 min
+  (`ScheduleService.createDay`); scrollbar escondida (`scrollbar-none`,
+  utility já existente) na timeline do cronograma E na trilha
+  horizontal de progresso da tela de setup (`SetupProgressSummary`) —
+  dois relatos separados do usuário, mesma classe, containers
+  diferentes.
+- **Overlay de "salvando" reescopado**: depois de shippado como `fixed
+  inset-0` (tela cheia), usuário pediu pra afetar só a área da
+  timeline/tabela — trocado pra `absolute inset-0` dentro de um `div
+  relative` que envolve só o `{viewMode === "timeline" ? ... : ...}`,
+  não a coluna inteira (que também tem o toggle/rodapé/mensagem de
+  erro, esses continuam clicáveis/legíveis durante o "Salvando...").
+- **Nome padrão do primeiro recurso de um dia novo**: "Pista 1" →
+  "Palco 1" (`ScheduleService.seedDefaultResources`) — só o nome
+  sugerido, sem mudança de terminologia no resto do app ("pista"
+  continua aparecendo em labels genéricos como "Recursos (pistas)");
+  organizador renomeia livremente depois.
+- **Bug real de input numérico controlado, `AutoGenerateDialog`**:
+  campos "Intervalo entre apresentações"/"Duração do aquecimento"/
+  "Duração do almoço" não deixavam apagar o "0" pra digitar outro
+  valor (mesma causa/fix documentado na seção de Gotchas mais abaixo —
+  `value`/`onChange` number direto vs. state em string). O mesmo
+  padrão existe em outros ~6 componentes do projeto, não corrigidos
+  ainda (fora do escopo do que foi reportado).
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
@@ -1307,6 +1451,46 @@ fato pendente:
   código do projeto), inofensivo (só imprime, não executa nada), mas
   vale saber que não é bug nosso se aparecer de novo no log de
   `migration:run`/`migration:generate`.
+- **`SelectValue` (Base UI) ignora a prop `placeholder` por completo
+  quando o filho é uma função** — só cai no `placeholder` quando NÃO há
+  `children` nenhum. O padrão já documentado acima (`<SelectValue
+  placeholder="x">{(v) => LABELS[v]}</SelectValue>`, necessário pra
+  mostrar o label em vez do value bruto) faz o trigger renderizar
+  VAZIO antes de escolher algo, com o `placeholder` sendo só código
+  morto. Corrigido tratando `!value` dentro da própria função:
+  `{(value) => value ? LABELS[value] : "Meu placeholder"}` — sem passar
+  `placeholder` nenhum (2026-08-05, achado testando
+  `PresentationDetailsDialog` no navegador, depois generalizado pra
+  outros 6 usos do mesmo padrão no projeto — não aparece em
+  typecheck/lint, só visualmente).
+- **`apps/api`'s `npm run lint` roda `eslint --fix`** (não é só
+  detecção) — rodar ele pra "só checar" reformata SILENCIOSAMENTE
+  qualquer arquivo do projeto com pendência de estilo, mesmo arquivos
+  não relacionados ao que você está tocando (pego 2026-08-05:
+  reformatou ~40 arquivos, incluindo migrations antigas, ao rodar só
+  pra investigar erros durante uma sessão retomada com trabalho não
+  commitado de outra pessoa/sessão — teve que reverter tudo e reaplicar
+  manualmente as mudanças legítimas misturadas no meio). Pra só
+  verificar erros de tipo sem risco de reescrever nada, usar `npx tsc
+  --noEmit -p .` (funciona de verdade em `apps/api`, diferente do
+  `apps/web` — ver gotcha do `tsc -b` acima).
+- **Input `type="number"` controlado direto por `number` state
+  (`value={x}` + `onChange={(e) => setX(Number(e.target.value))}`)
+  nunca fica vazio pro usuário apagar e digitar de novo** — apagar o
+  campo manda `e.target.value === ""`, `Number("")` vira `0`, e o
+  input reexibe "0" na hora, obrigando o usuário a digitar um dígito
+  ANTES de conseguir apagar o zero (reportado 2026-08-05,
+  `AutoGenerateDialog`; o mesmo padrão existe em pelo menos mais 6
+  componentes do projeto — `CustomIntervalDialog`, `EditCriterionPanel`,
+  `CategoryFormFields`, `DeductionRulesSection`, `ScoreBandsEditor`,
+  `ScoringTemplateFormFields` — não corrigidos ainda, só o reportado).
+  Fix: guardar o valor do input como STRING separada (aceita vazio
+  livremente enquanto digita), convertendo pra number só no momento de
+  usar o valor de verdade (submit), com fallback pro mínimo válido se
+  ficar vazio/inválido — `ScheduleDaySettingsBar` já evitava isso desde
+  sempre usando `defaultValue` (input não controlado) + `onBlur` em vez
+  de `value`+`onChange`, outra forma válida de resolver o mesmo
+  problema quando não precisa reagir a cada tecla.
 
 ## Comandos úteis
 
