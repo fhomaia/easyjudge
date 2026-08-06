@@ -589,24 +589,41 @@ export function SchedulePage() {
                         </Button>
                       </div>
                     </div>
-                    {viewMode === "timeline" ? (
-                      <ScheduleTimeline
-                        day={selectedDay}
-                        conflicts={conflicts}
-                        onRemoveEntry={handleRemoveEntry}
-                        onOpenDetails={setDetailsEntryId}
-                        onAddResource={() => setCreateResourceOpen(true)}
-                        onEditResource={setEditingResourceId}
-                        peerDrag={peerDrag}
-                      />
-                    ) : (
-                      <ScheduleTableView
-                        day={selectedDay}
-                        conflicts={conflicts}
-                        onRemoveEntry={handleRemoveEntry}
-                        peerDrag={peerDrag}
-                      />
-                    )}
+                    <div className="relative min-h-72 flex-1">
+                      {viewMode === "timeline" ? (
+                        <ScheduleTimeline
+                          day={selectedDay}
+                          conflicts={conflicts}
+                          onRemoveEntry={handleRemoveEntry}
+                          onOpenDetails={setDetailsEntryId}
+                          onAddResource={() => setCreateResourceOpen(true)}
+                          onEditResource={setEditingResourceId}
+                          peerDrag={peerDrag}
+                        />
+                      ) : (
+                        <ScheduleTableView
+                          day={selectedDay}
+                          conflicts={conflicts}
+                          onRemoveEntry={handleRemoveEntry}
+                          peerDrag={peerDrag}
+                        />
+                      )}
+                      {/* Escopado só à área da timeline/tabela (era
+                          `fixed inset-0`, tela inteira) — pedido do
+                          usuário 2026-08-05: opacificar a tela toda era
+                          mais do que o necessário, o "Salvando..." é
+                          especificamente sobre o que está dentro desta
+                          seção. `pointer-events-none` de propósito: é só
+                          feedback visual, não precisa bloquear clique. */}
+                      {scheduleMutationPending && (
+                        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-xl bg-background/70 backdrop-blur-sm">
+                          <div className="flex flex-col items-center gap-3">
+                            <Loader2 className="size-8 animate-spin text-primary" />
+                            <p className="text-sm font-medium text-foreground">Salvando alteração...</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     {/* Movido pra aqui (era logo no topo da página,
                         antes até do cabeçalho "Cronograma do Evento") —
                         pedido do usuário 2026-08-05: passava
@@ -780,23 +797,6 @@ export function SchedulePage() {
         onExtend={handleExtendDayEnd}
         onCancel={handleCancelOverflow}
       />
-
-      {/* Cobre a tela inteira (não só um indicador pequeno perto do
-          toggle Linha do tempo/Tabela, que passava despercebido — pedido
-          do usuário, 2026-08-05) enquanto soltar/mover/remover uma
-          apresentação ainda não terminou de reconciliar no backend (ver
-          `scheduleMutationPending`). `pointer-events-none` de propósito:
-          é só feedback visual, não precisa bloquear clique — a ação já
-          está em voo e o próximo refetch vai substituir o estado atual
-          de qualquer forma. */}
-      {scheduleMutationPending && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="size-8 animate-spin text-primary" />
-            <p className="text-sm font-medium text-foreground">Salvando alteração...</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
