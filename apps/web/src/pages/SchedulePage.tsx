@@ -481,7 +481,7 @@ export function SchedulePage() {
                   }
                 />
 
-                <div className="grid flex-1 grid-cols-1 gap-6 xl:min-h-0 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="grid flex-1 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                   {/* Abaixo de `xl` (cobre qualquer tablet, mesmo em
                       paisagem — a grade vira 1 coluna só) o grid não tem
                       mais uma linha "esticável" pra essa coluna se
@@ -497,21 +497,29 @@ export function SchedulePage() {
                       pedido pelo usuário (prefere conteúdo grande com
                       scroll a tudo espremido pra caber sem rolar).
 
-                      O próprio grid (div acima) só ganha `min-h-0` a
-                      partir de `xl` também (bug real 2026-08-05,
-                      reportado em tablet paisagem): sem esse gate, o
-                      `min-h-0` incondicional deixava o algoritmo de
-                      flexbox encolher o grid pra caber no espaço
-                      restante do flex-col da página (que agora inclui o
-                      banner "Próxima etapa recomendada" abaixo) —
-                      encolhendo o grid pra MENOS que os 70vh exigidos
-                      por esta coluna, que então vazava (`overflow:
-                      visible`) pra fora do grid e sobrepunha o banner
-                      seguinte. Com `min-h-0` só em `xl` (mesmo gate já
-                      usado aqui do lado), o grid herda `min-height:
-                      auto` abaixo de `xl` — não encolhe além do que o
-                      conteúdo exige, e a página cresce/rola em vez de
-                      sobrepor. */}
+                      O grid (div acima) NÃO tem `min-h-0` em NENHUM
+                      breakpoint, de propósito — bug real 2026-08-05,
+                      encontrado de novo em tablet PAISAGEM depois de um
+                      primeiro fix que só cobria retrato (largura abaixo
+                      de `xl`). `min-h-0` incondicional (ou só `xl:`,
+                      como a primeira tentativa) deixa o algoritmo de
+                      flexbox encolher o grid abaixo do que o CONTEÚDO
+                      dele exige — e em paisagem/desktop (`xl`, 2
+                      colunas) esse piso não vem só do `min-h-[70vh]`
+                      daqui, vem também do `min-h-72` incondicional da
+                      própria ScheduleTimeline (garante 4 recursos
+                      visíveis mesmo em telas curtas) — encolher o grid
+                      além disso deixa a timeline vazar (`overflow:
+                      visible`) pra fora dele e sobrepor o banner "Próxima
+                      etapa recomendada" seguinte. SEM `min-h-0` aqui, o
+                      grid herda `min-height: auto` (baseado no
+                      conteúdo) em qualquer tela — `flex-1` ainda deixa
+                      ele CRESCER pra preencher espaço de sobra quando
+                      há (visual idêntico ao anterior em telas com
+                      espaço confortável), só não deixa mais ENCOLHER
+                      além do piso real; sem espaço suficiente, a página
+                      cresce/rola (`main` já é `overflow-y-auto`) em vez
+                      de sobrepor. */}
                   <div className="flex min-h-[70vh] min-w-0 flex-col gap-6 xl:min-h-0">
                     <div className="flex items-center gap-1 self-start rounded-lg border border-border/60 bg-muted/30 p-1">
                       <Button
