@@ -571,7 +571,9 @@ export function JudgingPage() {
 
               {templateOptions.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground">
-                  Nenhuma categoria deste evento tem um sistema de pontuação atribuído ainda.
+                  {candidateTemplateOptions.length === 0
+                    ? "Nenhuma categoria deste evento tem um sistema de pontuação atribuído ainda."
+                    : "As categorias deste evento já têm sistema de pontuação atribuído, mas nenhuma apresentação foi agendada ainda. Monte o cronograma antes de escalar jurados."}
                 </p>
               ) : (
                 <>

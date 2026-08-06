@@ -87,10 +87,6 @@ export function RegulationPage() {
     setRegulation(updated);
   }
 
-  function handleTemplateCreated(template: ScoringTemplate) {
-    navigate(`/scoring-templates/${template.id}`);
-  }
-
   return (
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
@@ -142,7 +138,6 @@ export function RegulationPage() {
                 <ScoringTemplatesSummarySection
                   eventId={id!}
                   templates={templates}
-                  onCreated={handleTemplateCreated}
                 />
               </div>
 

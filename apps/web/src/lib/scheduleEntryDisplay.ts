@@ -77,3 +77,17 @@ export function getScheduleEntryDisplay(
     (isAutoWaitBreak(entry) ? "\n(gerado automaticamente — some junto com a apresentação)" : "");
   return { title, subtitle, timeRange, tooltip };
 }
+
+// Rótulo curto (sem horário/conflito) de qualquer entry — usado pelos
+// seletores de referência "antes de"/"depois de" (AddUnscheduledEntryDialog,
+// MovePresentationDialog, PresentationDetailsDialog), que a partir de
+// 2026-08-06 deixam escolher qualquer componente do evento (Almoço,
+// Abertura, Premiação, intervalo personalizado) como referência, não só
+// outra apresentação. Reaproveita a mesma resolução de título/subtítulo
+// de getScheduleEntryDisplay (startMinutes/endMinutes/conflictReasons não
+// entram no cálculo de título/subtítulo, por isso os valores fixos abaixo
+// são seguros).
+export function scheduleReferenceLabel(entry: ScheduleEntry): string {
+  const { title, subtitle } = getScheduleEntryDisplay(entry, 0, 0, []);
+  return subtitle ? `${title} · ${subtitle}` : title;
+}

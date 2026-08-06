@@ -37,6 +37,7 @@ import {
 } from "@/components/ScheduleTimeline";
 import { ScheduleTableView, TABLE_CELL_PREFIX } from "@/components/ScheduleTableView";
 import { UnscheduledTeamsPanel, UnscheduledItemCard } from "@/components/UnscheduledTeamsPanel";
+import { AddUnscheduledEntryDialog } from "@/components/AddUnscheduledEntryDialog";
 import {
   EventComponentsLibrary,
   ComponentBlockCard,
@@ -93,6 +94,7 @@ export function SchedulePage() {
   const [autoGenerateOpen, setAutoGenerateOpen] = useState(false);
   const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [detailsEntryId, setDetailsEntryId] = useState<string | null>(null);
+  const [addingPair, setAddingPair] = useState<UnscheduledPair | null>(null);
   const [createResourceOpen, setCreateResourceOpen] = useState(false);
   const [replicateOpen, setReplicateOpen] = useState(false);
   const [dayToDelete, setDayToDelete] = useState<ScheduleDay | null>(null);
@@ -318,6 +320,36 @@ export function SchedulePage() {
       if (entry) await scheduleApi.removeEntry(id, dayId, entry.id);
       refetchDays();
     });
+  }
+
+  // Confirmação do AddUnscheduledEntryDialog (clicar numa equipe não
+  // agendada, em vez de arrastar) — mesmo endpoint/payload usado pelo
+  // drop no handleDragEnd abaixo, só que a pista e a posição (`order`)
+  // já vêm prontas do popup em vez de calculadas a partir do ponto do
+  // drop.
+  async function handleAddUnscheduledEntry(resourceId: string, order: number) {
+    if (!id || !selectedDay || !addingPair) return;
+    const dayId = selectedDay.id;
+    const { teamId, categoryId } = addingPair;
+    setScheduleMutationPending(true);
+    try {
+      const created = await scheduleApi.createEntry(id, dayId, {
+        resourceId,
+        type: "presentation",
+        order,
+        teamId,
+        categoryId,
+      });
+      refetchUnscheduled();
+      const presentation = created.find((e) => e.type === "presentation");
+      await checkDayOverflowAndMaybePrompt(dayId, async () => {
+        if (presentation) await scheduleApi.removeEntry(id, dayId, presentation.id);
+        refetchDays();
+        refetchUnscheduled();
+      });
+    } finally {
+      setScheduleMutationPending(false);
+    }
   }
 
   async function handleReplicateToAllDays() {
@@ -641,6 +673,7 @@ export function SchedulePage() {
                       onToggleIgnoreUnscheduled={(value) =>
                         handleUpdateDay({ ignoreUnscheduledPresentations: value })
                       }
+                      onSelectPair={setAddingPair}
                     />
                     <EventComponentsLibrary
                       eventId={id!}
@@ -755,6 +788,13 @@ export function SchedulePage() {
           }}
         />
       )}
+
+      <AddUnscheduledEntryDialog
+        pair={addingPair}
+        day={selectedDay}
+        onOpenChange={(open) => !open && setAddingPair(null)}
+        onConfirm={handleAddUnscheduledEntry}
+      />
 
       {id && selectedDay && (
         <CreateResourceDialog

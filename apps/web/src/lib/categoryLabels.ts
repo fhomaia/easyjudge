@@ -20,8 +20,8 @@ export const DIVISION_LABELS: Record<CategoryDivision, string> = {
 export const FORMAT_LABELS: Record<CategoryFormat, string> = {
   team_cheer: "Team Cheer",
   group_stunt: "Group Stunt",
-  coed: "Elite",
-  partner: "Partner",
+  coed: "Elite Stunt",
+  partner: "Partner Stunt",
   custom: "Custom",
 };
 

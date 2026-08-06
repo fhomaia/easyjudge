@@ -8,18 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/FormError";
+import { SchedulePositionRadioGroup } from "@/components/SchedulePositionRadioGroup";
 import { formatDate } from "@/lib/formatDate";
+import { isAutoWaitBreak, scheduleReferenceLabel } from "@/lib/scheduleEntryDisplay";
+import type { SchedulePositionType } from "@/lib/useSchedulePosition";
 import type { FullScheduleItem } from "@/lib/eventFullSchedule";
 import { ApiError, type ScheduleDay, type ScheduleEntry } from "@/api/client";
 
-type PositionType = "start" | "before" | "end";
-
-const POSITION_TYPE_LABELS: Record<PositionType, string> = {
-  start: "No início da pista",
-  before: "Antes de uma apresentação",
-  end: "No fim da pista",
-};
+type PositionType = SchedulePositionType;
 
 interface MovePresentationDialogProps {
   item: FullScheduleItem | null;
@@ -61,7 +59,7 @@ export function MovePresentationDialog({
 }: MovePresentationDialogProps) {
   const [resourceId, setResourceId] = useState("");
   const [positionType, setPositionType] = useState<PositionType>("end");
-  const [beforeEntryId, setBeforeEntryId] = useState("");
+  const [referenceEntryId, setReferenceEntryId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,23 +90,25 @@ export function MovePresentationDialog({
       .sort((a, b) => a.order - b.order);
   }, [targetResource, item]);
 
-  const presentationAnchors = useMemo(
+  // Qualquer item do cronograma serve de referência (apresentação, ou
+  // um componente do evento como Almoço/Abertura/Premiação/intervalo
+  // personalizado) — só exclui aquecimento e os breaks automáticos
+  // ("Aguardando aquecimento"/"Aguardando disponibilidade da equipe"),
+  // que são geridos pelo backend e não fazem sentido como âncora
+  // (pedido do usuário 2026-08-06: antes só listava apresentações).
+  const anchorEntries = useMemo(
     () =>
       siblingsAfterRemoval
         .map((entry: ScheduleEntry, index) => ({ entry, index }))
-        .filter(({ entry }) => entry.type === "presentation"),
+        .filter(({ entry }) => entry.type !== "warmup" && !isAutoWaitBreak(entry)),
     [siblingsAfterRemoval],
   );
 
-  const positionTypeOptions: PositionType[] = useMemo(
-    () => (presentationAnchors.length > 0 ? ["start", "before", "end"] : ["start", "end"]),
-    [presentationAnchors],
-  );
-
   // Default: se a pista escolhida ainda é a de origem, pré-seleciona a
-  // posição que representa "não mudar nada" (a próxima apresentação que
-  // já vem depois dela hoje) — sem isso, confirmar sem tocar em nada
-  // poderia mover a apresentação pro fim da pista sem querer.
+  // posição que representa "não mudar nada" (o próximo item do
+  // cronograma que já vem depois dela hoje) — sem isso, confirmar sem
+  // tocar em nada poderia mover a apresentação pro fim da pista sem
+  // querer.
   useEffect(() => {
     if (!item || !targetResource) return;
     if (resourceId === item.entry.resourceId) {
@@ -116,10 +116,13 @@ export function MovePresentationDialog({
       const currentIndex = currentSiblings.findIndex((e) => e.id === item.entry.id);
       const next = currentSiblings
         .slice(currentIndex + 1)
-        .find((e) => e.type === "presentation" && e.linkedEntryId !== item.entry.id);
+        .find(
+          (e) =>
+            e.type !== "warmup" && !isAutoWaitBreak(e) && e.linkedEntryId !== item.entry.id,
+        );
       if (next) {
         setPositionType("before");
-        setBeforeEntryId(next.id);
+        setReferenceEntryId(next.id);
       } else {
         setPositionType("end");
       }
@@ -128,15 +131,15 @@ export function MovePresentationDialog({
     }
   }, [resourceId, targetResource, item]);
 
-  // Se a pista mudar (ou a apresentação escolhida como referência sumir
-  // da lista) enquanto "Antes de uma apresentação" está selecionado, cai
-  // pra primeira opção disponível em vez de ficar com uma referência
-  // inválida.
+  // Se a pista mudar (ou o item escolhido como referência sumir da
+  // lista) enquanto "Antes de"/"Depois de um item do cronograma" está
+  // selecionado, cai pra primeira opção disponível em vez de ficar com
+  // uma referência inválida.
   useEffect(() => {
-    if (positionType !== "before") return;
-    if (presentationAnchors.some(({ entry }) => entry.id === beforeEntryId)) return;
-    setBeforeEntryId(presentationAnchors[0]?.entry.id ?? "");
-  }, [positionType, presentationAnchors, beforeEntryId]);
+    if (positionType !== "before" && positionType !== "after") return;
+    if (anchorEntries.some(({ entry }) => entry.id === referenceEntryId)) return;
+    setReferenceEntryId(anchorEntries[0]?.entry.id ?? "");
+  }, [positionType, anchorEntries, referenceEntryId]);
 
   function handleOpenChange(next: boolean) {
     if (!next) setError(null);
@@ -146,8 +149,9 @@ export function MovePresentationDialog({
   function computeOrder(): number | null {
     if (positionType === "start") return 0;
     if (positionType === "end") return siblingsAfterRemoval.length;
-    const anchor = presentationAnchors.find(({ entry }) => entry.id === beforeEntryId);
-    return anchor ? anchor.index : null;
+    const anchor = anchorEntries.find(({ entry }) => entry.id === referenceEntryId);
+    if (!anchor) return null;
+    return positionType === "before" ? anchor.index : anchor.index + 1;
   }
 
   async function handleConfirm() {
@@ -179,7 +183,7 @@ export function MovePresentationDialog({
         </div>
 
         <div className="grid gap-2">
-          <label className="text-sm font-medium text-foreground">Pista</label>
+          <Label>Pista</Label>
           <Select value={resourceId} onValueChange={(value) => value && setResourceId(value)}>
             <SelectTrigger className="w-full min-w-0">
               <SelectValue className="truncate">
@@ -198,56 +202,38 @@ export function MovePresentationDialog({
           </Select>
         </div>
 
-        <div className="grid gap-2">
-          <label className="text-sm font-medium text-foreground">Posição</label>
-          <Select
+        <div className="grid gap-3">
+          <Label>Posição</Label>
+          <SchedulePositionRadioGroup
             value={positionType}
-            onValueChange={(value) => value && setPositionType(value as PositionType)}
-          >
-            <SelectTrigger className="w-full min-w-0">
-              <SelectValue className="truncate">
-                {(value: string) => POSITION_TYPE_LABELS[value as PositionType]}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {positionTypeOptions.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {POSITION_TYPE_LABELS[type]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+            onChange={setPositionType}
+            showBeforeAfter={anchorEntries.length > 0}
+          />
 
-        {positionType === "before" && (
-          <div className="grid gap-2">
-            <label className="text-sm font-medium text-foreground">Apresentação</label>
+          {(positionType === "before" || positionType === "after") && (
             <Select
-              value={beforeEntryId}
-              onValueChange={(value) => value && setBeforeEntryId(value)}
+              value={referenceEntryId || null}
+              onValueChange={(value) => setReferenceEntryId(value as string)}
             >
-              <SelectTrigger className="w-full min-w-0">
-                <SelectValue className="truncate">
-                  {(value: string) => {
-                    const anchor = presentationAnchors.find(({ entry }) => entry.id === value);
-                    if (!anchor) return "Selecione";
-                    return `${anchor.entry.teamName ?? "Equipe"}${
-                      anchor.entry.categoryName ? ` · ${anchor.entry.categoryName}` : ""
-                    }`;
+              <SelectTrigger className="w-full">
+                <SelectValue>
+                  {(value: string | null) => {
+                    if (!value) return "Escolha o item de referência";
+                    const anchor = anchorEntries.find(({ entry }) => entry.id === value);
+                    return anchor ? scheduleReferenceLabel(anchor.entry) : value;
                   }}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
-                {presentationAnchors.map(({ entry }) => (
+              <SelectContent alignItemWithTrigger={false}>
+                {anchorEntries.map(({ entry }) => (
                   <SelectItem key={entry.id} value={entry.id}>
-                    {entry.teamName ?? "Equipe"}
-                    {entry.categoryName ? ` · ${entry.categoryName}` : ""}
+                    {scheduleReferenceLabel(entry)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        )}
+          )}
+        </div>
 
         <p className="text-xs text-muted-foreground">
           O aquecimento e os intervalos automáticos são reorganizados sozinhos, se precisar.

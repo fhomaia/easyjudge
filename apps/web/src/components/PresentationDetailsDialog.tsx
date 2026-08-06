@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -17,10 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormError } from "@/components/FormError";
+import { SchedulePositionRadioGroup } from "@/components/SchedulePositionRadioGroup";
 import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
+import { isAutoWaitBreak, scheduleReferenceLabel } from "@/lib/scheduleEntryDisplay";
+import type { SchedulePositionType } from "@/lib/useSchedulePosition";
 import { ApiError, scheduleApi, type ScheduleDay } from "@/api/client";
 
-type MoveMode = "start" | "end" | "before";
+type MoveMode = SchedulePositionType;
 
 interface PresentationDetailsDialogProps {
   eventId: string;
@@ -35,11 +37,11 @@ interface PresentationDetailsDialogProps {
 // intervalo/etc.) na linha do tempo da tela de cadastro do cronograma —
 // mostra os dados completos dela e junta remover + mover num só lugar,
 // como alternativa a arrastar na timeline (útil quando a equipe de
-// referência não está visível na tela sem rolar). "Antes de" reaproveita
-// o mesmo endpoint de mover já usado pelo drag-and-drop
+// referência não está visível na tela sem rolar). "Antes de"/"Depois de"
+// reaproveitam o mesmo endpoint de mover já usado pelo drag-and-drop
 // (scheduleApi.moveEntry) — pedir pra inserir na posição (`order`) da
-// apresentação de referência já empurra ela (e as seguintes) uma casa
-// pra frente, sem precisar de um endpoint novo.
+// apresentação de referência (ou uma casa depois dela) já empurra o
+// resto pra frente, sem precisar de um endpoint novo.
 export function PresentationDetailsDialog({
   eventId,
   day,
@@ -49,13 +51,13 @@ export function PresentationDetailsDialog({
   onChanged,
 }: PresentationDetailsDialogProps) {
   const [moveMode, setMoveMode] = useState<MoveMode>("start");
-  const [beforeEntryId, setBeforeEntryId] = useState<string | null>(null);
+  const [referenceEntryId, setReferenceEntryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setMoveMode("start");
-    setBeforeEntryId(null);
+    setReferenceEntryId(null);
     setError(null);
   }, [entryId]);
 
@@ -78,13 +80,21 @@ export function PresentationDetailsDialog({
     return day.resources.find((r) => r.entries.some((e) => e.id === entryId)) ?? null;
   }, [day, entryId]);
 
-  // Candidatas a referência de "antes de": qualquer outra apresentação
-  // já escalada no dia, em qualquer pista — ordenadas por horário (não
-  // por pista), pra listar na ordem em que elas de fato acontecem.
-  const otherPresentations = useMemo(() => {
+  // Candidatas a referência de "antes de"/"depois de": qualquer outro
+  // item do dia, em qualquer pista — apresentação ou componente do
+  // evento (Almoço, Abertura, Premiação, intervalo personalizado);
+  // exclui só aquecimento e os breaks automáticos ("Aguardando
+  // aquecimento"/"Aguardando disponibilidade da equipe"), que são
+  // geridos pelo backend (pedido do usuário 2026-08-06: antes só
+  // listava apresentações). Ordenadas por horário (não por pista), pra
+  // listar na ordem em que elas de fato acontecem.
+  const otherEntries = useMemo(() => {
     return day.resources
       .flatMap((r) => r.entries.map((e) => ({ entry: e, resource: r })))
-      .filter(({ entry: e }) => e.type === "presentation" && e.id !== entryId)
+      .filter(
+        ({ entry: e }) =>
+          e.id !== entryId && e.type !== "warmup" && !isAutoWaitBreak(e),
+      )
       .sort((a, b) => {
         const ta = times.get(a.entry.id)?.startMinutes ?? 0;
         const tb = times.get(b.entry.id)?.startMinutes ?? 0;
@@ -107,9 +117,9 @@ export function PresentationDetailsDialog({
       targetResourceId = entry!.resourceId;
       order = Number.MAX_SAFE_INTEGER;
     } else {
-      const ref = otherPresentations.find((p) => p.entry.id === beforeEntryId)?.entry;
+      const ref = otherEntries.find((p) => p.entry.id === referenceEntryId)?.entry;
       if (!ref) {
-        setError("Escolha uma apresentação de referência.");
+        setError("Escolha um item de referência.");
         return;
       }
       targetResourceId = ref.resourceId;
@@ -138,7 +148,8 @@ export function PresentationDetailsDialog({
       const siblingsAfterRemoval = [...targetResource.entries]
         .sort((a, b) => a.order - b.order)
         .filter((e) => !excludedIds.has(e.id));
-      order = siblingsAfterRemoval.findIndex((e) => e.id === ref.id);
+      const refIndex = siblingsAfterRemoval.findIndex((e) => e.id === ref.id);
+      order = moveMode === "after" ? refIndex + 1 : refIndex;
     }
     setLoading(true);
     try {
@@ -204,26 +215,14 @@ export function PresentationDetailsDialog({
 
         <div className="grid gap-3">
           <Label>Mover apresentação</Label>
-          <RadioGroup value={moveMode} onValueChange={(v) => setMoveMode(v as MoveMode)}>
-            <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="start" />
-              <ArrowUpToLine className="size-4 text-muted-foreground" />
-              Para o início da pista
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="end" />
-              <ArrowRightToLine className="size-4 text-muted-foreground" />
-              Para o fim da pista
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="before" />
-              <ArrowLeftToLine className="size-4 text-muted-foreground" />
-              Antes de...
-            </label>
-          </RadioGroup>
+          <SchedulePositionRadioGroup
+            value={moveMode}
+            onChange={setMoveMode}
+            showBeforeAfter={otherEntries.length > 0}
+          />
 
-          {moveMode === "before" && (
-            <Select value={beforeEntryId || null} onValueChange={(v) => setBeforeEntryId(v as string)}>
+          {(moveMode === "before" || moveMode === "after") && (
+            <Select value={referenceEntryId || null} onValueChange={(v) => setReferenceEntryId(v as string)}>
               <SelectTrigger className="w-full">
                 {/* `placeholder` é ignorado pelo Base UI quando o filho é
                     uma função (ver SelectValue.mjs: só cai no placeholder
@@ -233,10 +232,10 @@ export function PresentationDetailsDialog({
                     testado no navegador: o trigger renderizava vazio). */}
                 <SelectValue>
                   {(value: string | null) => {
-                    if (!value) return "Escolha a apresentação de referência";
-                    const found = otherPresentations.find((p) => p.entry.id === value);
+                    if (!value) return "Escolha o item de referência";
+                    const found = otherEntries.find((p) => p.entry.id === value);
                     return found
-                      ? `${found.entry.teamName} — ${found.entry.categoryName} (${found.resource.name})`
+                      ? `${scheduleReferenceLabel(found.entry)} (${found.resource.name})`
                       : value;
                   }}
                 </SelectValue>
@@ -246,14 +245,14 @@ export function PresentationDetailsDialog({
                   calendário") — este Select vive dentro do Dialog, não de
                   outro Popover, mas o mesmo cuidado não faz mal aqui. */}
               <SelectContent alignItemWithTrigger={false}>
-                {otherPresentations.map(({ entry: p, resource: r }) => (
+                {otherEntries.map(({ entry: p, resource: r }) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.teamName} — {p.categoryName} ({r.name})
+                    {scheduleReferenceLabel(p)} ({r.name})
                   </SelectItem>
                 ))}
-                {otherPresentations.length === 0 && (
+                {otherEntries.length === 0 && (
                   <p className="p-3 text-sm text-muted-foreground">
-                    Nenhuma outra apresentação escalada neste dia.
+                    Nenhum outro item agendado neste dia.
                   </p>
                 )}
               </SelectContent>

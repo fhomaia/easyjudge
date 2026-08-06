@@ -36,8 +36,8 @@ export class ProgramParticipation {
 
   // Quem cadastrou esta linha (o produtor) — usado por
   // ProgramsService.findCatalogForUser (o "catálogo" de um produtor é
-  // toda linha com createdById dele) e pra validar duplicidade
-  // (assertNoDuplicateInCatalog) na hora do cadastro.
+  // toda linha com createdById dele) e pra validar duplicidade de email
+  // (assertEmailNotDuplicateInCatalog) na hora do cadastro.
   @Index()
   @Column({ name: 'created_by_id' })
   createdById: string;

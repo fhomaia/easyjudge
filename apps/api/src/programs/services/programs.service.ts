@@ -87,10 +87,9 @@ export class ProgramsService {
       eligibleUser = await this.findEligibleProgramUserByEmail(dto.email);
       userId = eligibleUser?.id ?? null;
     }
-    await this.assertNoDuplicateInCatalog(
+    await this.assertEmailNotDuplicateInCatalog(
       createdById,
       event.aliasId,
-      dto.name,
       dto.email,
     );
     if (userId) {
@@ -201,12 +200,11 @@ export class ProgramsService {
     if (dto.userId) {
       await this.assertProgramUser(dto.userId);
     }
-    if (dto.name || dto.email) {
-      await this.assertNoDuplicateInCatalog(
+    if (dto.email) {
+      await this.assertEmailNotDuplicateInCatalog(
         participation.createdById,
         participation.aliasId,
-        dto.name ?? participation.name,
-        dto.email ?? participation.email,
+        dto.email,
         participation.id,
       );
     }
@@ -276,33 +274,25 @@ export class ProgramsService {
     return user;
   }
 
-  // Impede um produtor de acumular duas entradas divergentes no
-  // próprio catálogo (mesmo nome OU mesmo email, mas dados diferentes)
-  // — reaproveitar o mesmo nome+email exatos (pra usar em outro
-  // evento) continua permitido, só isso não conta como duplicidade.
-  // `aliasId` é o evento em que este programa está sendo criado/editado
-  // — um match EXATO (mesmo nome E mesmo email) só é permitido quando o
-  // conflito está num evento DIFERENTE (reaproveitar o mesmo programa
-  // real do catálogo em outro evento, o caso de uso original deste
-  // método). Dentro do MESMO evento, exato ou não, é duplicata de
-  // verdade — bug real encontrado 2026-08-05: sem essa distinção, dava
-  // pra cadastrar o mesmo programa duas vezes no mesmo evento, porque o
-  // "match exato" liberava o passo sem checar se o conflito era com uma
-  // linha do próprio evento atual.
-  private async assertNoDuplicateInCatalog(
+  // Impede um produtor de acumular duas entradas com o mesmo email no
+  // próprio catálogo — nome duplicado é permitido de propósito (dois
+  // programas reais podem ter o mesmo nome; email é o único
+  // identificador confiável, pedido do usuário 2026-08-06, substituindo
+  // a checagem antiga que também barrava por nome). Dentro do MESMO
+  // evento (`aliasId`), qualquer email repetido é duplicata. Em outro
+  // evento, mesmo email é sempre reaproveitar o mesmo programa do
+  // catálogo — permitido mesmo que o nome tenha mudado nesse meio
+  // tempo.
+  private async assertEmailNotDuplicateInCatalog(
     createdById: string,
     aliasId: string,
-    name: string,
     email: string,
     excludeId?: string,
   ): Promise<void> {
     const qb = this.participationsRepo
       .createQueryBuilder('participation')
       .where('participation.createdById = :createdById', { createdById })
-      .andWhere(
-        '(LOWER(participation.name) = LOWER(:name) OR LOWER(participation.email) = LOWER(:email))',
-        { name, email },
-      );
+      .andWhere('LOWER(participation.email) = LOWER(:email)', { email });
     if (excludeId) {
       qb.andWhere('participation.id != :excludeId', { excludeId });
     }
@@ -311,18 +301,9 @@ export class ProgramsService {
 
     if (conflicting.aliasId === aliasId) {
       throw new ConflictException(
-        'Este evento já tem um programa cadastrado com esse nome ou email.',
+        'Este evento já tem um programa cadastrado com esse email.',
       );
     }
-
-    const isExactMatch =
-      conflicting.name.toLowerCase() === name.toLowerCase() &&
-      conflicting.email.toLowerCase() === email.toLowerCase();
-    if (isExactMatch) return;
-
-    throw new ConflictException(
-      'Você já tem um programa com esse nome ou email cadastrado, com dados diferentes — reaproveite pelo catálogo em vez de cadastrar de novo.',
-    );
   }
 
   // Vincula automaticamente ao usuário recém-registrado (role PROGRAM)
@@ -490,18 +471,19 @@ export class ProgramsService {
       });
     }
 
-    // Dedupe por nome+email (sem diferenciar maiúsculas/minúsculas) —
-    // sem isso, cadastrar o mesmo programa "solto" (sem conta própria)
-    // em mais de um evento deste produtor criava uma linha de
-    // `ProgramParticipation` por evento, e cada uma virava uma entrada
-    // separada aqui, aparecendo duplicada no select de "programa já
-    // conhecido" (bug real encontrado 2026-08-05). Mantém a
-    // participação mais recente de cada grupo (nome/cidade/estado mais
-    // atualizados).
+    // Dedupe por email (sem diferenciar maiúsculas/minúsculas) — email é
+    // o identificador único de um programa no catálogo (nome duplicado é
+    // permitido, ver assertEmailNotDuplicateInCatalog). Sem isso,
+    // cadastrar o mesmo programa "solto" (sem conta própria) em mais de
+    // um evento deste produtor criava uma linha de `ProgramParticipation`
+    // por evento, e cada uma virava uma entrada separada aqui, aparecendo
+    // duplicada no select de "programa já conhecido" (bug real encontrado
+    // 2026-08-05). Mantém a participação mais recente de cada grupo
+    // (nome/cidade/estado mais atualizados).
     const unclaimedByKey = new Map<string, ProgramParticipation>();
     for (const p of myParticipations) {
       if (p.userId) continue;
-      const key = `${p.name.toLowerCase()}::${p.email.toLowerCase()}`;
+      const key = p.email.toLowerCase();
       const existing = unclaimedByKey.get(key);
       if (!existing || existing.createdAt < p.createdAt) {
         unclaimedByKey.set(key, p);

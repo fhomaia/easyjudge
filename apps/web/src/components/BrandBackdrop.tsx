@@ -146,9 +146,9 @@ export function BrandBackdrop({ className, variant = "split", onDone }: BrandBac
                 <image
                   href="/bg-right.webp"
                   x={44}
-                  y={9}
+                  y={0}
                   width={122}
-                  height={81}
+                  height={100}
                   preserveAspectRatio="xMidYMid slice"
                 />
                 <rect

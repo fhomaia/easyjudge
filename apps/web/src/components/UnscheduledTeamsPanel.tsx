@@ -23,7 +23,13 @@ export function UnscheduledItemCard({ pair }: { pair: UnscheduledPair }) {
   );
 }
 
-function UnscheduledItem({ pair }: { pair: UnscheduledPair }) {
+function UnscheduledItem({
+  pair,
+  onClick,
+}: {
+  pair: UnscheduledPair;
+  onClick: (pair: UnscheduledPair) => void;
+}) {
   const id = `unscheduled:${pair.teamId}:${pair.categoryId}`;
   // `data` carrega o par pro DragOverlay (ver SchedulePage) desenhar
   // uma prévia igual a este card sem precisar rebuscá-lo pelo id — o
@@ -43,13 +49,20 @@ function UnscheduledItem({ pair }: { pair: UnscheduledPair }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      // onClick coexiste com o drag: o PointerSensor do dnd-kit (ver
+      // SchedulePage) só ativa o arraste depois de `distance: 5`px de
+      // movimento — um clique de verdade (sem arrastar) nunca cruza esse
+      // limiar, então o evento de clique chega normalmente. Alternativa
+      // ao drag-and-drop pra quando a pista de destino não está visível
+      // sem rolar a tela (pedido do usuário 2026-08-06).
+      onClick={() => onClick(pair)}
       className={cn(
         // touch-none: sem isso, o navegador trata o toque inicial como
         // scroll da lista (que já é `overflow-y-auto`) em vez de
         // iniciar o arraste do dnd-kit — mesma classe que ScheduleEntryCard
         // já usa pros cards dentro da timeline (por isso funcionava lá e
         // não aqui).
-        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
+        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm transition-colors hover:border-primary/50 active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >
@@ -62,12 +75,14 @@ interface UnscheduledTeamsPanelProps {
   pairs: UnscheduledPair[];
   ignoreUnscheduled: boolean;
   onToggleIgnoreUnscheduled: (value: boolean) => void;
+  onSelectPair: (pair: UnscheduledPair) => void;
 }
 
 export function UnscheduledTeamsPanel({
   pairs,
   ignoreUnscheduled,
   onToggleIgnoreUnscheduled,
+  onSelectPair,
 }: UnscheduledTeamsPanelProps) {
   const [query, setQuery] = useState("");
   const filtered = pairs.filter((p) =>
@@ -82,6 +97,9 @@ export function UnscheduledTeamsPanel({
           {pairs.length}
         </span>
       </div>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Arraste até uma pista ou clique numa equipe para escolher a posição.
+      </p>
       <label className="flex items-start gap-2 text-xs text-muted-foreground">
         <Checkbox
           checked={ignoreUnscheduled}
@@ -108,7 +126,11 @@ export function UnscheduledTeamsPanel({
           </p>
         )}
         {filtered.map((pair) => (
-          <UnscheduledItem key={`${pair.teamId}:${pair.categoryId}`} pair={pair} />
+          <UnscheduledItem
+            key={`${pair.teamId}:${pair.categoryId}`}
+            pair={pair}
+            onClick={onSelectPair}
+          />
         ))}
       </div>
     </div>

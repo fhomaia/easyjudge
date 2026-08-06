@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, Check, Info, Plus } from "lucide-react";
 import { ScoringTemplateCard } from "@/components/ScoringTemplateCard";
-import { CreateScoringTemplateDialog } from "@/components/CreateScoringTemplateDialog";
 import { listVariants } from "@/lib/motionVariants";
 import { cn } from "@/lib/utils";
 import { eventScoringTemplatesApi, type ScoringTemplate } from "@/api/client";
@@ -11,7 +10,6 @@ import { eventScoringTemplatesApi, type ScoringTemplate } from "@/api/client";
 interface ScoringTemplatesSummarySectionProps {
   eventId: string;
   templates: ScoringTemplate[];
-  onCreated: (template: ScoringTemplate) => void;
 }
 
 // Card inteiro clicável pra marcar/desmarcar o template na seleção
@@ -50,10 +48,8 @@ function SelectableTemplateCard({
 export function ScoringTemplatesSummarySection({
   eventId,
   templates,
-  onCreated,
 }: ScoringTemplatesSummarySectionProps) {
   const navigate = useNavigate();
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
 
   useEffect(() => {
@@ -122,7 +118,7 @@ export function ScoringTemplatesSummarySection({
         </div>
         <button
           type="button"
-          onClick={() => setCreateOpen(true)}
+          onClick={() => navigate("/scoring-templates")}
           className="flex shrink-0 items-center gap-1.5 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
         >
           <Plus className="size-4" />
@@ -169,12 +165,6 @@ export function ScoringTemplatesSummarySection({
           <ArrowRight className="size-3.5" />
         </button>
       </div>
-
-      <CreateScoringTemplateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={onCreated}
-      />
     </div>
   );
 }

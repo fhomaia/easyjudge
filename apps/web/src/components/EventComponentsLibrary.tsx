@@ -3,6 +3,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { Flag, Music, Plus, Trophy, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CustomIntervalDialog } from "@/components/CustomIntervalDialog";
+import { AddComponentEntryDialog } from "@/components/AddComponentEntryDialog";
 import type { ScheduleDay, ScheduleEntry } from "@/api/client";
 
 export interface ComponentBlockDef {
@@ -35,7 +36,13 @@ export function ComponentBlockCard({ def }: { def: ComponentBlockDef }) {
   );
 }
 
-function ComponentBlock({ def }: { def: ComponentBlockDef }) {
+function ComponentBlock({
+  def,
+  onClick,
+}: {
+  def: ComponentBlockDef;
+  onClick: (def: ComponentBlockDef) => void;
+}) {
   const id = `component:${def.type}:${def.durationMinutes}:${def.label}`;
   // Sem `transform` no elemento original de propósito — mesmo motivo de
   // UnscheduledTeamsPanel (bug real 2026-08-05): esta lista não tem
@@ -52,11 +59,18 @@ function ComponentBlock({ def }: { def: ComponentBlockDef }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      // onClick coexiste com o drag: o PointerSensor do dnd-kit (ver
+      // SchedulePage) só ativa o arraste depois de `distance: 5`px de
+      // movimento, então um clique de verdade chega normalmente (mesmo
+      // padrão de UnscheduledTeamsPanel) — alternativa ao
+      // drag-and-drop pra quando a pista de destino não está visível
+      // sem rolar a tela (pedido do usuário 2026-08-06).
+      onClick={() => onClick(def)}
       className={cn(
         // touch-none: mesmo raciocínio de UnscheduledTeamsPanel — sem
         // isso o navegador intercepta o toque inicial como scroll em
         // vez de deixar o dnd-kit iniciar o arraste.
-        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
+        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm transition-colors hover:border-primary/50 active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >
@@ -73,17 +87,18 @@ interface EventComponentsLibraryProps {
 
 export function EventComponentsLibrary({ eventId, day, onCreated }: EventComponentsLibraryProps) {
   const [customOpen, setCustomOpen] = useState(false);
+  const [addingDef, setAddingDef] = useState<ComponentBlockDef | null>(null);
 
   return (
     <>
       <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4">
         <h3 className="text-sm font-semibold text-foreground">Componentes do evento</h3>
         <p className="text-xs text-muted-foreground">
-          Arraste para a linha de uma pista ou área de aquecimento.
+          Arraste até uma pista ou clique num componente para escolher a posição.
         </p>
         <div className="flex flex-col gap-2">
           {COMPONENT_BLOCKS.map((def) => (
-            <ComponentBlock key={`${def.type}:${def.label}`} def={def} />
+            <ComponentBlock key={`${def.type}:${def.label}`} def={def} onClick={setAddingDef} />
           ))}
 
           {/* Diferente dos outros — pede nome/duração antes de criar,
@@ -106,6 +121,14 @@ export function EventComponentsLibrary({ eventId, day, onCreated }: EventCompone
         day={day}
         open={customOpen}
         onOpenChange={setCustomOpen}
+        onCreated={onCreated}
+      />
+
+      <AddComponentEntryDialog
+        eventId={eventId}
+        day={day}
+        def={addingDef}
+        onOpenChange={(open) => !open && setAddingDef(null)}
         onCreated={onCreated}
       />
     </>
