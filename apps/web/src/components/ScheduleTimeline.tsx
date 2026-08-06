@@ -1,4 +1,4 @@
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
@@ -66,6 +66,13 @@ function ResourceRow({
   const { setNodeRef: setHandleDropRef, isOver: isHandleOver } = useDroppable({
     id: `${RESOURCE_DROP_PREFIX}${resource.id}`,
   });
+  // Evidencia TODA linha soltável assim que QUALQUER arraste começa
+  // (não só a que está embaixo do cursor no momento, isso já era
+  // `isOver`) — mesmo padrão já usado em JudgingCriterionRow/
+  // SpecialRolesCard, pedido do usuário aqui também: sem isso não dava
+  // pra saber onde soltar até passar exatamente em cima de uma linha.
+  const { active } = useDndContext();
+  const isDragActive = active != null;
   const {
     attributes,
     listeners,
@@ -120,11 +127,20 @@ function ResourceRow({
           width: totalWidth,
           minWidth: totalWidth,
           // Tonalidade bem sutil da cor do recurso (mesma da bolinha) —
-          // só quando não está em drag-over, que já tem seu próprio
-          // destaque (bg-primary/5 via className).
-          backgroundColor: isOver ? undefined : `${getResourceColor(resource)}0d`,
+          // só quando não há NENHUM destaque de drag (nem passivo nem
+          // isOver) disputando o mesmo background. Precisava checar
+          // `isDragActive` aqui também, não só `isOver` — como style
+          // inline sempre vence classe pra `background-color`, o
+          // `bg-primary/*` abaixo nunca pintava enquanto esta cor
+          // continuasse forçada (bug real 2026-08-05: o destaque de
+          // "arraste em andamento" ficava sempre invisível).
+          backgroundColor: isDragActive ? undefined : `${getResourceColor(resource)}0d`,
         }}
-        className={cn("relative min-h-16 flex-1", isOver && "bg-primary/5")}
+        className={cn(
+          "relative min-h-16 flex-1 transition-colors",
+          isDragActive && !isOver && "bg-primary/10 ring-2 ring-inset ring-primary/30",
+          isOver && "bg-primary/20 ring-2 ring-inset ring-primary/60",
+        )}
       >
         {(() => {
           const sortedEntries = [...resource.entries].sort((a, b) => a.order - b.order);

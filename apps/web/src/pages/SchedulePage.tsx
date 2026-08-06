@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Copy,
   GanttChartSquare,
+  Loader2,
   Sparkles,
   Star,
   Table2,
@@ -84,6 +85,17 @@ export function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [activeDragEntryId, setActiveDragEntryId] = useState<string | null>(null);
   const [activeDragDelta, setActiveDragDelta] = useState({ x: 0, y: 0 });
+  // Cobre tanto soltar um drag (card já desaparece do lugar de origem
+  // na hora, dnd-kit reseta o estado de drag imediatamente) quanto
+  // remover uma apresentação (botão "X"/"Remover apresentação") — nos
+  // dois casos a reconciliação de verdade no backend (aquecimento/
+  // intervalos/pistas, ver ScheduleService) pode levar um tempo
+  // perceptível, e sem nenhum feedback nesse meio tempo parecia que a
+  // ação tinha falhado silenciosamente (pedido do usuário, 2026-08-05).
+  // Fica true do início ao fim da chamada de rede (ver handleDragEnd/
+  // handleRemoveEntry), não é otimista: o dado real só chega quando
+  // `refetchDays` resolve.
+  const [scheduleMutationPending, setScheduleMutationPending] = useState(false);
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -246,13 +258,15 @@ export function SchedulePage() {
 
   function handleRemoveEntry(entryId: string) {
     if (!id || !selectedDayId) return;
+    setScheduleMutationPending(true);
     scheduleApi
       .removeEntry(id, selectedDayId, entryId)
       .then(() => {
         refetchDays();
         refetchUnscheduled();
       })
-      .catch(() => setError("Não foi possível remover este item do cronograma."));
+      .catch(() => setError("Não foi possível remover este item do cronograma."))
+      .finally(() => setScheduleMutationPending(false));
   }
 
   async function handleAutoGenerate(payload: AutoGenerateSchedulePayload, gapMinutes: number) {
@@ -309,10 +323,12 @@ export function SchedulePage() {
       const targetIndex = sortedResources.findIndex((r) => r.id === targetResourceId);
       if (targetIndex === -1) return;
 
+      setScheduleMutationPending(true);
       scheduleApi
         .moveResource(id, selectedDay.id, sourceResourceId, { order: targetIndex })
         .then(refetchDays)
-        .catch(() => setError("Não foi possível reordenar este recurso."));
+        .catch(() => setError("Não foi possível reordenar este recurso."))
+        .finally(() => setScheduleMutationPending(false));
       return;
     }
 
@@ -353,6 +369,7 @@ export function SchedulePage() {
     if (activeIdRaw.startsWith("unscheduled:")) {
       const [, teamId, categoryId] = activeIdRaw.split(":");
       const dayId = selectedDay.id;
+      setScheduleMutationPending(true);
       scheduleApi
         .createEntry(id, dayId, {
           resourceId,
@@ -364,7 +381,7 @@ export function SchedulePage() {
         .then((created) => {
           refetchUnscheduled();
           const presentation = created.find((e) => e.type === "presentation");
-          checkDayOverflowAndMaybePrompt(dayId, async () => {
+          return checkDayOverflowAndMaybePrompt(dayId, async () => {
             if (presentation) await scheduleApi.removeEntry(id, dayId, presentation.id);
             refetchDays();
             refetchUnscheduled();
@@ -374,13 +391,15 @@ export function SchedulePage() {
           setError(
             err instanceof ApiError ? err.message : "Não foi possível agendar esta apresentação.",
           ),
-        );
+        )
+        .finally(() => setScheduleMutationPending(false));
       return;
     }
 
     if (activeIdRaw.startsWith("component:")) {
       const [, type, durationStr, label] = activeIdRaw.split(":");
       const dayId = selectedDay.id;
+      setScheduleMutationPending(true);
       scheduleApi
         .createEntry(id, dayId, {
           resourceId,
@@ -391,19 +410,22 @@ export function SchedulePage() {
         })
         .then((created) => {
           const entry = created[0];
-          checkDayOverflowAndMaybePrompt(dayId, async () => {
+          return checkDayOverflowAndMaybePrompt(dayId, async () => {
             if (entry) await scheduleApi.removeEntry(id, dayId, entry.id);
             refetchDays();
           });
         })
-        .catch(() => setError("Não foi possível adicionar este componente."));
+        .catch(() => setError("Não foi possível adicionar este componente."))
+        .finally(() => setScheduleMutationPending(false));
       return;
     }
 
+    setScheduleMutationPending(true);
     scheduleApi
       .moveEntry(id, selectedDay.id, activeIdRaw, { resourceId, order: insertIndex })
       .then(refetchDays)
-      .catch(() => setError("Não foi possível mover este item."));
+      .catch(() => setError("Não foi possível mover este item."))
+      .finally(() => setScheduleMutationPending(false));
   }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -521,25 +543,39 @@ export function SchedulePage() {
                       cresce/rola (`main` já é `overflow-y-auto`) em vez
                       de sobrepor. */}
                   <div className="flex min-h-[70vh] min-w-0 flex-col gap-6 xl:min-h-0">
-                    <div className="flex items-center gap-1 self-start rounded-lg border border-border/60 bg-muted/30 p-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={viewMode === "timeline" ? "default" : "ghost"}
-                        onClick={() => setViewMode("timeline")}
-                      >
-                        <GanttChartSquare className="size-4" />
-                        Linha do tempo
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={viewMode === "table" ? "default" : "ghost"}
-                        onClick={() => setViewMode("table")}
-                      >
-                        <Table2 className="size-4" />
-                        Tabela
-                      </Button>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1 self-start rounded-lg border border-border/60 bg-muted/30 p-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={viewMode === "timeline" ? "default" : "ghost"}
+                          onClick={() => setViewMode("timeline")}
+                        >
+                          <GanttChartSquare className="size-4" />
+                          Linha do tempo
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={viewMode === "table" ? "default" : "ghost"}
+                          onClick={() => setViewMode("table")}
+                        >
+                          <Table2 className="size-4" />
+                          Tabela
+                        </Button>
+                      </div>
+                      {/* Feedback de que soltar/remover está sendo
+                          processado — sem isso, o intervalo até o card
+                          aparecer/desaparecer de verdade (reconciliação
+                          no backend, ver comentário em
+                          `scheduleMutationPending`) parecia que a ação
+                          tinha falhado (pedido do usuário, 2026-08-05). */}
+                      {scheduleMutationPending && (
+                        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <Loader2 className="size-3.5 animate-spin" />
+                          Salvando...
+                        </span>
+                      )}
                     </div>
                     {viewMode === "timeline" ? (
                       <ScheduleTimeline
