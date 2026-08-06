@@ -6,30 +6,9 @@ import { getAvatarColor } from "@/lib/avatarColor";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { UnscheduledPair } from "@/api/client";
 
-function UnscheduledItem({ pair }: { pair: UnscheduledPair }) {
-  const id = `unscheduled:${pair.teamId}:${pair.categoryId}`;
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
-
+export function UnscheduledItemCard({ pair }: { pair: UnscheduledPair }) {
   return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      style={
-        transform
-          ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
-          : undefined
-      }
-      className={cn(
-        // touch-none: sem isso, o navegador trata o toque inicial como
-        // scroll da lista (que já é `overflow-y-auto`) em vez de
-        // iniciar o arraste do dnd-kit — mesma classe que ScheduleEntryCard
-        // já usa pros cards dentro da timeline (por isso funcionava lá e
-        // não aqui).
-        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
-        isDragging && "opacity-50",
-      )}
-    >
+    <>
       <span
         style={{ backgroundColor: getAvatarColor(pair.teamId) }}
         className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
@@ -40,6 +19,41 @@ function UnscheduledItem({ pair }: { pair: UnscheduledPair }) {
         <p className="truncate font-medium text-foreground">{pair.teamName}</p>
         <p className="truncate text-xs text-muted-foreground">{pair.categoryName}</p>
       </div>
+    </>
+  );
+}
+
+function UnscheduledItem({ pair }: { pair: UnscheduledPair }) {
+  const id = `unscheduled:${pair.teamId}:${pair.categoryId}`;
+  // `data` carrega o par pro DragOverlay (ver SchedulePage) desenhar
+  // uma prévia igual a este card sem precisar rebuscá-lo pelo id — o
+  // DragOverlay renderiza num portal (document.body), imune ao
+  // `overflow-y-auto` da lista abaixo. Sem `transform`/movimento no
+  // elemento original de propósito (bug real 2026-08-05: a versão
+  // anterior movia o próprio card via CSS, que continuava clipado pela
+  // lista com scroll — some assim que o dedo cruza a borda dela); o
+  // original só esmaece (`opacity-50`), o DragOverlay é quem se move.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    data: { kind: "unscheduled", pair },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={cn(
+        // touch-none: sem isso, o navegador trata o toque inicial como
+        // scroll da lista (que já é `overflow-y-auto`) em vez de
+        // iniciar o arraste do dnd-kit — mesma classe que ScheduleEntryCard
+        // já usa pros cards dentro da timeline (por isso funcionava lá e
+        // não aqui).
+        "flex touch-none cursor-grab items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm active:cursor-grabbing",
+        isDragging && "opacity-50",
+      )}
+    >
+      <UnscheduledItemCard pair={pair} />
     </div>
   );
 }

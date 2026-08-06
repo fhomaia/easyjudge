@@ -1938,7 +1938,11 @@ export class ScheduleService {
       startMinutes: 480,
       endMinutes: 1200,
       defaultWarmupMinutes: 10,
-      defaultGapMinutes: 0,
+      // 5 min (era 0) — pedido do usuário 2026-08-05: dia novo sem
+      // nenhum intervalo entre apresentações raramente é o que se
+      // quer de verdade, e o organizador sempre pode zerar depois pela
+      // própria barra de configurações do dia.
+      defaultGapMinutes: 5,
     });
     const saved = await this.daysRepo.save(day);
     await this.seedDefaultResources(saved);

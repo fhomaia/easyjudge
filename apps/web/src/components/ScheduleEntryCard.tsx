@@ -50,9 +50,6 @@ export function ScheduleEntryCard({
   onOpenDetails,
   peerDrag,
 }: ScheduleEntryCardProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: entry.id,
-  });
   const style = SCHEDULE_TYPE_STYLES[entry.type];
   const hasConflict = conflictReasons.length > 0;
   const isWaitBreak = isAutoWaitBreak(entry);
@@ -62,7 +59,22 @@ export function ScheduleEntryCard({
     endMinutes,
     conflictReasons,
   );
-  const effectiveTransform = transform ?? (peerDrag ? { x: peerDrag.x, y: peerDrag.y } : null);
+  // `data` carrega o que o DragOverlay (ver SchedulePage) precisa pra
+  // desenhar uma prévia igual a este card. Sem aplicar o `transform` de
+  // useDraggable no elemento original de propósito (bug real
+  // 2026-08-05, mesma causa do painel de equipes/componentes): a
+  // ScheduleTimeline tem `overflow-auto` própria, então mover o card
+  // original via CSS o deixava clipado ao cruzar essa borda. O
+  // DragOverlay flutua num portal, imune a isso — o original só esmaece
+  // (`opacity-60` abaixo). `peerDrag` é o único caso que ainda usa
+  // transform aqui: é o aquecimento espelhando visualmente o delta da
+  // apresentação vinculada sendo arrastada (não é o próprio drag deste
+  // card), continua igual.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: entry.id,
+    data: { kind: "entry", entry, title, subtitle, timeRange },
+  });
+  const effectiveTransform = peerDrag ? { x: peerDrag.x, y: peerDrag.y } : null;
 
   return (
     <div

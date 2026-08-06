@@ -39,6 +39,21 @@ function getResourceRoleLabel(resource: ScheduleResource, allResources: Schedule
   return null;
 }
 
+// Prévia usada pelo DragOverlay (ver SchedulePage) ao reordenar pistas
+// arrastando o handle — mesmo conteúdo visual do próprio handle, sem
+// depender de re-renderizar o ResourceRow inteiro.
+export function ResourceHandleCard({ resource }: { resource: ScheduleResource }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span
+        className="size-2 shrink-0 rounded-full"
+        style={{ backgroundColor: getResourceColor(resource) }}
+      />
+      <p className="truncate text-sm font-medium text-foreground">{resource.name}</p>
+    </span>
+  );
+}
+
 interface ResourceRowProps {
   resource: ScheduleResource;
   roleLabel: string | null;
@@ -73,13 +88,21 @@ function ResourceRow({
   // pra saber onde soltar até passar exatamente em cima de uma linha.
   const { active } = useDndContext();
   const isDragActive = active != null;
+  // Sem aplicar `transform` no handle original de propósito — mesma
+  // causa/fix do drag de equipes/componentes/apresentações (bug real
+  // 2026-08-05): a timeline tem `overflow-auto` própria, então mover o
+  // handle via CSS o deixava clipado ao arrastar pra fora da área
+  // visível. O DragOverlay (ver SchedulePage) flutua num portal, imune
+  // a isso.
   const {
     attributes,
     listeners,
     setNodeRef: setDragRef,
-    transform,
     isDragging,
-  } = useDraggable({ id: `${RESOURCE_DRAG_PREFIX}${resource.id}` });
+  } = useDraggable({
+    id: `${RESOURCE_DRAG_PREFIX}${resource.id}`,
+    data: { kind: "resource", resource },
+  });
 
   function setHandleRefs(node: HTMLButtonElement | null) {
     setDragRef(node);
@@ -101,11 +124,6 @@ function ResourceRow({
         {...attributes}
         type="button"
         onClick={() => onEditResource(resource.id)}
-        style={
-          transform
-            ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
-            : undefined
-        }
         className={cn(
           "group sticky left-0 z-20 flex w-36 shrink-0 touch-none cursor-grab flex-col justify-center border-r border-border/40 bg-card px-3 py-2 text-left transition-colors hover:bg-muted/60 active:cursor-grabbing",
           isHandleOver && "bg-primary/10",

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { CustomIntervalDialog } from "@/components/CustomIntervalDialog";
 import type { ScheduleDay, ScheduleEntry } from "@/api/client";
 
-interface ComponentBlockDef {
+export interface ComponentBlockDef {
   type: "break" | "ceremony" | "award";
   label: string;
   durationMinutes: number;
@@ -24,21 +24,34 @@ const COMPONENT_BLOCKS: ComponentBlockDef[] = [
 // SchedulePage.handleDragEnd, que agora usa a duração daqui em vez de
 // cair sempre no default genérico do backend (15 min, mesmo pro
 // Almoço).
+export function ComponentBlockCard({ def }: { def: ComponentBlockDef }) {
+  const Icon = def.icon;
+  return (
+    <>
+      <Icon className={cn("size-4 shrink-0", def.colorClass)} />
+      <span className="flex-1 font-medium text-foreground">{def.label}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{def.durationMinutes} min</span>
+    </>
+  );
+}
+
 function ComponentBlock({ def }: { def: ComponentBlockDef }) {
   const id = `component:${def.type}:${def.durationMinutes}:${def.label}`;
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
-  const Icon = def.icon;
+  // Sem `transform` no elemento original de propósito — mesmo motivo de
+  // UnscheduledTeamsPanel (bug real 2026-08-05): esta lista não tem
+  // scroll próprio, mas o painel lateral que a contém tem, então o card
+  // ainda sumia ao cruzar essa borda. O DragOverlay (ver SchedulePage),
+  // renderizado num portal, não sofre disso.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    data: { kind: "component", def },
+  });
 
   return (
     <div
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      style={
-        transform
-          ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
-          : undefined
-      }
       className={cn(
         // touch-none: mesmo raciocínio de UnscheduledTeamsPanel — sem
         // isso o navegador intercepta o toque inicial como scroll em
@@ -47,9 +60,7 @@ function ComponentBlock({ def }: { def: ComponentBlockDef }) {
         isDragging && "opacity-50",
       )}
     >
-      <Icon className={cn("size-4 shrink-0", def.colorClass)} />
-      <span className="flex-1 font-medium text-foreground">{def.label}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">{def.durationMinutes} min</span>
+      <ComponentBlockCard def={def} />
     </div>
   );
 }
