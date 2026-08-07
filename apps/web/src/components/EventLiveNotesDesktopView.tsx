@@ -5,6 +5,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  ClipboardCheck,
+  ClipboardList,
   MapPin,
   Percent,
   Scale,
@@ -16,7 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { MetricTile, type EventNavTab } from "@/components/EventLiveShared";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
@@ -312,22 +314,33 @@ export function EventLiveNotesDesktopView({
 
         <main className="flex-1 overflow-y-auto p-6">
           {isAdminOrAssessor && assignment.isJudge ? (
-            <Tabs value={notesTab} onValueChange={(v) => setNotesTab(v as "mine" | "all")}>
-              <TabsList className="w-fit">
-                <TabsTrigger value="mine" className="flex-1">
+            <>
+              <div className="mb-6 flex w-fit items-center gap-1 self-start rounded-2xl border border-border bg-card p-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={notesTab === "mine" ? "default" : "ghost"}
+                  onClick={() => setNotesTab("mine")}
+                >
+                  <ClipboardList className="size-4" />
                   Minhas súmulas
-                </TabsTrigger>
-                <TabsTrigger value="all" className="flex-1">
-                  Todas as súmulas
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="mine" className="mt-4">
-                {judgeQueueContent}
-              </TabsContent>
-              <TabsContent value="all" className="mt-4">
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={notesTab === "all" ? "default" : "ghost"}
+                  onClick={() => setNotesTab("all")}
+                >
+                  <ClipboardCheck className="size-4" />
+                  Súmulas finalizadas
+                </Button>
+              </div>
+              {notesTab === "mine" ? (
+                judgeQueueContent
+              ) : (
                 <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
-              </TabsContent>
-            </Tabs>
+              )}
+            </>
           ) : isAdminOrAssessor ? (
             <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
           ) : assignment.isJudge ? (

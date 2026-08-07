@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  ClipboardCheck,
+  ClipboardList,
   MapPin,
   Menu,
   Percent,
@@ -19,7 +21,7 @@ import { FunctionsSummaryDialog } from "@/components/FunctionsSummaryDialog";
 import { EventLiveNotesDesktopView } from "@/components/EventLiveNotesDesktopView";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { EventLiveBottomNav, MetricTile, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { formatDate } from "@/lib/formatDate";
@@ -417,22 +419,37 @@ export function EventLiveNotesPage() {
 
       <main className="flex-1 overflow-y-auto">
           {isAdminOrAssessor && assignment.isJudge ? (
-            <Tabs value={notesTab} onValueChange={(v) => setNotesTab(v as "mine" | "all")}>
-              <TabsList className="mx-4 mt-4 w-[calc(100%-2rem)]">
-                <TabsTrigger value="mine" className="flex-1">
+            <>
+              <div className="mx-4 mt-4 flex items-center gap-1 self-start rounded-2xl border border-border bg-card p-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={notesTab === "mine" ? "default" : "ghost"}
+                  className="flex-1"
+                  onClick={() => setNotesTab("mine")}
+                >
+                  <ClipboardList className="size-4" />
                   Minhas súmulas
-                </TabsTrigger>
-                <TabsTrigger value="all" className="flex-1">
-                  Todas as súmulas
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="mine">{judgeQueueContent}</TabsContent>
-              <TabsContent value="all">
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={notesTab === "all" ? "default" : "ghost"}
+                  className="flex-1"
+                  onClick={() => setNotesTab("all")}
+                >
+                  <ClipboardCheck className="size-4" />
+                  Súmulas finalizadas
+                </Button>
+              </div>
+              {notesTab === "mine" ? (
+                judgeQueueContent
+              ) : (
                 <div className="p-4">
                   <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
                 </div>
-              </TabsContent>
-            </Tabs>
+              )}
+            </>
           ) : isAdminOrAssessor ? (
             <div className="p-4">
               <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
