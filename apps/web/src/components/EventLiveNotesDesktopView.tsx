@@ -11,10 +11,12 @@ import {
   Trophy,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MetricTile, type EventNavTab } from "@/components/EventLiveShared";
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
@@ -62,11 +64,183 @@ export function EventLiveNotesDesktopView({
   onOpenFunctions,
 }: EventLiveNotesDesktopViewProps) {
   const navigate = useNavigate();
+  // Independente do estado de aba do EventLiveNotesPage (mobile) — os
+  // dois branches (mobile/desktop) ficam sempre montados juntos, só um
+  // visível por vez via classe responsiva, então cada um tem sua própria
+  // seleção de aba sem problema.
+  const [notesTab, setNotesTab] = useState<"mine" | "all">("mine");
   // Separada em destaque (card próprio) além de aparecer na lista com a
   // badge "Próxima" — mesmo raciocínio do design anterior, a pedido do
   // usuário (repetida em destaque no topo, não removida da lista).
   const nextItem = nextIndex >= 0 ? myPresentations[nextIndex] : null;
   const nextDisplay = nextItem ? getScheduleEntryDisplay(nextItem.entry, nextItem.start, nextItem.end, []) : null;
+
+  // Reaproveitado tanto pra quem é só jurado (sozinho, sem abas) quanto
+  // dentro da aba "Minhas súmulas" de quem também é admin/assessor.
+  const judgeQueueContent = (
+    <div>
+      {nextItem ? (
+        <div className="mb-4 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 text-white shadow-lg">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold tracking-wide text-white/70">PRÓXIMA APRESENTAÇÃO</p>
+            {nextItem.dayDate !== isoToday && (
+              <span className="rounded-full bg-black/20 px-3 py-1 text-xs font-semibold">
+                {formatDate(nextItem.dayDate)}
+              </span>
+            )}
+          </div>
+          <div className="mt-3 flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-2xl leading-tight font-bold">{nextDisplay?.title}</p>
+              {nextDisplay?.subtitle && <p className="truncate text-white/80">{nextDisplay.subtitle}</p>}
+              <p className="mt-2 flex items-center gap-1.5 text-sm text-white/80">
+                <MapPin className="size-4" />
+                {nextItem.resourceName} · {formatMinutes(nextItem.start)}
+              </p>
+              {nextItem.entry.contestationRequestedAt && !nextItem.entry.contestationResolvedAt && (
+                <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-red-500/20 px-2.5 py-1.5 text-xs font-semibold text-white">
+                  <AlertTriangle className="size-3.5" />
+                  Contestação solicitada
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${nextItem.entry.id}`)}
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-primary transition-opacity hover:opacity-90"
+            >
+              Iniciar avaliação
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </div>
+      ) : myPresentations.length > 0 ? (
+        <div className="mb-4 flex items-center gap-2 rounded-2xl border border-dashed border-emerald-500/40 bg-emerald-500/5 p-6 text-sm text-emerald-700 dark:text-emerald-400">
+          <CheckCircle2 className="size-4 shrink-0" />
+          Você concluiu todas as suas apresentações.
+        </div>
+      ) : (
+        <div className="mb-4 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          Nenhuma apresentação pendente pra você julgar.
+        </div>
+      )}
+
+      {contestedItems.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-red-300/50 bg-red-500/5 p-2">
+          <p className="px-3 pt-3 text-xs font-semibold tracking-wide text-red-600">CONTESTAÇÕES</p>
+          <div className="mt-1 divide-y divide-red-300/30">
+            {contestedItems.map((item) => {
+              const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
+              return (
+                <button
+                  key={item.entry.id}
+                  type="button"
+                  onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
+                  className="flex w-full items-center gap-4 rounded-xl p-3 text-left hover:bg-red-500/10"
+                >
+                  <AlertTriangle className="size-4 shrink-0 text-red-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{display.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {display.subtitle ? `${display.subtitle} · ` : ""}
+                      {item.resourceName}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-border bg-card p-2">
+        <p className="px-3 pt-3 text-xs font-semibold tracking-wide text-muted-foreground">
+          MINHAS APRESENTAÇÕES
+        </p>
+        {myPresentations.length === 0 ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">
+            Nenhuma apresentação pendente pra você julgar.
+          </p>
+        ) : (
+          <div className="mt-1 divide-y divide-border">
+            {myPresentations.map((item, index) => {
+              const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
+              const isNext = index === nextIndex;
+              const contested =
+                Boolean(item.entry.contestationRequestedAt) &&
+                !item.entry.contestationResolvedAt;
+              const contestationResolved =
+                Boolean(item.entry.contestationRequestedAt) &&
+                Boolean(item.entry.contestationResolvedAt);
+              const withdrawn = Boolean(item.entry.withdrawnAt);
+              return (
+                <button
+                  key={item.entry.id}
+                  type="button"
+                  disabled={withdrawn}
+                  onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
+                  className={cn(
+                    "flex w-full items-center gap-4 rounded-xl p-3 text-left",
+                    withdrawn
+                      ? "cursor-default opacity-60"
+                      : isNext
+                        ? "bg-primary/5 ring-1 ring-primary/30"
+                        : "hover:bg-muted",
+                  )}
+                >
+                  <div className="w-16 shrink-0">
+                    <p className="text-sm font-medium text-foreground">{formatMinutes(item.start)}</p>
+                    {item.dayDate !== isoToday && (
+                      <p className="text-[10px] text-muted-foreground">{formatDate(item.dayDate)}</p>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{display.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {display.subtitle ? `${display.subtitle} · ` : ""}
+                      {item.resourceName}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isNext && (
+                      <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
+                        Próxima
+                      </span>
+                    )}
+                    {item.submitted && (
+                      <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="size-3.5" />
+                        Concluída
+                      </span>
+                    )}
+                    {contestationResolved && (
+                      <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="size-3.5" />
+                        Contestação resolvida
+                      </span>
+                    )}
+                    {contested && (
+                      <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+                        <AlertTriangle className="size-3.5" />
+                        Contestação
+                      </span>
+                    )}
+                    {withdrawn && (
+                      <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+                        <XCircle className="size-3.5" />
+                        Desistência
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="hidden h-svh lg:flex">
@@ -137,180 +311,34 @@ export function EventLiveNotesDesktopView({
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
-          {!assignment.isJudge ? (
-            isAdminOrAssessor ? (
-              <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
-            ) : isAthlete ? (
-              <AthleteNotesOverview eventId={event.aliasId} />
-            ) : (
-              <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-                {event.currentUserRoles.includes("spectator")
-                  ? "O conteúdo não está disponível para espectadores do evento."
-                  : "Você não está escalado como jurado neste evento."}
-              </div>
-            )
+          {isAdminOrAssessor && assignment.isJudge ? (
+            <Tabs value={notesTab} onValueChange={(v) => setNotesTab(v as "mine" | "all")}>
+              <TabsList className="w-fit">
+                <TabsTrigger value="mine" className="flex-1">
+                  Minhas súmulas
+                </TabsTrigger>
+                <TabsTrigger value="all" className="flex-1">
+                  Todas as súmulas
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="mine" className="mt-4">
+                {judgeQueueContent}
+              </TabsContent>
+              <TabsContent value="all" className="mt-4">
+                <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+              </TabsContent>
+            </Tabs>
+          ) : isAdminOrAssessor ? (
+            <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+          ) : assignment.isJudge ? (
+            judgeQueueContent
+          ) : isAthlete ? (
+            <AthleteNotesOverview eventId={event.aliasId} />
           ) : (
-            <div>
-              {nextItem ? (
-                <div className="mb-4 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 text-white shadow-lg">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold tracking-wide text-white/70">PRÓXIMA APRESENTAÇÃO</p>
-                    {nextItem.dayDate !== isoToday && (
-                      <span className="rounded-full bg-black/20 px-3 py-1 text-xs font-semibold">
-                        {formatDate(nextItem.dayDate)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-3 flex items-end justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="truncate text-2xl leading-tight font-bold">{nextDisplay?.title}</p>
-                      {nextDisplay?.subtitle && <p className="truncate text-white/80">{nextDisplay.subtitle}</p>}
-                      <p className="mt-2 flex items-center gap-1.5 text-sm text-white/80">
-                        <MapPin className="size-4" />
-                        {nextItem.resourceName} · {formatMinutes(nextItem.start)}
-                      </p>
-                      {nextItem.entry.contestationRequestedAt && !nextItem.entry.contestationResolvedAt && (
-                        <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-red-500/20 px-2.5 py-1.5 text-xs font-semibold text-white">
-                          <AlertTriangle className="size-3.5" />
-                          Contestação solicitada
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${nextItem.entry.id}`)}
-                      className="flex shrink-0 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-primary transition-opacity hover:opacity-90"
-                    >
-                      Iniciar avaliação
-                      <ChevronRight className="size-4" />
-                    </button>
-                  </div>
-                </div>
-              ) : myPresentations.length > 0 ? (
-                <div className="mb-4 flex items-center gap-2 rounded-2xl border border-dashed border-emerald-500/40 bg-emerald-500/5 p-6 text-sm text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="size-4 shrink-0" />
-                  Você concluiu todas as suas apresentações.
-                </div>
-              ) : (
-                <div className="mb-4 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                  Nenhuma apresentação pendente pra você julgar.
-                </div>
-              )}
-
-              {contestedItems.length > 0 && (
-                <div className="mb-4 rounded-2xl border border-red-300/50 bg-red-500/5 p-2">
-                  <p className="px-3 pt-3 text-xs font-semibold tracking-wide text-red-600">CONTESTAÇÕES</p>
-                  <div className="mt-1 divide-y divide-red-300/30">
-                    {contestedItems.map((item) => {
-                      const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
-                      return (
-                        <button
-                          key={item.entry.id}
-                          type="button"
-                          onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
-                          className="flex w-full items-center gap-4 rounded-xl p-3 text-left hover:bg-red-500/10"
-                        >
-                          <AlertTriangle className="size-4 shrink-0 text-red-600" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-foreground">{display.title}</p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {display.subtitle ? `${display.subtitle} · ` : ""}
-                              {item.resourceName}
-                            </p>
-                          </div>
-                          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-border bg-card p-2">
-              <p className="px-3 pt-3 text-xs font-semibold tracking-wide text-muted-foreground">
-                MINHAS APRESENTAÇÕES
-              </p>
-              {myPresentations.length === 0 ? (
-                <p className="p-6 text-center text-sm text-muted-foreground">
-                  Nenhuma apresentação pendente pra você julgar.
-                </p>
-              ) : (
-                <div className="mt-1 divide-y divide-border">
-                  {myPresentations.map((item, index) => {
-                    const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
-                    const isNext = index === nextIndex;
-                    const contested =
-                      Boolean(item.entry.contestationRequestedAt) &&
-                      !item.entry.contestationResolvedAt;
-                    const contestationResolved =
-                      Boolean(item.entry.contestationRequestedAt) &&
-                      Boolean(item.entry.contestationResolvedAt);
-                    const withdrawn = Boolean(item.entry.withdrawnAt);
-                    return (
-                      <button
-                        key={item.entry.id}
-                        type="button"
-                        disabled={withdrawn}
-                        onClick={() => navigate(`/events/${event.aliasId}/live/scoring/${item.entry.id}`)}
-                        className={cn(
-                          "flex w-full items-center gap-4 rounded-xl p-3 text-left",
-                          withdrawn
-                            ? "cursor-default opacity-60"
-                            : isNext
-                              ? "bg-primary/5 ring-1 ring-primary/30"
-                              : "hover:bg-muted",
-                        )}
-                      >
-                        <div className="w-16 shrink-0">
-                          <p className="text-sm font-medium text-foreground">{formatMinutes(item.start)}</p>
-                          {item.dayDate !== isoToday && (
-                            <p className="text-[10px] text-muted-foreground">{formatDate(item.dayDate)}</p>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-foreground">{display.title}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {display.subtitle ? `${display.subtitle} · ` : ""}
-                            {item.resourceName}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {isNext && (
-                            <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
-                              Próxima
-                            </span>
-                          )}
-                          {item.submitted && (
-                            <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                              <CheckCircle2 className="size-3.5" />
-                              Concluída
-                            </span>
-                          )}
-                          {contestationResolved && (
-                            <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                              <CheckCircle2 className="size-3.5" />
-                              Contestação resolvida
-                            </span>
-                          )}
-                          {contested && (
-                            <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
-                              <AlertTriangle className="size-3.5" />
-                              Contestação
-                            </span>
-                          )}
-                          {withdrawn && (
-                            <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
-                              <XCircle className="size-3.5" />
-                              Desistência
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              </div>
+            <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+              {event.currentUserRoles.includes("spectator")
+                ? "O conteúdo não está disponível para espectadores do evento."
+                : "Você não está escalado como jurado neste evento."}
             </div>
           )}
         </main>
