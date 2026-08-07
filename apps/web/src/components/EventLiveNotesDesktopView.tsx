@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
+import { ReleaseFlagsPanel } from "@/components/scoring/ReleaseFlagsPanel";
 import { Button } from "@/components/ui/button";
 import { MetricTile, type EventNavTab } from "@/components/EventLiveShared";
 import { formatDate } from "@/lib/formatDate";
@@ -315,6 +316,7 @@ export function EventLiveNotesDesktopView({
         <main className="flex-1 overflow-y-auto p-6">
           {isAdminOrAssessor && assignment.isJudge ? (
             <>
+              <ReleaseFlagsPanel eventId={event.aliasId} />
               <div className="mb-6 flex w-fit items-center gap-1 self-start rounded-2xl border border-border bg-card p-1.5">
                 <Button
                   type="button"
@@ -338,7 +340,7 @@ export function EventLiveNotesDesktopView({
               {notesTab === "mine" ? (
                 judgeQueueContent
               ) : (
-                <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+                <AdminNotesOverview eventId={event.aliasId} eventName={event.name} hideReleaseFlags />
               )}
             </>
           ) : isAdminOrAssessor ? (

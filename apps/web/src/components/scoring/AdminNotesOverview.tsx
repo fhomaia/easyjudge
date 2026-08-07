@@ -16,9 +16,14 @@ import { adminScoringApi, type AdminOverviewEntry } from "@/api/client";
 interface AdminNotesOverviewProps {
   eventId: string;
   eventName: string;
+  // Quem chama já renderiza o próprio ReleaseFlagsPanel fora daqui (ver
+  // EventLiveNotesPage/EventLiveNotesDesktopView, aba "Súmulas
+  // finalizadas" de quem também é jurado) — a liberação é do evento
+  // inteiro, não faz sentido ficar escondida dentro de uma aba só.
+  hideReleaseFlags?: boolean;
 }
 
-export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewProps) {
+export function AdminNotesOverview({ eventId, eventName, hideReleaseFlags = false }: AdminNotesOverviewProps) {
   const [entries, setEntries] = useState<AdminOverviewEntry[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
@@ -64,7 +69,7 @@ export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewPro
 
   return (
     <div>
-      <ReleaseFlagsPanel eventId={eventId} />
+      {!hideReleaseFlags && <ReleaseFlagsPanel eventId={eventId} />}
       {!entries ? (
         <div className="flex items-center justify-center p-8 text-muted-foreground">
           <Loader2 className="size-5 animate-spin" />

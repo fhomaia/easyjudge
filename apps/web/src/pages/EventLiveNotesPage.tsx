@@ -21,6 +21,7 @@ import { FunctionsSummaryDialog } from "@/components/FunctionsSummaryDialog";
 import { EventLiveNotesDesktopView } from "@/components/EventLiveNotesDesktopView";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
+import { ReleaseFlagsPanel } from "@/components/scoring/ReleaseFlagsPanel";
 import { Button } from "@/components/ui/button";
 import { EventLiveBottomNav, MetricTile, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
@@ -420,7 +421,10 @@ export function EventLiveNotesPage() {
       <main className="flex-1 overflow-y-auto">
           {isAdminOrAssessor && assignment.isJudge ? (
             <>
-              <div className="mx-4 mt-4 flex items-center gap-1 self-start rounded-2xl border border-border bg-card p-1.5">
+              <div className="mx-4 mt-4">
+                <ReleaseFlagsPanel eventId={event.aliasId} />
+              </div>
+              <div className="mx-4 flex items-center gap-1 self-start rounded-2xl border border-border bg-card p-1.5">
                 <Button
                   type="button"
                   size="sm"
@@ -446,7 +450,7 @@ export function EventLiveNotesPage() {
                 judgeQueueContent
               ) : (
                 <div className="p-4">
-                  <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+                  <AdminNotesOverview eventId={event.aliasId} eventName={event.name} hideReleaseFlags />
                 </div>
               )}
             </>
