@@ -213,7 +213,7 @@ export function PresentationDetailsDialog({
           )}
         </div>
 
-        <div className="grid gap-3">
+        <div className="grid min-w-0 gap-3">
           <Label>Mover apresentação</Label>
           <SchedulePositionRadioGroup
             value={moveMode}
@@ -223,14 +223,14 @@ export function PresentationDetailsDialog({
 
           {(moveMode === "before" || moveMode === "after") && (
             <Select value={referenceEntryId || null} onValueChange={(v) => setReferenceEntryId(v as string)}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full min-w-0">
                 {/* `placeholder` é ignorado pelo Base UI quando o filho é
                     uma função (ver SelectValue.mjs: só cai no placeholder
                     quando NÃO há children) — por isso o "nada selecionado"
                     precisa ser tratado dentro da própria função, não só
                     via prop `placeholder` (bug real encontrado 2026-08-05,
                     testado no navegador: o trigger renderizava vazio). */}
-                <SelectValue>
+                <SelectValue className="truncate">
                   {(value: string | null) => {
                     if (!value) return "Escolha o item de referência";
                     const found = otherEntries.find((p) => p.entry.id === value);

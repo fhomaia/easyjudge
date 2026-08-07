@@ -110,7 +110,7 @@ export function AddUnscheduledEntryDialog({
           </Select>
         </div>
 
-        <div className="grid gap-3">
+        <div className="grid min-w-0 gap-3">
           <Label>Posição</Label>
           <SchedulePositionRadioGroup
             value={positionType}
@@ -123,8 +123,8 @@ export function AddUnscheduledEntryDialog({
               value={referenceEntryId || null}
               onValueChange={(value) => setReferenceEntryId(value as string)}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue>
+              <SelectTrigger className="w-full min-w-0">
+                <SelectValue className="truncate">
                   {(value: string | null) => {
                     if (!value) return "Escolha o item de referência";
                     const anchor = anchorEntries.find(({ entry }) => entry.id === value);

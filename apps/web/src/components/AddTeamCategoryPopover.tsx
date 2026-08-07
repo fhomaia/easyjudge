@@ -61,10 +61,10 @@ export function AddTeamCategoryPopover({
           <p className="text-xs text-muted-foreground">{team.name}</p>
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid min-w-0 gap-2">
           <Label>Categoria</Label>
           <Select value={categoryId || null} onValueChange={(v) => setCategoryId(v as string)}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full min-w-0">
               {/* `placeholder` é ignorado pelo Base UI quando o filho é
                   uma função (SelectValue só cai nele quando NÃO há
                   children) — bug real encontrado 2026-08-05 durante outro
