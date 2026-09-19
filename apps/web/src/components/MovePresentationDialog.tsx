@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/FormError";
 import { SchedulePositionRadioGroup } from "@/components/SchedulePositionRadioGroup";
 import { formatDate } from "@/lib/formatDate";
-import { isAutoWaitBreak, scheduleReferenceLabel } from "@/lib/scheduleEntryDisplay";
+import { scheduleReferenceLabel } from "@/lib/scheduleEntryDisplay";
+import { isRealEntry, presentationEndIndex, presentationStartIndex } from "@/lib/dropSlots";
 import type { SchedulePositionType } from "@/lib/useSchedulePosition";
 import type { FullScheduleItem } from "@/lib/eventFullSchedule";
 import { ApiError, type ScheduleDay, type ScheduleEntry } from "@/api/client";
@@ -90,17 +91,20 @@ export function MovePresentationDialog({
       .sort((a, b) => a.order - b.order);
   }, [targetResource, item]);
 
-  // Qualquer item do cronograma serve de referência (apresentação, ou
-  // um componente do evento como Almoço/Abertura/Premiação/intervalo
+  // Qualquer item real do cronograma serve de referência (apresentação,
+  // ou um evento especial como Almoço/Abertura/Premiação/intervalo
   // personalizado) — só exclui aquecimento e os breaks automáticos
-  // ("Aguardando aquecimento"/"Aguardando disponibilidade da equipe"),
-  // que são geridos pelo backend e não fazem sentido como âncora
+  // (esperas e intervalo entre apresentações), que são geridos pelo backend e não fazem sentido como âncora
   // (pedido do usuário 2026-08-06: antes só listava apresentações).
   const anchorEntries = useMemo(
     () =>
       siblingsAfterRemoval
         .map((entry: ScheduleEntry, index) => ({ entry, index }))
-        .filter(({ entry }) => entry.type !== "warmup" && !isAutoWaitBreak(entry)),
+        // Só itens reais (apresentação, evento especial): esperas e o
+        // "Intervalo entre apresentações" pertencem ao grupo da
+        // apresentação seguinte e nunca são ponto de referência (mesma
+        // regra dos pontos de soltura do cronograma, ver lib/dropSlots).
+        .filter(({ entry }) => entry.type !== "warmup" && isRealEntry(entry)),
     [siblingsAfterRemoval],
   );
 
@@ -117,8 +121,7 @@ export function MovePresentationDialog({
       const next = currentSiblings
         .slice(currentIndex + 1)
         .find(
-          (e) =>
-            e.type !== "warmup" && !isAutoWaitBreak(e) && e.linkedEntryId !== item.entry.id,
+          (e) => e.type !== "warmup" && isRealEntry(e) && e.linkedEntryId !== item.entry.id,
         );
       if (next) {
         setPositionType("before");
@@ -147,8 +150,8 @@ export function MovePresentationDialog({
   }
 
   function computeOrder(): number | null {
-    if (positionType === "start") return 0;
-    if (positionType === "end") return siblingsAfterRemoval.length;
+    if (positionType === "start") return presentationStartIndex(siblingsAfterRemoval);
+    if (positionType === "end") return presentationEndIndex(siblingsAfterRemoval);
     const anchor = anchorEntries.find(({ entry }) => entry.id === referenceEntryId);
     if (!anchor) return null;
     return positionType === "before" ? anchor.index : anchor.index + 1;

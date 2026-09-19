@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { isAutoWaitBreak } from "@/lib/scheduleEntryDisplay";
+import { isRealEntry, presentationEndIndex, presentationStartIndex } from "@/lib/dropSlots";
 import type { ScheduleDay, ScheduleEntry } from "@/api/client";
 
 export type SchedulePositionType = "start" | "before" | "after" | "end";
@@ -13,7 +13,12 @@ export type SchedulePositionType = "start" | "before" | "after" | "end";
 // âncora — ver `computeOrder`) entre os dois. Diferente de
 // MovePresentationDialog (mover um item JÁ agendado), aqui não existe
 // remoção prévia a descontar dos índices — é sempre inserção pura.
-export function useSchedulePosition(day: ScheduleDay | null) {
+export function useSchedulePosition(
+  day: ScheduleDay | null,
+  // Item novo é uma APRESENTAÇÃO: início/fim ficam entre os eventos
+  // especiais de abertura/encerramento (ver presentationStartIndex).
+  options: { forPresentation?: boolean } = {},
+) {
   const [resourceId, setResourceId] = useState("");
   const [positionType, setPositionType] = useState<SchedulePositionType>("end");
   const [referenceEntryId, setReferenceEntryId] = useState("");
@@ -38,7 +43,7 @@ export function useSchedulePosition(day: ScheduleDay | null) {
     () =>
       sortedSiblings
         .map((entry: ScheduleEntry, index) => ({ entry, index }))
-        .filter(({ entry }) => entry.type !== "warmup" && !isAutoWaitBreak(entry)),
+        .filter(({ entry }) => entry.type !== "warmup" && isRealEntry(entry)),
     [sortedSiblings],
   );
 
@@ -64,8 +69,12 @@ export function useSchedulePosition(day: ScheduleDay | null) {
   }
 
   function computeOrder(): number | null {
-    if (positionType === "start") return 0;
-    if (positionType === "end") return sortedSiblings.length;
+    if (positionType === "start") {
+      return options.forPresentation ? presentationStartIndex(sortedSiblings) : 0;
+    }
+    if (positionType === "end") {
+      return options.forPresentation ? presentationEndIndex(sortedSiblings) : sortedSiblings.length;
+    }
     const anchor = anchorEntries.find(({ entry }) => entry.id === referenceEntryId);
     if (!anchor) return null;
     return positionType === "before" ? anchor.index : anchor.index + 1;

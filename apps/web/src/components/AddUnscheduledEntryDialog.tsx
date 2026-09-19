@@ -45,7 +45,7 @@ export function AddUnscheduledEntryDialog({
     anchorEntries,
     computeOrder,
     reset,
-  } = useSchedulePosition(day);
+  } = useSchedulePosition(day, { forPresentation: true });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

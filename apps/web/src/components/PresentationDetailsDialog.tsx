@@ -17,8 +17,9 @@ import {
 } from "@/components/ui/select";
 import { FormError } from "@/components/FormError";
 import { SchedulePositionRadioGroup } from "@/components/SchedulePositionRadioGroup";
+import { isRealEntry, presentationEndIndex, presentationStartIndex } from "@/lib/dropSlots";
 import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
-import { isAutoWaitBreak, scheduleReferenceLabel } from "@/lib/scheduleEntryDisplay";
+import { scheduleReferenceLabel } from "@/lib/scheduleEntryDisplay";
 import type { SchedulePositionType } from "@/lib/useSchedulePosition";
 import { ApiError, scheduleApi, type ScheduleDay } from "@/api/client";
 
@@ -89,11 +90,15 @@ export function PresentationDetailsDialog({
   // listava apresentações). Ordenadas por horário (não por pista), pra
   // listar na ordem em que elas de fato acontecem.
   const otherEntries = useMemo(() => {
+    // Só pistas (recursos que aceitam apresentações) e só itens reais:
+    // referências em área de aquecimento levariam a mover pra um recurso
+    // que não aceita apresentações; esperas e intervalo entre
+    // apresentações pertencem ao grupo da apresentação seguinte.
     return day.resources
+      .filter((r) => r.supportsPresentations)
       .flatMap((r) => r.entries.map((e) => ({ entry: e, resource: r })))
       .filter(
-        ({ entry: e }) =>
-          e.id !== entryId && e.type !== "warmup" && !isAutoWaitBreak(e),
+        ({ entry: e }) => e.id !== entryId && e.type !== "warmup" && isRealEntry(e),
       )
       .sort((a, b) => {
         const ta = times.get(a.entry.id)?.startMinutes ?? 0;
@@ -110,12 +115,14 @@ export function PresentationDetailsDialog({
     setError(null);
     let targetResourceId: string;
     let order: number;
-    if (moveMode === "start") {
+    if (moveMode === "start" || moveMode === "end") {
       targetResourceId = entry!.resourceId;
-      order = 0;
-    } else if (moveMode === "end") {
-      targetResourceId = entry!.resourceId;
-      order = Number.MAX_SAFE_INTEGER;
+      // Fila da própria pista SEM esta apresentação e as esperas ligadas
+      // a ela (o que o backend remove antes de reinserir).
+      const own = [...resource!.entries]
+        .sort((a, b) => a.order - b.order)
+        .filter((e) => e.id !== entry!.id && e.linkedEntryId !== entry!.id);
+      order = moveMode === "start" ? presentationStartIndex(own) : presentationEndIndex(own);
     } else {
       const ref = otherEntries.find((p) => p.entry.id === referenceEntryId)?.entry;
       if (!ref) {

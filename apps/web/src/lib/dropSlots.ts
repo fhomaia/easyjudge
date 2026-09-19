@@ -144,3 +144,31 @@ export interface DropPreview {
   resourceId: string;
   slot: DropSlot;
 }
+
+// "Início" e "fim" de uma fila para uma APRESENTAÇÃO, sobre a fila JÁ SEM
+// o item movido: início = antes da primeira apresentação (colado no
+// grupo dela, depois de eventos especiais de abertura); fim = depois da
+// última apresentação (antes de eventos especiais de encerramento, como
+// Premiação). Sem isso, "início da pista" caía antes da Abertura e "fim"
+// depois da Premiação. Para eventos especiais o início/fim continuam
+// sendo o índice 0 / o tamanho da fila (Abertura vai mesmo antes de tudo).
+export function presentationStartIndex(entries: ScheduleEntry[]): number {
+  const first = entries.findIndex((e) => e.type === "presentation");
+  if (first === -1) return 0;
+  let start = first;
+  while (
+    start > 0 &&
+    entries[start - 1].type === "break" &&
+    entries[start - 1].linkedEntryId === entries[first].id
+  ) {
+    start--;
+  }
+  return start;
+}
+
+export function presentationEndIndex(entries: ScheduleEntry[]): number {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    if (entries[i].type === "presentation") return i + 1;
+  }
+  return entries.length;
+}
