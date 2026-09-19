@@ -34,6 +34,31 @@
   }
 }
 
+/* Barra de rolagem fina e discreta (segue o tema) — pra áreas que
+   rolam por conta própria e precisam mostrar onde o usuário está, como
+   a linha do tempo do cronograma (um dia de 12h tem ~30 mil px). */
+@utility scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent) transparent;
+  &::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+    background-clip: content-box;
+  }
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Plus Jakarta Sans Variable', sans-serif;

@@ -3,6 +3,11 @@ import { Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
 import { getResourceColor } from "@/lib/resourceColor";
+import {
+  computeDropSlots,
+  type DragInfo,
+  type DropPreview,
+} from "@/lib/dropSlots";
 import { ScheduleEntryCard } from "./ScheduleEntryCard";
 import type { ScheduleDay, ScheduleResource } from "@/api/client";
 
@@ -25,9 +30,14 @@ export const RESOURCE_DROP_PREFIX = "resource-drop:";
 // não uma categoria embutida no modelo. O vínculo fica no aquecimento
 // apontando pra pista (pairedResourceId) — uma pista pode ter mais de
 // um aquecimento vinculado, então o rótulo dela mostra a contagem.
-function getResourceRoleLabel(resource: ScheduleResource, allResources: ScheduleResource[]): string | null {
+function getResourceRoleLabel(
+  resource: ScheduleResource,
+  allResources: ScheduleResource[],
+): string | null {
   if (resource.supportsPresentations) {
-    const warmupCount = allResources.filter((r) => r.pairedResourceId === resource.id).length;
+    const warmupCount = allResources.filter(
+      (r) => r.pairedResourceId === resource.id,
+    ).length;
     return warmupCount > 0
       ? `Apresentações · ${warmupCount} ${warmupCount === 1 ? "aquecimento" : "aquecimentos"}`
       : "Apresentações";
@@ -42,14 +52,20 @@ function getResourceRoleLabel(resource: ScheduleResource, allResources: Schedule
 // Prévia usada pelo DragOverlay (ver SchedulePage) ao reordenar pistas
 // arrastando o handle — mesmo conteúdo visual do próprio handle, sem
 // depender de re-renderizar o ResourceRow inteiro.
-export function ResourceHandleCard({ resource }: { resource: ScheduleResource }) {
+export function ResourceHandleCard({
+  resource,
+}: {
+  resource: ScheduleResource;
+}) {
   return (
     <span className="flex items-center gap-1.5">
       <span
         className="size-2 shrink-0 rounded-full"
         style={{ backgroundColor: getResourceColor(resource) }}
       />
-      <p className="truncate text-sm font-medium text-foreground">{resource.name}</p>
+      <p className="truncate text-sm font-medium text-foreground">
+        {resource.name}
+      </p>
     </span>
   );
 }
@@ -64,6 +80,8 @@ interface ResourceRowProps {
   onOpenDetails: (entryId: string) => void;
   onEditResource: (resourceId: string) => void;
   peerDrag: { entryId: string; x: number; y: number } | null;
+  dragInfo: DragInfo | null;
+  dropPreview: DropPreview | null;
 }
 
 function ResourceRow({
@@ -76,8 +94,12 @@ function ResourceRow({
   onOpenDetails,
   onEditResource,
   peerDrag,
+  dragInfo,
+  dropPreview,
 }: ResourceRowProps) {
-  const { setNodeRef: setEntriesDropRef, isOver } = useDroppable({ id: resource.id });
+  const { setNodeRef: setEntriesDropRef, isOver } = useDroppable({
+    id: resource.id,
+  });
   const { setNodeRef: setHandleDropRef, isOver: isHandleOver } = useDroppable({
     id: `${RESOURCE_DROP_PREFIX}${resource.id}`,
   });
@@ -109,7 +131,21 @@ function ResourceRow({
     setHandleDropRef(node);
   }
 
-  const totalWidth = (day.endMinutes - day.startMinutes) * SCHEDULE_PX_PER_MINUTE;
+  const totalWidth =
+    (day.endMinutes - day.startMinutes) * SCHEDULE_PX_PER_MINUTE;
+  // Apresentação só cabe em pista (recurso que aceita apresentações); o
+  // resto (eventos especiais, aquecimento) vale em qualquer recurso.
+  const acceptsDrop =
+    dragInfo != null &&
+    (!dragInfo.isPresentation || resource.supportsPresentations);
+  const slots = acceptsDrop
+    ? computeDropSlots(
+        [...resource.entries].sort((a, b) => a.order - b.order),
+        times,
+        day.startMinutes,
+        dragInfo.movedEntry,
+      )
+    : [];
 
   return (
     <div
@@ -134,10 +170,14 @@ function ResourceRow({
             className="size-2 shrink-0 rounded-full"
             style={{ backgroundColor: getResourceColor(resource) }}
           />
-          <p className="truncate text-sm font-medium text-foreground">{resource.name}</p>
+          <p className="truncate text-sm font-medium text-foreground">
+            {resource.name}
+          </p>
           <Pencil className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
         </span>
-        {roleLabel && <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>}
+        {roleLabel && (
+          <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+        )}
       </button>
       <div
         ref={setEntriesDropRef}
@@ -152,20 +192,50 @@ function ResourceRow({
           // `bg-primary/*` abaixo nunca pintava enquanto esta cor
           // continuasse forçada (bug real 2026-08-05: o destaque de
           // "arraste em andamento" ficava sempre invisível).
-          backgroundColor: isDragActive ? undefined : `${getResourceColor(resource)}0d`,
+          backgroundColor: isDragActive
+            ? undefined
+            : `${getResourceColor(resource)}0d`,
         }}
         className={cn(
           "relative min-h-16 flex-1 transition-colors",
-          isDragActive && !isOver && "bg-primary/10 ring-2 ring-inset ring-primary/30",
-          isOver && "bg-primary/20 ring-2 ring-inset ring-primary/60",
+          // Só um tom de fundo: os alvos de verdade são os pontos entre
+          // os itens (marcadores abaixo), nunca a linha inteira nem o
+          // que está em cima de um item.
+          acceptsDrop && !isOver && "bg-primary/5",
+          acceptsDrop && isOver && "bg-primary/10",
+          dragInfo && !acceptsDrop && "opacity-60",
         )}
       >
+        {slots.map((slot) => {
+          const isActiveSlot =
+            dropPreview?.resourceId === resource.id &&
+            dropPreview.slot.beforeEntryId === slot.beforeEntryId &&
+            dropPreview.slot.afterEntryId === slot.afterEntryId;
+          return (
+            <div
+              key={`${slot.beforeEntryId}:${slot.afterEntryId}`}
+              style={{
+                left:
+                  (slot.minutes - day.startMinutes) * SCHEDULE_PX_PER_MINUTE,
+              }}
+              className={cn(
+                "pointer-events-none absolute inset-y-1 z-30 -translate-x-1/2 rounded-full transition-all",
+                isActiveSlot
+                  ? "w-1.5 bg-primary shadow-[0_0_0_3px_rgba(59,130,246,0.25)]"
+                  : "w-1 bg-primary/40",
+              )}
+            />
+          );
+        })}
         {(() => {
-          const sortedEntries = [...resource.entries].sort((a, b) => a.order - b.order);
+          const sortedEntries = [...resource.entries].sort(
+            (a, b) => a.order - b.order,
+          );
           return sortedEntries.map((entry, index) => {
             const t = times.get(entry.id);
             if (!t) return null;
-            const left = (t.startMinutes - day.startMinutes) * SCHEDULE_PX_PER_MINUTE;
+            const left =
+              (t.startMinutes - day.startMinutes) * SCHEDULE_PX_PER_MINUTE;
             const width = entry.durationMinutes * SCHEDULE_PX_PER_MINUTE;
 
             // Espaço livre até o próximo item da mesma linha (ou uma
@@ -193,7 +263,9 @@ function ResourceRow({
                 conflictReasons={conflicts.get(entry.id) ?? []}
                 onRemove={() => onRemoveEntry(entry.id)}
                 onOpenDetails={onOpenDetails}
-                peerDrag={peerDrag && peerDrag.entryId === entry.id ? peerDrag : null}
+                peerDrag={
+                  peerDrag && peerDrag.entryId === entry.id ? peerDrag : null
+                }
               />
             );
           });
@@ -207,7 +279,13 @@ function ResourceRow({
 // ResourceRow, mas tracejada/opaca, convidando a criar um recurso
 // novo direto pela timeline (sem precisar abrir "Gerenciar recursos"
 // primeiro). Clicar em qualquer ponto abre o mesmo popup de cadastro.
-function AddResourceRow({ totalWidth, onClick }: { totalWidth: number; onClick: () => void }) {
+function AddResourceRow({
+  totalWidth,
+  onClick,
+}: {
+  totalWidth: number;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -238,6 +316,8 @@ interface ScheduleTimelineProps {
   // dá a impressão de arrastar os dois juntos, embora o
   // reposicionamento de verdade só aconteça no backend ao soltar.
   peerDrag?: { entryId: string; x: number; y: number } | null;
+  dragInfo?: DragInfo | null;
+  dropPreview?: DropPreview | null;
 }
 
 export function ScheduleTimeline({
@@ -248,10 +328,13 @@ export function ScheduleTimeline({
   onAddResource,
   onEditResource,
   peerDrag = null,
+  dragInfo = null,
+  dropPreview = null,
 }: ScheduleTimelineProps) {
   const times = computeResourceTimes(day.resources, day.startMinutes);
   const sortedResources = [...day.resources].sort((a, b) => a.order - b.order);
-  const totalWidth = (day.endMinutes - day.startMinutes) * SCHEDULE_PX_PER_MINUTE;
+  const totalWidth =
+    (day.endMinutes - day.startMinutes) * SCHEDULE_PX_PER_MINUTE;
   // Grade de 5 em 5 minutos, com rótulo em cada marca — o zoom
   // (SCHEDULE_PX_PER_MINUTE) já dá espaço suficiente pro texto.
   const ticks: number[] = [];
@@ -265,7 +348,7 @@ export function ScheduleTimeline({
     // espaço pra esta timeline depois do resto do layout — sem esse
     // piso explícito, `min-h-0` deixava a timeline encolher livremente
     // até quase sumir nesses casos.
-    <div className="scrollbar-none flex min-h-72 min-w-0 flex-1 flex-col overflow-auto rounded-xl border border-border/60 bg-card">
+    <div className="scrollbar-slim flex min-h-72 min-w-0 flex-1 flex-col overflow-auto rounded-xl border border-border/60 bg-card">
       <div className="flex flex-1 flex-col" style={{ width: totalWidth + 144 }}>
         <div className="flex shrink-0 border-b border-border/60">
           <div className="sticky left-0 z-20 w-36 shrink-0 border-r border-border/40 bg-card" />
@@ -275,16 +358,23 @@ export function ScheduleTimeline({
               return (
                 <div
                   key={m}
-                  style={{ left: (m - day.startMinutes) * SCHEDULE_PX_PER_MINUTE }}
+                  style={{
+                    left: (m - day.startMinutes) * SCHEDULE_PX_PER_MINUTE,
+                  }}
                   className="absolute top-0 bottom-0"
                 >
                   <div
-                    className={cn("absolute bottom-0 w-px bg-border", isHour ? "h-2.5" : "h-1.5")}
+                    className={cn(
+                      "absolute bottom-0 w-px bg-border",
+                      isHour ? "h-2.5" : "h-1.5",
+                    )}
                   />
                   <span
                     className={cn(
                       "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs",
-                      isHour ? "font-medium text-foreground" : "text-muted-foreground",
+                      isHour
+                        ? "font-medium text-foreground"
+                        : "text-muted-foreground",
                     )}
                   >
                     {formatMinutes(m)}
@@ -307,6 +397,8 @@ export function ScheduleTimeline({
             onOpenDetails={onOpenDetails}
             onEditResource={onEditResource}
             peerDrag={peerDrag}
+            dragInfo={dragInfo}
+            dropPreview={dropPreview}
           />
         ))}
 

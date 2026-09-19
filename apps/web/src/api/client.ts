@@ -1078,8 +1078,6 @@ export const regulationApi = {
 
 export type ScheduleEntryType =
   "presentation" | "warmup" | "break" | "ceremony" | "award";
-export type ScheduleDistributionStrategy = "balanced" | "sequential";
-
 export interface ScheduleEntry {
   id: string;
   resourceId: string;
@@ -1111,6 +1109,33 @@ export interface ScheduleResource {
   entries: ScheduleEntry[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type AutoGenerateOrderPrimary = "level" | "format";
+export type AutoGenerateLevelDirection = "asc" | "desc";
+
+// Configuração do "gerar automaticamente", uma por evento (vale pra
+// todos os dias). `formatOrder` são chaves de autoFormatKey.
+export interface AutoGenerateSettings {
+  orderPrimary: AutoGenerateOrderPrimary;
+  levelDirection: AutoGenerateLevelDirection;
+  formatOrder: string[];
+  specialEvents: SpecialEvent[];
+}
+
+// Evento especial da geração automática (Almoço, Abertura, Premiação,
+// Contestação de notas ou personalizado). Entra em todas as pistas e
+// termina no mesmo horário em todas; `durationMinutes` é o mínimo.
+export type SpecialEventAnchor = "time" | "start" | "end" | "before" | "after";
+
+export interface SpecialEvent {
+  id: string;
+  label: string;
+  type: "break" | "ceremony" | "award";
+  durationMinutes: number;
+  anchor: SpecialEventAnchor;
+  timeMinutes?: number;
+  refId?: string;
 }
 
 export interface ScheduleDay {
@@ -1179,13 +1204,19 @@ export interface MoveScheduleEntryPayload {
 
 export interface AutoGenerateSchedulePayload {
   startMinutes: number;
-  lunchStartMinutes: number;
-  lunchDurationMinutes: number;
   warmupMinutes: number;
-  distribution: ScheduleDistributionStrategy;
 }
 
 export const scheduleApi = {
+  getAutoGenerateSettings: (eventId: string) =>
+    authRequest<AutoGenerateSettings>(`/events/${eventId}/schedule/auto-generate-settings`),
+
+  updateAutoGenerateSettings: (eventId: string, payload: AutoGenerateSettings) =>
+    authRequest<AutoGenerateSettings>(`/events/${eventId}/schedule/auto-generate-settings`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
   listDays: (eventId: string) =>
     authRequest<ScheduleDay[]>(`/events/${eventId}/schedule/days`),
 

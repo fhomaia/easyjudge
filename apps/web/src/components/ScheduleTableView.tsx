@@ -2,13 +2,22 @@ import { useMemo } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { computeResourceTimes, formatMinutes, getScheduleRowStarts } from "@/lib/scheduleTime";
+import {
+  computeResourceTimes,
+  formatMinutes,
+  getScheduleRowStarts,
+} from "@/lib/scheduleTime";
 import { getResourceColor } from "@/lib/resourceColor";
 import {
   SCHEDULE_TYPE_STYLES,
   getScheduleEntryDisplay,
   isAutoWaitBreak,
 } from "@/lib/scheduleEntryDisplay";
+import {
+  computeDropSlots,
+  type DragInfo,
+  type DropPreview,
+} from "@/lib/dropSlots";
 import type { ScheduleDay, ScheduleEntry } from "@/api/client";
 
 // Id do droppable de cada célula — "table-cell:<resourceId>:<rowStart
@@ -32,6 +41,8 @@ interface ScheduleTableViewProps {
   // dá a impressão de arrastar os dois juntos, embora o
   // reposicionamento de verdade só aconteça no backend ao soltar.
   peerDrag?: { entryId: string; x: number; y: number } | null;
+  dragInfo?: DragInfo | null;
+  dropPreview?: DropPreview | null;
 }
 
 export function ScheduleTableView({
@@ -39,6 +50,8 @@ export function ScheduleTableView({
   conflicts,
   onRemoveEntry,
   peerDrag = null,
+  dragInfo = null,
+  dropPreview = null,
 }: ScheduleTableViewProps) {
   const times = useMemo(
     () => computeResourceTimes(day.resources, day.startMinutes),
@@ -73,7 +86,9 @@ export function ScheduleTableView({
   const grid = useMemo(() => {
     return sortedResources.map((resource) => {
       const cells: GridCell[] = rowStarts.map(() => ({ kind: "empty" }));
-      const sortedEntries = [...resource.entries].sort((a, b) => a.order - b.order);
+      const sortedEntries = [...resource.entries].sort(
+        (a, b) => a.order - b.order,
+      );
       for (const entry of sortedEntries) {
         // Suprimido da tabela — a linha de tempo continua mostrando
         // (é lá que faz sentido ver o motivo do atraso), mas aqui só
@@ -109,8 +124,52 @@ export function ScheduleTableView({
   // handleDragEnd) media a distância até o meio do card e às vezes
   // resolvia "antes dele" em vez de "depois".
   const resourceEndMinutes = sortedResources.map((resource) =>
-    resource.entries.reduce((sum, e) => sum + e.durationMinutes, day.startMinutes),
+    resource.entries.reduce(
+      (sum, e) => sum + e.durationMinutes,
+      day.startMinutes,
+    ),
   );
+
+  // Pontos de soltura por recurso (só enquanto arrasta): antes de cada
+  // item real e o ponto final. Apresentação só nas pistas.
+  const dropByResource = sortedResources.map((resource) => {
+    const accepts =
+      dragInfo != null &&
+      (!dragInfo.isPresentation || resource.supportsPresentations);
+    const slots = accepts
+      ? computeDropSlots(
+          [...resource.entries].sort((a, b) => a.order - b.order),
+          times,
+          day.startMinutes,
+          dragInfo.movedEntry,
+        )
+      : [];
+    const preview =
+      dropPreview?.resourceId === resource.id ? dropPreview.slot : null;
+    const movedId = dragInfo?.movedEntry?.id ?? null;
+    return {
+      accepts,
+      // A célula arrastada anda junto com o cursor: nunca leva marcador.
+      beforeIds: new Set(
+        slots
+          .map((sl) => sl.beforeEntryId)
+          .filter((v): v is string => v !== null && v !== movedId),
+      ),
+      activeBeforeId:
+        preview && preview.beforeEntryId !== movedId
+          ? preview.beforeEntryId
+          : null,
+      // Ponto colado ao próprio item arrastado (ficaria no lugar dele):
+      // destaca a borda de baixo do item real anterior.
+      activeAfterId:
+        preview &&
+        preview.beforeEntryId !== null &&
+        preview.beforeEntryId === movedId
+          ? preview.afterEntryId
+          : null,
+      activeFinal: preview !== null && preview.beforeEntryId === null,
+    };
+  });
 
   return (
     // min-h-72: mesmo piso da ScheduleTimeline (ver comentário lá) —
@@ -143,7 +202,10 @@ export function ScheduleTableView({
         </thead>
         <tbody>
           {rowStarts.map((rowStart, rowIndex) => (
-            <tr key={rowStart} className="border-b border-border/40 last:border-b-0">
+            <tr
+              key={rowStart}
+              className="border-b border-border/40 last:border-b-0"
+            >
               <td className="sticky left-0 z-10 border-r border-border/40 bg-card px-3 py-2 align-top text-xs font-medium text-muted-foreground">
                 {formatMinutes(rowStart)}
               </td>
@@ -162,8 +224,26 @@ export function ScheduleTableView({
                       startMinutes={t.startMinutes}
                       endMinutes={t.endMinutes}
                       conflictReasons={conflicts.get(cell.entry.id) ?? []}
+                      dropMark={
+                        dropByResource[resourceIndex].activeBeforeId ===
+                        cell.entry.id
+                          ? "active"
+                          : dropByResource[resourceIndex].beforeIds.has(
+                                cell.entry.id,
+                              )
+                            ? "slot"
+                            : null
+                      }
+                      dropMarkBottomActive={
+                        dropByResource[resourceIndex].activeAfterId ===
+                        cell.entry.id
+                      }
                       onRemove={() => onRemoveEntry(cell.entry.id)}
-                      peerDrag={peerDrag && peerDrag.entryId === cell.entry.id ? peerDrag : null}
+                      peerDrag={
+                        peerDrag && peerDrag.entryId === cell.entry.id
+                          ? peerDrag
+                          : null
+                      }
                     />
                   );
                 }
@@ -191,6 +271,8 @@ export function ScheduleTableView({
                 key={`trailing:${resource.id}`}
                 resourceId={resource.id}
                 dropMinutes={resourceEndMinutes[index]}
+                accepts={dropByResource[index].accepts}
+                active={dropByResource[index].activeFinal}
               />
             ))}
           </tr>
@@ -208,6 +290,11 @@ interface TableEntryCellProps {
   startMinutes: number;
   endMinutes: number;
   conflictReasons: string[];
+  // Ponto de soltura logo ANTES desta célula: "slot" = disponível,
+  // "active" = o que será usado se soltar agora.
+  dropMark: "slot" | "active" | null;
+  // Destaque na borda de BAIXO (ponto logo depois desta célula).
+  dropMarkBottomActive: boolean;
   onRemove: () => void;
   // Setado quando ESTA célula não é a que o usuário está arrastando,
   // mas sim o aquecimento vinculado à apresentação sendo arrastada —
@@ -224,17 +311,29 @@ function TableEntryCell({
   startMinutes,
   endMinutes,
   conflictReasons,
+  dropMark,
+  dropMarkBottomActive,
   onRemove,
   peerDrag,
 }: TableEntryCellProps) {
-  const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    transform,
+    isDragging,
+  } = useDraggable({
     id: entry.id,
+    // `data` só pra SchedulePage saber o que está sendo arrastado (pontos
+    // de soltura); tipo próprio pra não acionar o DragOverlay do "entry"
+    // — aqui a própria célula acompanha o cursor.
+    data: { kind: "tableEntry", entry },
   });
   // A própria célula ocupada também é um alvo de soltar — arrastar
   // outra coisa por cima dela ainda conta como "soltar neste recurso,
   // neste horário" (mesma posição de insertIndex calculada em
   // handleDragEnd a partir do horário da linha).
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
+  const { setNodeRef: setDropRef } = useDroppable({
     id: `${TABLE_CELL_PREFIX}${resourceId}:${rowStart}`,
   });
   const style = SCHEDULE_TYPE_STYLES[entry.type];
@@ -245,7 +344,8 @@ function TableEntryCell({
     endMinutes,
     conflictReasons,
   );
-  const effectiveTransform = transform ?? (peerDrag ? { x: peerDrag.x, y: peerDrag.y } : null);
+  const effectiveTransform =
+    transform ?? (peerDrag ? { x: peerDrag.x, y: peerDrag.y } : null);
 
   function setRefs(node: HTMLTableCellElement | null) {
     setDragRef(node);
@@ -272,9 +372,21 @@ function TableEntryCell({
         style.text,
         hasConflict && "bg-destructive/15 text-destructive",
         (isDragging || peerDrag) && "opacity-50",
-        isOver && "ring-2 ring-inset ring-primary/40",
       )}
     >
+      {dropMarkBottomActive && (
+        <span className="pointer-events-none absolute -bottom-px inset-x-0 z-10 h-1.5 rounded-full bg-primary shadow-[0_0_0_3px_rgba(59,130,246,0.25)]" />
+      )}
+      {dropMark && (
+        <span
+          className={cn(
+            "pointer-events-none absolute -top-px inset-x-0 z-10 rounded-full",
+            dropMark === "active"
+              ? "h-1.5 bg-primary shadow-[0_0_0_3px_rgba(59,130,246,0.25)]"
+              : "h-1 bg-primary/50",
+          )}
+        />
+      )}
       {/* Sempre visível, não só no hover (era `hidden group-hover:block`)
           — sem hover em touch/tablet, esse botão nunca aparecia lá.
           Aquecimento (2026-08-16, pedido do usuário) nunca é excluível
@@ -301,8 +413,14 @@ function TableEntryCell({
   );
 }
 
-function TableEmptyCell({ resourceId, rowStart }: { resourceId: string; rowStart: number }) {
-  const { setNodeRef, isOver } = useDroppable({
+function TableEmptyCell({
+  resourceId,
+  rowStart,
+}: {
+  resourceId: string;
+  rowStart: number;
+}) {
+  const { setNodeRef } = useDroppable({
     id: `${TABLE_CELL_PREFIX}${resourceId}:${rowStart}`,
   });
   return (
@@ -310,7 +428,6 @@ function TableEmptyCell({ resourceId, rowStart }: { resourceId: string; rowStart
       ref={setNodeRef}
       className={cn(
         "min-w-40 border-r border-l border-border/30 px-3 py-2 align-top text-xs text-muted-foreground/40 last:border-r-0",
-        isOver && "bg-primary/5 ring-2 ring-inset ring-primary/30",
       )}
     >
       —
@@ -326,11 +443,15 @@ function TableEmptyCell({ resourceId, rowStart }: { resourceId: string; rowStart
 function TableTrailingCell({
   resourceId,
   dropMinutes,
+  accepts,
+  active,
 }: {
   resourceId: string;
   dropMinutes: number;
+  accepts: boolean;
+  active: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: `${TABLE_CELL_PREFIX}${resourceId}:${dropMinutes}`,
   });
   return (
@@ -338,7 +459,9 @@ function TableTrailingCell({
       ref={setNodeRef}
       className={cn(
         "min-w-40 border-r border-l border-dashed border-border/40 px-3 py-2 align-top text-xs text-muted-foreground/40 last:border-r-0",
-        isOver && "bg-primary/5 ring-2 ring-inset ring-primary/30",
+        accepts && "bg-primary/5 text-muted-foreground",
+        active &&
+          "bg-primary/15 ring-2 ring-inset ring-primary/60 text-foreground",
       )}
     >
       Arraste aqui para adicionar após o evento acima

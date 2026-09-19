@@ -14,7 +14,7 @@ export interface ComponentBlockDef {
   colorClass: string;
 }
 
-const COMPONENT_BLOCKS: ComponentBlockDef[] = [
+export const COMPONENT_BLOCKS: ComponentBlockDef[] = [
   { type: "break", label: "Almoço", durationMinutes: 60, icon: UtensilsCrossed, colorClass: "text-orange-600" },
   { type: "break", label: "Contestação de notas", durationMinutes: 30, icon: Flag, colorClass: "text-orange-600" },
   { type: "ceremony", label: "Abertura", durationMinutes: 30, icon: Music, colorClass: "text-purple-600" },
