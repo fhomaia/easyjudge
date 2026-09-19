@@ -1442,6 +1442,83 @@ Rodada grande no Cronograma (`SchedulePage`), commits `4abfefd`,
   chamada e só então lança — um script de teste com `DELETE` seguido
   disso apagou dado sem eu conferir. Sempre declarar (`let r`).
 
+## Reorganização da tela de lançamento de nota + Rascunho com desenho/texto separados (2026-09-19)
+
+Rodada de ajustes pedidos direto na tela `EventLiveScoringPage`/
+`EventLiveScoringDesktopView` (jurado lançando nota), um de cada vez,
+mesma sessão. Ainda não deployada (ver "Deploy" abaixo).
+
+- **Slider de faixa de pontuação só colore a faixa ATUAL** — antes
+  todas as faixas apareciam coloridas o tempo todo, achado "muito
+  distrativo" pelo usuário. `buildBandGradient` (`lib/scoreBands.ts`)
+  ganhou um 3º parâmetro opcional `highlightBand`: quando informado,
+  só o segmento que bate com a faixa atual mantém a cor de verdade, os
+  demais caem pra `var(--color-muted)`. `ScoreBandSlider.tsx` calcula
+  `currentBand` primeiro e repassa pro gradiente.
+- **Layout do desktop reorganizado**: Rascunho ao lado de Legalidade na
+  linha 1 (Comentários sobe pra essa vaga quando não há jurado de
+  legalidade na pista); faixas de pontuação na linha 2 (a última faixa
+  sozinha numa linha ímpar estica pra ocupar a largura toda,
+  `ScoringCriteriaGroups.tsx`); Comentários na linha 3 só quando já
+  ocupou a linha 1 com Legalidade. Sem altura fixa no grid da linha 1
+  (tentada e revertida — com muitos tipos de dedução cadastrados o
+  card de Legalidade ultrapassava qualquer altura fixa razoável e as
+  seções se sobrepunham); em vez disso, `LegalityDeductionsPanel` ganhou
+  `max-h-48 overflow-y-auto` só na lista de últimos registros.
+- **Bug real corrigido no `SketchCanvas` (rascunho por desenho)**:
+  trocar de aba rápido demais (antes do debounce de 900ms salvar)
+  descartava o traço em silêncio pra sempre. Causa: o cleanup do
+  `useEffect` de desmontagem tentava reler `canvasRef.current`, mas o
+  React zera essa ref pra `null` ANTES do cleanup rodar, não depois
+  (contrário à suposição inicial, confirmado testando com
+  `left_click_drag` de verdade — eventos de ponteiro sintéticos via JS
+  não disparam `setPointerCapture`). Corrigido capturando o PNG de
+  forma SÍNCRONA a cada edição (`scheduleSave`, dentro de
+  `lastDataUrlRef`) — o debounce e o cleanup de desmontagem só releem
+  esse ref, nunca o canvas.
+- **Rascunho: desenho e texto viraram campos SEPARADOS no backend**
+  (pedido do usuário depois de reportar "quando desenho apaga o que
+  tinha escrito no modo caixa de texto e vice versa" — os dois
+  dividiam o mesmo campo antes, format-sniffed pelo prefixo `data:`).
+  Novo `ScoreEventKind.SKETCH_TEXT_SET` (mesma privacidade de
+  `SKETCH_SET` — só o próprio jurado vê, nunca aparece pra Head
+  Judge/admin/programa) + migration `AddSketchTextSetToScoreEventKind`
+  (`ALTER TYPE ... ADD VALUE`, rodada no Postgres local; **ainda não
+  rodada no Neon**, ver "Deploy"). `ReducedScoringState.sketchText`
+  novo no reducer do frontend.
+- **`SketchCanvas.tsx` virou o hook `useSketchCanvas`** (arquivo
+  renomeado pra `components/scoring/useSketchCanvas.tsx`, só usado por
+  `RascunhoEditor`), devolvendo `{ toolbar, canvas }` em vez de um
+  componente monolítico — permite ao `RascunhoEditor` decidir onde
+  cada pedaço entra na árvore, em vez da barra de ferramentas do
+  desenho vir sempre grudada embaixo do canvas.
+- **Duas linhas de cabeçalho do Rascunho viraram uma só** (pedido do
+  usuário: "ganhamos uma linha de espaço na tela"): a nota "Visível
+  apenas para você" saiu de dentro do `RascunhoEditor` e foi pro lado
+  do título "RASCUNHO" no desktop (mesma linha, `EventLiveScoringDesktopView`);
+  no mobile (sem título próprio, só a aba "Rascunho") ficou numa linha
+  compacta acima do editor (`EventLiveScoringPage`). A barra de
+  ferramentas do desenho (usando o hook acima) passou a aparecer do
+  lado do toggle "Desenho livre/Caixa de texto", só quando
+  `mode === "draw"` — antes vinha numa linha própria, exclusiva do
+  modo desenho, o que também é o motivo de desenho/texto terem alturas
+  diferentes antes do `stretchToFill` (agora as duas alturas batem
+  igual em qualquer modo).
+- **Testado no navegador** com um harness descartável (`ViewerTestPage`
+  temporário, removido ao final junto com a rota `/viewer-test` de
+  `App.tsx`) renderizando `EventLiveScoringDesktopView` com uma folha
+  falsa e 9 tipos de dedução (pra also validar o scroll da lista de
+  Legalidade): confirmado visualmente que Rascunho/Legalidade não se
+  sobrepõem com as faixas abaixo; confirmado via DOM
+  (`textarea.value`/`toDataURL`) que desenhar não apaga o texto já
+  digitado e vice-versa; confirmado que a altura do card não muda ao
+  trocar de modo. **A página mobile só foi conferida por leitura de
+  código + typecheck, não testada visualmente no navegador** nesta
+  rodada.
+- **Deploy**: migration `AddSketchTextSetToScoreEventKind` ainda
+  precisa rodar no Neon (usuário, `DATABASE_URL` inline no terminal
+  dele) antes de qualquer push que inclua este backend.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do

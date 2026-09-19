@@ -7,6 +7,12 @@ export enum ScoreEventKind {
   DEDUCTION_REMOVE = 'deduction_remove',
   COMMENT_SET = 'comment_set',
   SKETCH_SET = 'sketch_set',
+  // Rascunho digitado (modo "Caixa de texto" do RascunhoEditor) —
+  // guardado À PARTE de SKETCH_SET (não reaproveita o mesmo campo/
+  // formato) pra desenho e texto nunca se apagarem um ao outro ao
+  // trocar de modo (pedido do usuário, 2026-09-19). Mesma privacidade
+  // de SKETCH_SET: só o próprio jurado vê (ver getSheetForJudge).
+  SKETCH_TEXT_SET = 'sketch_text_set',
   // Marcador emitido quando o jurado clica "Lançar notas" (ver
   // EventLiveScoringPage.handleSubmit) — não carrega nenhuma coluna
   // extra, só sinaliza "esta apresentação não exige mais ação deste

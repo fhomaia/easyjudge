@@ -71,13 +71,27 @@ export function ScoringCriteriaGroups({
     setEditingId(null);
   }
 
+  // No desktop (única variante que renderiza os grupos numa grade
+  // grid-cols-2, ver EventLiveScoringDesktopView) uma quantidade ímpar
+  // de grupos deixava o último sozinho ocupando só metade da largura,
+  // com a outra metade vazia — esse último grupo estica pra linha
+  // inteira nesse caso (pedido do usuário, 2026-09-19).
+  const lastFullWidthIndex = !isMobile && groups.length % 2 === 1 ? groups.length - 1 : -1;
+
   return (
     <>
-      {groups.map((group) => {
+      {groups.map((group, index) => {
         const criteriaIds = group.criteria.map((c) => c.id);
         const complete = isGroupComplete(criteriaIds);
         return (
-          <div key={group.id} className={cn("rounded-2xl border border-border bg-card", isMobile && "mx-4 mt-3")}>
+          <div
+            key={group.id}
+            className={cn(
+              "rounded-2xl border border-border bg-card",
+              isMobile && "mx-4 mt-3",
+              index === lastFullWidthIndex && "col-span-2",
+            )}
+          >
             <div className="flex w-full items-center gap-3 p-4 text-left">
               <span
                 className={cn(

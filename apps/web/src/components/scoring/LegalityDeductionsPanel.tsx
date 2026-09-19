@@ -98,7 +98,15 @@ export function LegalityDeductionsPanel({
               <Trash2 className="size-3" />
             </button>
           </div>
-          <div className="mt-1 divide-y divide-border">
+          {/* Teto de altura + rolagem própria (não depende de nenhuma
+              altura externa, ao contrário de flex-1/h-full — a grade de
+              tipos de dedução acima não tem limite, então o card
+              inteiro precisa continuar de altura NATURAL) — sem isso,
+              muitas ilegalidades lançadas na mesma apresentação faziam
+              o card (e a linha toda, via h-full do vizinho) crescer sem
+              parar (pedido do usuário, 2026-09-19). "Ver todos" continua
+              útil pra abrir a lista completa, agora com rolagem. */}
+          <div className={cn("mt-1 divide-y divide-border", !isMobile && "max-h-48 overflow-y-auto")}>
             {visibleDeductions.map((d) => (
               <div key={d.id} className="py-2">
                 <div className={cn("flex items-center", isMobile ? "gap-3" : "gap-2")}>

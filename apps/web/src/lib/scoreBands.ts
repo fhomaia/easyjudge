@@ -63,7 +63,18 @@ export function findMatchingBand(bands: ScoreBand[], score: number): ScoreBand |
 // de só usar os limites de cada faixa isoladamente, porque em trechos
 // de sobreposição a faixa "vencedora" (ver findMatchingBand) pode mudar
 // no meio do intervalo de uma faixa perdedora.
-export function buildBandGradient(bands: ScoreBand[], maxScore: number): string {
+//
+// `highlightBand`, quando passado, faz só o trecho da faixa ATUAL (a
+// que o ponteiro está) ganhar cor — o resto do trilho fica neutro
+// (pedido do usuário, 2026-09-19: colorir tudo sempre distraía mais do
+// que ajudava). Comparação por referência: `winner` vem da mesma
+// `bands` que gerou `highlightBand` (ver ScoreBandSlider), então é o
+// mesmo objeto quando é a mesma faixa, mesmo com sobreposição.
+export function buildBandGradient(
+  bands: ScoreBand[],
+  maxScore: number,
+  highlightBand?: ScoreBand | null,
+): string {
   if (bands.length === 0 || maxScore <= 0) return "";
 
   const boundaries = new Set<number>([0, maxScore]);
@@ -79,7 +90,8 @@ export function buildBandGradient(bands: ScoreBand[], maxScore: number): string 
     const end = sorted[i + 1];
     if (end <= start) continue;
     const winner = findMatchingBand(bands, (start + end) / 2);
-    const color = winner?.color ?? "var(--color-muted)";
+    const highlighted = highlightBand === undefined || winner === highlightBand;
+    const color = winner && highlighted ? winner.color : "var(--color-muted)";
     const startPct = (start / maxScore) * 100;
     const endPct = (end / maxScore) * 100;
     stops.push(`${color} ${startPct}% ${endPct}%`);

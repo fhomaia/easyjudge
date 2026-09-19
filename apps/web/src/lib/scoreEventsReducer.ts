@@ -21,6 +21,11 @@ export interface ReducedScoringState {
   deductions: DeductionLogEntry[];
   comment: string;
   sketchDataUrl: string | null;
+  // Rascunho digitado (modo "Caixa de texto" do RascunhoEditor) —
+  // campo À PARTE de sketchDataUrl (não o mesmo valor em formatos
+  // diferentes), pra desenho e texto nunca se apagarem um ao outro ao
+  // trocar de modo (pedido do usuário, 2026-09-19).
+  sketchText: string | null;
   // Tempo TOTAL marcado pelo cronômetro na última vez que o Jurado de
   // Legalidade clicou "Parar" (ScoreEventKind.TIMER_STOPPED) — `null`
   // se o cronômetro nunca foi parado nesta apresentação. Permite
@@ -44,6 +49,7 @@ export function reduceScoreEvents(
   const codesByDeductionId = new Map<string, string>();
   let comment = "";
   let sketchDataUrl: string | null = null;
+  let sketchText: string | null = null;
   let timerStoppedAtMs: number | null = null;
 
   for (const e of sorted) {
@@ -73,6 +79,9 @@ export function reduceScoreEvents(
       case "sketch_set":
         sketchDataUrl = e.text ?? null;
         break;
+      case "sketch_text_set":
+        sketchText = e.text ?? null;
+        break;
       case "timer_stopped":
         if (e.presentationElapsedMs !== undefined) timerStoppedAtMs = e.presentationElapsedMs ?? null;
         break;
@@ -84,5 +93,5 @@ export function reduceScoreEvents(
     .map((d) => ({ ...d, code: codesByDeductionId.get(d.id) ?? null }))
     .sort((a, b) => b.clientCreatedAt.localeCompare(a.clientCreatedAt));
 
-  return { scores, deductions, comment, sketchDataUrl, timerStoppedAtMs };
+  return { scores, deductions, comment, sketchDataUrl, sketchText, timerStoppedAtMs };
 }

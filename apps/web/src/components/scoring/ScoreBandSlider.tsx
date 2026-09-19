@@ -31,8 +31,8 @@ export function ScoreBandSlider({
   onValueChange,
   teamScores,
 }: ScoreBandSliderProps) {
-  const gradient = buildBandGradient(bands, maxScore);
   const currentBand = findMatchingBand(bands, value);
+  const gradient = buildBandGradient(bands, maxScore, currentBand);
   const step = allowDecimal ? 0.1 : 1;
 
   return (

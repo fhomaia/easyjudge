@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Circle, Eraser, Minus, Pencil, Redo2, Square, Trash2, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,9 +28,32 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 400;
 const SAVE_DEBOUNCE_MS = 900;
 
-interface SketchCanvasProps {
+interface UseSketchCanvasProps {
   initialDataUrl: string | null;
   onChange: (dataUrl: string) => void;
+  // Desenho vs. Caixa de texto (ver RascunhoEditor) precisam ocupar a
+  // MESMA altura, senão o card do rascunho "pula" de tamanho ao trocar
+  // de modo (pedido do usuário, 2026-09-19). Com isso true, o canvas
+  // estica pra preencher a altura do container (mesma regra que a
+  // caixa de texto já seguia via flex-1), em vez de calcular a própria
+  // altura pela proporção 2:1 da resolução interna — só usado no
+  // desktop, onde um ancestral já define uma altura fixa pra esticar;
+  // sem isso (default, usado no mobile/demais contextos, sem altura
+  // fixa no ancestral), a proporção 2:1 é o que evita o canvas colapsar
+  // pra altura zero.
+  stretchToFill?: boolean;
+}
+
+interface UseSketchCanvasResult {
+  // Separados (em vez de um componente `<SketchCanvas>` só) pra
+  // `RascunhoEditor` poder colocar a barra de ferramentas na MESMA
+  // linha do toggle desenho/texto, em vez da linha própria que ela
+  // ocupava antes — pedido do usuário, 2026-09-19 ("ganhamos uma linha
+  // de espaço na tela"). Os dois compartilham o mesmo estado (formas,
+  // ferramenta/cor atual) através deste hook, só a posição na árvore
+  // de JSX é decidida por quem chama.
+  toolbar: ReactNode;
+  canvas: ReactNode;
 }
 
 // Canvas puro (sem lib de desenho) — pilha de formas em estado React
@@ -39,10 +62,26 @@ interface SketchCanvasProps {
 // imagem inicial (`initialDataUrl`, se houver — reaberto de uma
 // sessão anterior) vira uma camada de base fixa; undo/redo só afeta
 // os traços feitos NESTA sessão, não volta atrás da base.
-export function SketchCanvas({ initialDataUrl, onChange }: SketchCanvasProps) {
+export function useSketchCanvas({
+  initialDataUrl,
+  onChange,
+  stretchToFill = false,
+}: UseSketchCanvasProps): UseSketchCanvasResult {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseImageRef = useRef<HTMLImageElement | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Último PNG capturado (ver scheduleSave) — o valor de verdade que o
+  // debounce (ou o cleanup de desmontagem) envia pra `onChange`.
+  const lastDataUrlRef = useRef<string | null>(null);
+  // Sempre a versão mais recente de `onChange` — a flush de desmontagem
+  // (ver useEffect abaixo) roda numa closure registrada só uma vez (no
+  // mount), então sem isso ela chamaria uma versão desatualizada da
+  // prop se o componente pai tivesse re-renderizado com uma nova
+  // função entre o mount e o unmount.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   const [tool, setTool] = useState<Tool>("pen");
   const [color, setColor] = useState(COLORS[0]);
@@ -125,13 +164,37 @@ export function SketchCanvas({ initialDataUrl, onChange }: SketchCanvasProps) {
     };
   }
 
+  // Captura o PNG na hora (síncrono, com o canvas garantidamente vivo)
+  // e só AGENDA quando `onChange` de fato roda — sem isso, o cleanup de
+  // desmontagem (ver useEffect abaixo) não tinha como recuperar o
+  // desenho: `canvasRef.current` já vem `null` nesse momento (React
+  // desfaz a ref do <canvas> ANTES do cleanup do efeito rodar, não
+  // depois — descoberto testando esta correção, contrariando a
+  // suposição inicial). Reler o canvas ali sempre falhava em silêncio.
   function scheduleSave() {
+    const canvas = canvasRef.current;
+    if (canvas) lastDataUrlRef.current = canvas.toDataURL("image/png");
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      const canvas = canvasRef.current;
-      if (canvas) onChange(canvas.toDataURL("image/png"));
+      saveTimeoutRef.current = null;
+      if (lastDataUrlRef.current !== null) onChangeRef.current(lastDataUrlRef.current);
     }, SAVE_DEBOUNCE_MS);
   }
+
+  // Desmontar (trocar de aba, no toggle desenho/texto do rascunho, ou
+  // sair da tela) com um save ainda pendente no debounce descartava
+  // esse traço em silêncio pra sempre (bug real, 2026-09-19: jurado
+  // desenhava e trocava de aba rápido demais) — usa o PNG já capturado
+  // em `lastDataUrlRef` (ver scheduleSave), não tenta reler o canvas.
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        if (lastDataUrlRef.current !== null) onChangeRef.current(lastDataUrlRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
@@ -192,78 +255,83 @@ export function SketchCanvas({ initialDataUrl, onChange }: SketchCanvasProps) {
     { tool: "circle", icon: Circle, label: "Círculo" },
   ];
 
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-1 border-b border-border pb-2">
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-1">
+      <button
+        type="button"
+        onClick={handleUndo}
+        disabled={shapes.length === 0}
+        aria-label="Desfazer"
+        className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+      >
+        <Undo2 className="size-4" />
+      </button>
+      <button
+        type="button"
+        onClick={handleRedo}
+        disabled={redoStack.length === 0}
+        aria-label="Refazer"
+        className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+      >
+        <Redo2 className="size-4" />
+      </button>
+      <div className="mx-1 h-5 w-px bg-border" />
+      {TOOL_BUTTONS.map(({ tool: t, icon: Icon, label }) => (
         <button
+          key={t}
           type="button"
-          onClick={handleUndo}
-          disabled={shapes.length === 0}
-          aria-label="Desfazer"
-          className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+          onClick={() => setTool(t)}
+          aria-label={label}
+          title={label}
+          className={cn(
+            "flex size-8 items-center justify-center rounded-md transition-colors",
+            tool === t ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted",
+          )}
         >
-          <Undo2 className="size-4" />
+          <Icon className="size-4" />
         </button>
+      ))}
+      <div className="mx-1 h-5 w-px bg-border" />
+      {COLORS.map((c) => (
         <button
+          key={c}
           type="button"
-          onClick={handleRedo}
-          disabled={redoStack.length === 0}
-          aria-label="Refazer"
-          className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
-        >
-          <Redo2 className="size-4" />
-        </button>
-        <div className="mx-1 h-5 w-px bg-border" />
-        {TOOL_BUTTONS.map(({ tool: t, icon: Icon, label }) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTool(t)}
-            aria-label={label}
-            title={label}
-            className={cn(
-              "flex size-8 items-center justify-center rounded-md transition-colors",
-              tool === t ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            <Icon className="size-4" />
-          </button>
-        ))}
-        <div className="mx-1 h-5 w-px bg-border" />
-        {COLORS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => setColor(c)}
-            aria-label={`Cor ${c}`}
-            className={cn(
-              "size-6 shrink-0 rounded-full ring-offset-2",
-              color === c && "ring-2 ring-foreground",
-            )}
-            style={{ backgroundColor: c }}
-          />
-        ))}
-        <button
-          type="button"
-          onClick={handleClear}
-          aria-label="Limpar esboço"
-          title="Limpar esboço"
-          className="ml-auto flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
-        >
-          <Trash2 className="size-4" />
-        </button>
-      </div>
-
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        className="mt-2 w-full flex-1 touch-none rounded-lg border border-border bg-white"
-        style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` }}
-      />
+          onClick={() => setColor(c)}
+          aria-label={`Cor ${c}`}
+          className={cn(
+            "size-6 shrink-0 rounded-full ring-offset-2",
+            color === c && "ring-2 ring-foreground",
+          )}
+          style={{ backgroundColor: c }}
+        />
+      ))}
+      <button
+        type="button"
+        onClick={handleClear}
+        aria-label="Limpar esboço"
+        title="Limpar esboço"
+        className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
+      >
+        <Trash2 className="size-4" />
+      </button>
     </div>
   );
+
+  const canvas = (
+    <canvas
+      ref={canvasRef}
+      width={CANVAS_WIDTH}
+      height={CANVAS_HEIGHT}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      className={cn(
+        "w-full flex-1 touch-none rounded-lg border border-border bg-white",
+        stretchToFill && "min-h-0",
+      )}
+      style={stretchToFill ? undefined : { aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` }}
+    />
+  );
+
+  return { toolbar, canvas };
 }

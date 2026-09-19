@@ -1353,6 +1353,7 @@ export type ScoreEventKind =
   | "deduction_remove"
   | "comment_set"
   | "sketch_set"
+  | "sketch_text_set"
   | "sheet_submitted"
   | "timer_started"
   | "timer_stopped"

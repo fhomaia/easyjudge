@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
+import { EventDocumentsButton } from "@/components/EventDocumentsButton";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
 import { EventLiveScoringDesktopView } from "@/components/EventLiveScoringDesktopView";
 import { HeadJudgePanel } from "@/components/HeadJudgePanel";
@@ -8,7 +9,7 @@ import { HeadJudgeMobileSheet } from "@/components/HeadJudgeMobileSheet";
 import { ScoringCriteriaGroups } from "@/components/scoring/ScoringCriteriaGroups";
 import { LegalityDeductionsPanel } from "@/components/scoring/LegalityDeductionsPanel";
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
-import { SketchCanvas } from "@/components/SketchCanvas";
+import { RascunhoEditor } from "@/components/scoring/RascunhoEditor";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { enqueueEvent, flushQueue, getPendingEvents, startSyncLoop } from "@/lib/scoreEventsDb";
 import { reduceScoreEvents, type DeductionLogEntry } from "@/lib/scoreEventsReducer";
@@ -72,6 +73,7 @@ export function EventLiveScoringPage() {
   const [deductions, setDeductions] = useState<DeductionLogEntry[]>([]);
   const [comment, setComment] = useState("");
   const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
+  const [sketchText, setSketchText] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<"comments" | "sketch">("comments");
   const [supervisionOpen, setSupervisionOpen] = useState(false);
 
@@ -119,6 +121,7 @@ export function EventLiveScoringPage() {
       if (!hydratedRef.current) {
         setComment(reduced.comment);
         setSketchDataUrl(reduced.sketchDataUrl);
+        setSketchText(reduced.sketchText);
         // Cronômetro já parado antes (ex: o jurado saiu e voltou nesta
         // apresentação) — mostra o tempo TOTAL já marcado em vez de
         // reiniciar do zero (timerRunning fica false, então a tela já
@@ -368,6 +371,11 @@ export function EventLiveScoringPage() {
     void emitEvent({ kind: "sketch_set", text: dataUrl });
   }
 
+  function handleSketchTextChange(text: string) {
+    setSketchText(text);
+    void emitEvent({ kind: "sketch_text_set", text });
+  }
+
   function isGroupComplete(criteriaIds: string[]): boolean {
     return criteriaIds.length > 0 && criteriaIds.every((id) => id in scores);
   }
@@ -463,6 +471,7 @@ export function EventLiveScoringPage() {
               {sheet.presentation.categoryName} · {sheet.presentation.resourceName}
             </p>
           </div>
+          <EventDocumentsButton />
           {sheet.isHeadJudge && (
             <button
               type="button"
@@ -676,9 +685,14 @@ export function EventLiveScoringPage() {
                 <p className="mt-1 text-right text-xs text-muted-foreground">{comment.length} / 1000</p>
               </div>
             ) : (
-              <div>
-                <p className="mb-2 text-xs text-muted-foreground">Este rascunho é visível apenas para você.</p>
-                <SketchCanvas initialDataUrl={sketchDataUrl} onChange={handleSketchChange} />
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground">Este rascunho é visível apenas para você.</p>
+                <RascunhoEditor
+                  drawValue={sketchDataUrl}
+                  onDrawChange={handleSketchChange}
+                  textValue={sketchText}
+                  onTextChange={handleSketchTextChange}
+                />
               </div>
             )}
           </div>
@@ -730,6 +744,7 @@ export function EventLiveScoringPage() {
         deductions={deductions}
         comment={comment}
         sketchDataUrl={sketchDataUrl}
+        sketchText={sketchText}
         pendingCount={pendingCount}
         lastSyncedAt={lastSyncedAt}
         submitting={submitting}
@@ -753,6 +768,7 @@ export function EventLiveScoringPage() {
         onClearAllDeductions={clearAllDeductions}
         onCommentChange={handleCommentChange}
         onSketchChange={handleSketchChange}
+        onSketchTextChange={handleSketchTextChange}
         onSubmit={handleSubmit}
         onOpenSupervision={() => setSupervisionOpen(true)}
         canWrite={canWrite}

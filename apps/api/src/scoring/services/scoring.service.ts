@@ -513,7 +513,13 @@ export class ScoringService {
       where: {
         scheduleEntryId: entry.id,
         judgeParticipationId: target.id,
-        kind: Not(In([ScoreEventKind.COMMENT_SET, ScoreEventKind.SKETCH_SET])),
+        kind: Not(
+          In([
+            ScoreEventKind.COMMENT_SET,
+            ScoreEventKind.SKETCH_SET,
+            ScoreEventKind.SKETCH_TEXT_SET,
+          ]),
+        ),
       },
       order: { clientCreatedAt: 'ASC' },
     });

@@ -16,7 +16,8 @@ import { DeductionType } from '../../regulations/enums/deduction-type.enum';
 // no frontend): score de um critério = valor do último SCORE_SET
 // daquele criterionId; deduções ativas = todo DEDUCTION_ADD cujo id
 // não aparece como undoesEventId de nenhum DEDUCTION_REMOVE;
-// comentário/esboço = texto do último COMMENT_SET/SKETCH_SET.
+// comentário/esboço = texto do último COMMENT_SET/SKETCH_SET/
+// SKETCH_TEXT_SET.
 //
 // `id` é gerado NO CLIENTE (crypto.randomUUID()), não pelo banco — é o
 // que permite reenviar o mesmo evento depois de uma falha de rede sem
@@ -81,7 +82,8 @@ export class ScoreEvent {
   @Column({ name: 'presentation_elapsed_ms', type: 'int', nullable: true })
   presentationElapsedMs: number | null;
 
-  // COMMENT_SET (o comentário) ou SKETCH_SET (dataURL PNG do canvas).
+  // COMMENT_SET (o comentário), SKETCH_SET (dataURL PNG do canvas) ou
+  // SKETCH_TEXT_SET (rascunho digitado, texto puro).
   @Column({ type: 'text', nullable: true })
   text: string | null;
 

@@ -1,7 +1,8 @@
+import { EventDocumentsButton } from "@/components/EventDocumentsButton";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
-import { SketchCanvas } from "@/components/SketchCanvas";
 import { ScoringCriteriaGroups } from "@/components/scoring/ScoringCriteriaGroups";
 import { LegalityDeductionsPanel } from "@/components/scoring/LegalityDeductionsPanel";
+import { RascunhoEditor } from "@/components/scoring/RascunhoEditor";
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
 import type { DeductionLogEntry } from "@/lib/scoreEventsReducer";
 import { sumCriteriaScores, sumDeductions, sumMaxScores } from "@/lib/scoringSummary";
@@ -21,6 +22,7 @@ interface EventLiveScoringDesktopViewProps {
   deductions: DeductionLogEntry[];
   comment: string;
   sketchDataUrl: string | null;
+  sketchText: string | null;
   pendingCount: number;
   lastSyncedAt: Date | null;
   submitting: boolean;
@@ -44,6 +46,7 @@ interface EventLiveScoringDesktopViewProps {
   onSetDeductionCode: (deductionId: string, code: string) => void;
   onCommentChange: (text: string) => void;
   onSketchChange: (dataUrl: string) => void;
+  onSketchTextChange: (text: string) => void;
   onSubmit: () => void;
   onOpenSupervision: () => void;
   canWrite: boolean;
@@ -55,6 +58,7 @@ export function EventLiveScoringDesktopView({
   deductions,
   comment,
   sketchDataUrl,
+  sketchText,
   pendingCount,
   lastSyncedAt,
   submitting,
@@ -78,6 +82,7 @@ export function EventLiveScoringDesktopView({
   onSetDeductionCode,
   onCommentChange,
   onSketchChange,
+  onSketchTextChange,
   onSubmit,
   onOpenSupervision,
   canWrite,
@@ -100,40 +105,48 @@ export function EventLiveScoringDesktopView({
   const finalResult = totalScore + deductionsTotal;
   const maxScore = sumMaxScores(sheet.groups);
 
-  // Quando não há grupos de critério (jurado só de legalidade, ou sem
-  // nenhuma atribuição), comentários/esboço sobem pra preencher o
-  // espaço que ficaria vazio à esquerda — sem isso, "LEGALIDADE"
-  // ficava confinada e esquisita num cantinho à direita, com a tela
-  // toda vazia do lado (2026-07-24, a pedido do usuário). Os cards são
-  // `h-full flex flex-col` e o textarea é `flex-1` (não mais
-  // `rows` fixo) pra esticar até o fim do bloco disponível — só faz
-  // diferença de verdade quando o pai tem altura real pra distribuir
-  // (ver `flex-1` no grid que envolve isso mais abaixo).
-  const commentsAndSketch = (
-    <div className="grid h-full grid-cols-2 gap-4">
-      <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
-        <p className="flex items-center gap-1.5 text-sm font-bold tracking-wide text-foreground">COMENTÁRIOS</p>
-        <textarea
-          value={comment}
-          onChange={(e) => onCommentChange(e.target.value.slice(0, 1000))}
-          placeholder="Digite seus comentários aqui..."
-          className="mt-2 min-h-[160px] w-full flex-1 resize-none rounded-lg border border-border bg-background p-3 text-sm outline-none focus-visible:border-primary"
-        />
-        <p className="mt-1 text-right text-xs text-muted-foreground">{comment.length} / 1000</p>
-      </div>
-      <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
+  // Cards com altura própria (`h-full flex flex-col`, textarea
+  // `flex-1`) pra esticar até o fim do bloco disponível, casando com a
+  // altura NATURAL da linha 1 do grid (a mais alta entre Rascunho/
+  // Ilegalidade/Comentários — ver comentário na linha 1 mais abaixo).
+  // `min-h-[160px]` (~5 linhas) é o piso pro caso "Comentários sozinho"
+  // (linha 3, sem grid pra esticar a partir de — ver mais abaixo) E
+  // pro caso comum de Ilegalidade natural ficar baixa (pedido do
+  // usuário, 2026-09-19: campo de comentário pequeno demais).
+  const comentariosBlock = (
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
+      <p className="text-sm font-bold tracking-wide text-foreground">COMENTÁRIOS</p>
+      <textarea
+        value={comment}
+        onChange={(e) => onCommentChange(e.target.value.slice(0, 1000))}
+        placeholder="Digite seus comentários aqui..."
+        className="mt-2 min-h-[160px] w-full flex-1 resize-none rounded-lg border border-border bg-background p-3 text-sm outline-none focus-visible:border-primary"
+      />
+      <p className="mt-1 text-right text-xs text-muted-foreground">{comment.length} / 1000</p>
+    </div>
+  );
+
+  const rascunhoBlock = (
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-bold tracking-wide text-foreground">RASCUNHO</p>
-        <p className="mt-1 text-xs text-muted-foreground">Este rascunho é visível apenas para você.</p>
-        <div className="mt-2 flex flex-1 flex-col">
-          <SketchCanvas initialDataUrl={sketchDataUrl} onChange={onSketchChange} />
-        </div>
+        <p className="text-xs text-muted-foreground">Visível apenas para você.</p>
+      </div>
+      <div className="mt-2 flex min-h-0 flex-1 flex-col">
+        <RascunhoEditor
+          drawValue={sketchDataUrl}
+          onDrawChange={onSketchChange}
+          textValue={sketchText}
+          onTextChange={onSketchTextChange}
+          variant="desktop"
+        />
       </div>
     </div>
   );
 
-  // Extraído pra ser reusado tanto no layout "com grupos" (coluna da
-  // direita, altura natural) quanto no layout "só legalidade" (linha
-  // inteira esticada — ver mais abaixo), sem duplicar o JSX.
+  // Só existe quando a pista tem jurado de legalidade — nesse caso
+  // ocupa a vaga ao lado do Rascunho na linha 1 (ver layout mais
+  // abaixo); sem legalidade, Comentários ocupa essa vaga no lugar.
   const legalidadeBlock = sheet.isLegalityJudge && (
     <LegalityDeductionsPanel
       rules={sheet.deductions}
@@ -144,7 +157,6 @@ export function EventLiveScoringDesktopView({
       onEditDeductionTime={onEditDeductionTime}
       onSetDeductionCode={onSetDeductionCode}
       variant="desktop"
-      className="col-span-1"
     />
   );
 
@@ -177,6 +189,7 @@ export function EventLiveScoringDesktopView({
                 Painel Head Judge
               </button>
             )}
+            <EventDocumentsButton className="ml-1" />
           </div>
 
           {sheet.isLegalityJudge && (
@@ -313,57 +326,45 @@ export function EventLiveScoringDesktopView({
         )}
 
         <div className={cn("flex flex-1 flex-col", !canWrite && "pointer-events-none opacity-50")}>
-        {sheet.groups.length === 0 ? (
-          // Sem grupo de critério (só legalidade, ou nem isso) — a
-          // linha ocupa o resto da página (2026-07-24, a pedido do
-          // usuário: os blocos podiam esticar até o final da tela em
-          // vez de ficar com altura curta e sobra vazia embaixo).
-          <div className={cn("grid flex-1 gap-4", sheet.isLegalityJudge ? "grid-cols-3" : "grid-cols-1")}>
-            <div className={sheet.isLegalityJudge ? "col-span-2" : "col-span-1"}>{commentsAndSketch}</div>
-            {legalidadeBlock}
+        {/* Linha 1, sempre: Rascunho ao lado de Ilegalidade — ou,
+            quando esta pista não tem jurado de legalidade, Comentários
+            sobe pra ocupar o lugar que seria dela (pedido do usuário,
+            2026-09-19: não deixar o espaço vazio do lado do rascunho).
+            Altura NATURAL da linha (a do card mais alto — normalmente
+            Ilegalidade, que varia com a quantidade de tipos de dedução
+            do regulamento): Rascunho/Comentários esticam pra casar via
+            `h-full` (não uma altura fixa — travar um valor fixo aqui
+            cortava a grade de tipos de dedução em eventos com muitos
+            tipos, ver LegalityDeductionsPanel pro teto+rolagem só da
+            LISTA de deduções já lançadas, que é o que pode crescer sem
+            limite). */}
+        <div className="grid grid-cols-2 gap-4">
+          {rascunhoBlock}
+          {sheet.isLegalityJudge ? legalidadeBlock : comentariosBlock}
+        </div>
+
+        {/* Linha 2: faixas de pontuação (dentro de ScoringCriteriaGroups,
+            showScoreBands) — só existe se a pista tiver critério
+            atribuído; largura inteira, não mais dividindo espaço com
+            Ilegalidade na mesma linha. */}
+        {sheet.groups.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <ScoringCriteriaGroups
+              groups={sheet.groups}
+              scores={scores}
+              isGroupComplete={isGroupComplete}
+              onAdjustScore={onAdjustScore}
+              onSetScore={onSetScore}
+              variant="desktop"
+              showScoreBands
+            />
           </div>
-        ) : sheet.isLegalityJudge ? (
-          <>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2 space-y-3">
-                <ScoringCriteriaGroups
-                  groups={sheet.groups}
-                  scores={scores}
-                  isGroupComplete={isGroupComplete}
-                  onAdjustScore={onAdjustScore}
-                  onSetScore={onSetScore}
-                  variant="desktop"
-                  showScoreBands
-                />
-              </div>
-
-              {legalidadeBlock}
-            </div>
-
-            <div className="mt-4">{commentsAndSketch}</div>
-          </>
-        ) : (
-          <>
-            {/* Sem jurado de legalidade nesta pista, os grupos ocupam a
-                largura inteira (não sobra 1/3 vazio à direita) em 2
-                colunas por linha, em vez de empilhados numa coluna só —
-                a pedido do usuário, ao notar o espaço desperdiçado numa
-                súmula sem legalidade. */}
-            <div className="grid grid-cols-2 gap-4">
-              <ScoringCriteriaGroups
-                groups={sheet.groups}
-                scores={scores}
-                isGroupComplete={isGroupComplete}
-                onAdjustScore={onAdjustScore}
-                onSetScore={onSetScore}
-                variant="desktop"
-                showScoreBands
-              />
-            </div>
-
-            <div className="mt-4">{commentsAndSketch}</div>
-          </>
         )}
+
+        {/* Linha 3: Comentários — só quando ainda não subiu pra linha 1
+            (jurado de legalidade preenche aquela vaga com Ilegalidade,
+            então Comentários aparece aqui embaixo). */}
+        {sheet.isLegalityJudge && <div className="mt-4">{comentariosBlock}</div>}
         </div>
       </main>
 
