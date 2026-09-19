@@ -10,7 +10,19 @@ import { ScheduleDay } from '../entities/schedule-day.entity';
 import { ScheduleResource } from '../entities/schedule-resource.entity';
 import { ScheduleEntry } from '../entities/schedule-entry.entity';
 import { ScheduleEntryType } from '../enums/schedule-entry-type.enum';
-import { ScheduleDistributionStrategy } from '../enums/schedule-distribution-strategy.enum';
+import { ScheduleAutoSettings } from '../entities/schedule-auto-settings.entity';
+import {
+  findSpecialEventsProblem,
+  planSpecialEvents,
+  type SpecialEvent,
+} from '../special-events';
+import { UpdateAutoGenerateSettingsDto } from '../dto/update-auto-generate-settings.dto';
+import {
+  AutoGenerateLevelDirection,
+  AutoGenerateOrderPrimary,
+  autoFormatKey,
+  DEFAULT_AUTO_FORMAT_ORDER,
+} from '../enums/auto-generate-order.enum';
 import { UpdateScheduleDayDto } from '../dto/update-schedule-day.dto';
 import { CreateScheduleResourceDto } from '../dto/create-schedule-resource.dto';
 import { UpdateScheduleResourceDto } from '../dto/update-schedule-resource.dto';
@@ -48,28 +60,23 @@ export interface ScheduleDayView extends ScheduleDay {
   resources: ScheduleResourceView[];
 }
 
+export interface AutoGenerateSettingsView {
+  orderPrimary: AutoGenerateOrderPrimary;
+  levelDirection: AutoGenerateLevelDirection;
+  formatOrder: string[];
+  specialEvents: SpecialEvent[];
+}
+
 export interface UnscheduledPairView {
   teamId: string;
   teamName: string;
   categoryId: string;
   categoryName: string;
   categoryFormat: CategoryFormat;
+  customFormatLabel: string | null;
   level: number;
   durationMinutes: number;
 }
-
-// Ordem de preferência do "gerar automaticamente" (pedido do usuário,
-// 2026-08-05): Team Cheer primeiro, depois Group Stunt, Coed/Elite
-// Stunt, Partner Stunt e por último os demais formatos (Custom) — mesma
-// ordem já usada em CATEGORY_FORMAT_LABELS/o próprio enum. Dentro de
-// cada formato, nível crescente.
-const AUTO_GENERATE_FORMAT_PRIORITY: Record<CategoryFormat, number> = {
-  [CategoryFormat.TEAM_CHEER]: 0,
-  [CategoryFormat.GROUP_STUNT]: 1,
-  [CategoryFormat.COED]: 2,
-  [CategoryFormat.PARTNER]: 3,
-  [CategoryFormat.CUSTOM]: 4,
-};
 
 const DEFAULT_COMPONENT_DURATION_MINUTES = 15;
 
@@ -91,6 +98,8 @@ export class ScheduleService {
     private readonly resourcesRepo: Repository<ScheduleResource>,
     @InjectRepository(ScheduleEntry)
     private readonly entriesRepo: Repository<ScheduleEntry>,
+    @InjectRepository(ScheduleAutoSettings)
+    private readonly autoSettingsRepo: Repository<ScheduleAutoSettings>,
     @InjectRepository(Team)
     private readonly teamsRepo: Repository<Team>,
     @InjectRepository(Category)
@@ -99,6 +108,42 @@ export class ScheduleService {
     private readonly notificationsService: NotificationsService,
     private readonly activityLogService: EventActivityLogService,
   ) {}
+
+  // Sem linha salva = padrão. Não cria a linha na leitura.
+  private async getAutoSettingsByAlias(
+    aliasId: string,
+  ): Promise<AutoGenerateSettingsView> {
+    const row = await this.autoSettingsRepo.findOneBy({ aliasId });
+    return {
+      orderPrimary: row?.orderPrimary ?? AutoGenerateOrderPrimary.FORMAT,
+      levelDirection: row?.levelDirection ?? AutoGenerateLevelDirection.ASC,
+      formatOrder: row?.formatOrder ?? [],
+      specialEvents: row?.specialEvents ?? [],
+    };
+  }
+
+  async getAutoSettings(eventId: string): Promise<AutoGenerateSettingsView> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    return this.getAutoSettingsByAlias(event.aliasId);
+  }
+
+  async updateAutoSettings(
+    eventId: string,
+    dto: UpdateAutoGenerateSettingsDto,
+  ): Promise<AutoGenerateSettingsView> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const problem = findSpecialEventsProblem(dto.specialEvents);
+    if (problem) throw new BadRequestException(problem);
+    const row =
+      (await this.autoSettingsRepo.findOneBy({ aliasId: event.aliasId })) ??
+      this.autoSettingsRepo.create({ aliasId: event.aliasId });
+    row.orderPrimary = dto.orderPrimary;
+    row.levelDirection = dto.levelDirection;
+    row.formatOrder = dto.formatOrder;
+    row.specialEvents = dto.specialEvents;
+    await this.autoSettingsRepo.save(row);
+    return this.getAutoSettingsByAlias(event.aliasId);
+  }
 
   async getDays(eventId: string): Promise<ScheduleDayView[]> {
     const event = await this.eventsService.findEventOrThrow(eventId);
@@ -526,6 +571,7 @@ export class ScheduleService {
           categoryId: category.id,
           categoryName: category.name,
           categoryFormat: category.categoryFormat,
+          customFormatLabel: category.customFormatLabel,
           level: category.level,
           durationMinutes: this.presentationDurationMinutes(category),
         });
@@ -892,31 +938,58 @@ export class ScheduleService {
     // crescente — antes de distribuir nos buckets abaixo, então as
     // duas estratégias de distribuição (SEQUENTIAL e round-robin)
     // herdam a preferência automaticamente.
+    // Ordem configurada por evento (engrenagem ao lado de "Gerar
+    // automaticamente"): o critério primário manda, o outro só
+    // desempata dentro de cada grupo dele. Nível pode ser crescente ou
+    // decrescente; formato segue a lista de preferência do usuário.
+    const settings = await this.getAutoSettingsByAlias(day.aliasId);
+    const order = settings.formatOrder;
+    const rankOf = (pair: UnscheduledPairView) => {
+      let index = order.indexOf(
+        autoFormatKey(pair.categoryFormat, pair.customFormatLabel),
+      );
+      // Custom sem rótulo salvo na lista cai no "custom" genérico (se
+      // houver) e, por fim, no fim da fila na ordem padrão.
+      if (index === -1) index = order.indexOf(pair.categoryFormat);
+      if (index === -1) {
+        index =
+          order.length + DEFAULT_AUTO_FORMAT_ORDER.indexOf(pair.categoryFormat);
+      }
+      return index;
+    };
+    const levelSign =
+      settings.levelDirection === AutoGenerateLevelDirection.DESC ? -1 : 1;
+    const byFormat = (a: UnscheduledPairView, b: UnscheduledPairView) =>
+      rankOf(a) - rankOf(b);
+    const byLevel = (a: UnscheduledPairView, b: UnscheduledPairView) =>
+      levelSign * (a.level - b.level);
+    const levelFirst = settings.orderPrimary === AutoGenerateOrderPrimary.LEVEL;
     const unscheduled = [...(await this.getUnscheduled(eventId, day.id))].sort(
-      (a, b) => {
-        const formatDiff =
-          AUTO_GENERATE_FORMAT_PRIORITY[a.categoryFormat] -
-          AUTO_GENERATE_FORMAT_PRIORITY[b.categoryFormat];
-        if (formatDiff !== 0) return formatDiff;
-        return a.level - b.level;
-      },
+      (a, b) =>
+        levelFirst
+          ? byLevel(a, b) || byFormat(a, b)
+          : byFormat(a, b) || byLevel(a, b),
     );
-    const buckets: UnscheduledPairView[][] = mats.map(() => []);
+    const specialProblem = findSpecialEventsProblem(settings.specialEvents);
+    if (specialProblem) throw new BadRequestException(specialProblem);
+    const specialPlan = planSpecialEvents(settings.specialEvents);
+    // Entry criada em cada pista por evento especial (id do evento ->
+    // ids das entries), pra sincronizar o fim depois.
+    const specialEntryIds = new Map<string, string[]>();
 
-    if (dto.distribution === ScheduleDistributionStrategy.SEQUENTIAL) {
-      const perMat = Math.ceil(unscheduled.length / mats.length) || 1;
-      unscheduled.forEach((pair, idx) => {
-        const bucketIndex = Math.min(mats.length - 1, Math.floor(idx / perMat));
-        buckets[bucketIndex].push(pair);
-      });
-    } else {
-      unscheduled.forEach((pair, idx) => {
-        buckets[idx % mats.length].push(pair);
-      });
+    // Cada pista vira um "runner" com o próprio andamento. As apresentações
+    // (já na ordem definida pelo usuário) são então encaixadas uma a uma
+    // na pista onde conseguem começar mais cedo — isso otimiza o uso das
+    // pistas (fim do dia parecido nas duas) sem perder a ordem de
+    // categoria e nível.
+    interface MatRunner {
+      estimateStart: (pair: UnscheduledPairView) => Promise<number>;
+      place: (pair: UnscheduledPairView) => Promise<void>;
+      finish: () => Promise<void>;
     }
+    const runners: MatRunner[] = [];
 
-    for (let m = 0; m < mats.length; m++) {
-      const mat = mats[m];
+    for (const mat of mats) {
       const warmupCandidates = await this.resourcesRepo.find({
         where: { scheduleDayId: day.id, pairedResourceId: mat.id },
         order: { order: 'ASC' },
@@ -935,75 +1008,92 @@ export class ScheduleService {
 
       let matOrder = 0;
       let matElapsed = 0;
-      let lunchInserted = false;
       // Mesma regra de createPresentationWithWarmup: só a primeira
       // apresentação desta pista fica sem o intervalo — resetado a
-      // cada pista (`m`), já que cada uma tem sua própria fila.
+      // cada pista, já que cada uma tem sua própria fila.
       let matHasPresentation = false;
 
-      // Extraído do corpo do loop (2026-08-05) — precisa ser chamável
-      // também DEPOIS do loop (ver comentário logo abaixo dele): uma
-      // pista com poucas apresentações podia esvaziar o bucket sem
-      // nunca ter alcançado `dto.lunchStartMinutes` durante a
-      // iteração, e o almoço configurado simplesmente sumia daquela
-      // pista (bug real). Arrow function (não method/function comum)
-      // pra manter o `this` da classe.
-      const insertLunchIfDue = async (): Promise<void> => {
-        if (lunchInserted || dto.lunchDurationMinutes <= 0) return;
-        await this.insertIntoResource(mat.id, matOrder++, {
-          type: ScheduleEntryType.BREAK,
-          durationMinutes: dto.lunchDurationMinutes,
-          label: 'Almoço',
+      // Insere um evento especial (Almoço, Abertura...) na fila desta
+      // pista e — quando `alignWarmups` — também nas áreas de
+      // aquecimento dela (assim o aquecimento não segue rodando durante
+      // o evento). A duração aqui é a MÍNIMA pedida pelo usuário: o fim
+      // comum a todas as pistas é ajustado depois de todas geradas (ver
+      // syncSpecialEventEnds). Arrow function pra manter o `this`.
+      const insertSpecial = async (
+        event: SpecialEvent,
+        alignWarmups: boolean,
+      ): Promise<void> => {
+        const created = await this.insertIntoResource(mat.id, matOrder++, {
+          type: event.type,
+          durationMinutes: event.durationMinutes,
+          label: event.label,
         });
-        matElapsed += dto.lunchDurationMinutes;
-        for (const warmupResource of warmupCandidates) {
-          await this.insertIntoResource(
-            warmupResource.id,
-            Number.MAX_SAFE_INTEGER,
-            {
-              type: ScheduleEntryType.BREAK,
-              durationMinutes: dto.lunchDurationMinutes,
-              label: 'Almoço',
-            },
-          );
-          warmupElapsedByResource.set(
-            warmupResource.id,
-            (warmupElapsedByResource.get(warmupResource.id) ?? 0) +
-              dto.lunchDurationMinutes,
-          );
+        const ids = specialEntryIds.get(event.id) ?? [];
+        ids.push(created.id);
+        specialEntryIds.set(event.id, ids);
+        matElapsed += event.durationMinutes;
+        if (alignWarmups) {
+          for (const warmupResource of warmupCandidates) {
+            await this.insertIntoResource(
+              warmupResource.id,
+              Number.MAX_SAFE_INTEGER,
+              {
+                type: event.type,
+                durationMinutes: event.durationMinutes,
+                label: event.label,
+              },
+            );
+            warmupElapsedByResource.set(
+              warmupResource.id,
+              (warmupElapsedByResource.get(warmupResource.id) ?? 0) +
+                event.durationMinutes,
+            );
+          }
         }
-        lunchInserted = true;
-        // Depois do almoço, a próxima apresentação não deveria também
-        // levar o intervalo padrão "Intervalo entre apresentações" —
-        // o almoço já é, ele mesmo, um intervalo bem maior logo antes
-        // dela (bug real 2026-08-05: `matHasPresentation` continuava
-        // `true` através do almoço, então a apresentação seguinte
-        // ganhava um gap redundante colado depois do almoço).
+        // Depois de um evento especial a próxima apresentação não
+        // deveria também levar o "Intervalo entre apresentações" — o
+        // evento já é, ele mesmo, um intervalo bem maior logo antes
+        // dela (bug real 2026-08-05: o gap redundante colava depois do
+        // almoço).
         matHasPresentation = false;
       };
+      const insertCluster = async (
+        items: SpecialEvent[],
+        alignWarmups: boolean,
+      ): Promise<void> => {
+        for (const item of items) await insertSpecial(item, alignWarmups);
+      };
 
-      for (const pair of buckets[m]) {
+      // Horários fixos ainda não atingidos nesta pista (cada pista tem o
+      // seu próprio andamento).
+      const pendingTime = [...specialPlan.time];
+      for (const cluster of specialPlan.start) {
+        await insertCluster(cluster.items, true);
+      }
+
+      const place = async (pair: UnscheduledPairView): Promise<void> => {
         // Olha pra FRENTE, não só pra trás: comparar só o `matElapsed`
-        // de quando a apresentação ANTERIOR terminou contra
-        // `dto.lunchStartMinutes` (como era antes) deixava passar uma
-        // apresentação inteira sempre que ela começasse um pouco antes
-        // do horário do almoço, mesmo terminando bem depois dele (bug
-        // real 2026-08-05: almoço configurado pra 08:35, apresentação
-        // anterior tinha terminado 08:33, e em vez do almoço entrar ali
-        // a próxima apresentação era encaixada na frente). Agora
-        // projeta o intervalo + duração desta apresentação (antes de
-        // criar qualquer coisa) e insere o almoço primeiro se isso for
-        // ultrapassar o horário configurado.
-        const prospectiveGapMinutes = matHasPresentation
-          ? day.defaultGapMinutes
-          : 0;
-        const prospectiveEndMinutes =
+        // de quando a apresentação ANTERIOR terminou contra o horário
+        // fixo do evento deixava passar uma apresentação inteira sempre
+        // que ela começasse um pouco antes do horário, mesmo terminando
+        // bem depois dele (bug real 2026-08-05: almoço configurado pra
+        // 08:35, apresentação anterior tinha terminado 08:33, e em vez
+        // do almoço entrar ali a próxima apresentação era encaixada na
+        // frente). Projeta o intervalo + duração desta apresentação
+        // (antes de criar qualquer coisa) e insere o evento primeiro se
+        // isso ultrapassar o horário. Reavalia a cada evento inserido
+        // (o andamento da pista mudou).
+        const prospectiveEnd = (): number =>
           day.startMinutes +
           matElapsed +
-          prospectiveGapMinutes +
+          (matHasPresentation ? day.defaultGapMinutes : 0) +
           pair.durationMinutes;
-        if (prospectiveEndMinutes > dto.lunchStartMinutes) {
-          await insertLunchIfDue();
+        while (
+          pendingTime.length > 0 &&
+          prospectiveEnd() > (pendingTime[0].timeMinutes ?? 0)
+        ) {
+          const due = pendingTime.shift()!;
+          await insertCluster(due.items, true);
         }
 
         let chosenWarmupId = warmupCandidates[0].id;
@@ -1125,19 +1215,158 @@ export class ScheduleService {
           chosenWarmupId,
           chosenElapsed + dto.warmupMinutes,
         );
-      }
+      };
 
-      // Pista com poucas apresentações — terminou o bucket sem nunca
-      // ter cruzado `dto.lunchStartMinutes` dentro do loop acima. Ainda
-      // assim insere o almoço configurado (logo após a última
-      // apresentação desta pista, já que não sobrou mais nada
-      // depois pra ancorar um horário melhor — ver comentário de
-      // `insertLunchIfDue`), em vez de simplesmente omitir o intervalo.
-      await insertLunchIfDue();
+      // Quando (minuto do dia) a apresentação começaria nesta pista, sem
+      // gravar nada. Mesma conta de `place`: eventos de horário fixo que
+      // entrariam antes, intervalo entre apresentações, e o maior entre
+      // "a pista ficar livre" e "o aquecimento terminar" (área de
+      // aquecimento mais livre + equipe já ocupada em outro lugar).
+      const estimateStart = async (
+        pair: UnscheduledPairView,
+      ): Promise<number> => {
+        let elapsed = matElapsed;
+        let hasPresentation = matHasPresentation;
+        const warmupElapsed = new Map(warmupElapsedByResource);
+        for (const cluster of pendingTime) {
+          const prospectiveEnd =
+            day.startMinutes +
+            elapsed +
+            (hasPresentation ? day.defaultGapMinutes : 0) +
+            pair.durationMinutes;
+          if (prospectiveEnd <= (cluster.timeMinutes ?? 0)) break;
+          const total = cluster.items.reduce(
+            (sum, e) => sum + e.durationMinutes,
+            0,
+          );
+          elapsed += total;
+          for (const [id, value] of warmupElapsed) {
+            warmupElapsed.set(id, value + total);
+          }
+          hasPresentation = false;
+        }
+        const gap = hasPresentation ? day.defaultGapMinutes : 0;
+        const teamBusyWindows = await this.getTeamBusyWindows(day, pair.teamId);
+        const warmupStart = this.resolveNonOverlappingStart(
+          day.startMinutes + Math.min(...warmupElapsed.values()),
+          dto.warmupMinutes,
+          teamBusyWindows,
+        );
+        return Math.max(
+          day.startMinutes + elapsed + gap,
+          warmupStart + dto.warmupMinutes,
+        );
+      };
+
+      // Horários fixos que a pista nunca alcançou (poucas apresentações)
+      // entram logo depois da última apresentação — não sobrou nada
+      // depois pra ancorar um horário melhor — seguidos dos eventos "ao
+      // final das apresentações". Sem alinhar o aquecimento: não há mais
+      // apresentação nenhuma pra aquecer depois.
+      const finish = async (): Promise<void> => {
+        for (const cluster of pendingTime) {
+          await insertCluster(cluster.items, false);
+        }
+        for (const cluster of specialPlan.end) {
+          await insertCluster(cluster.items, false);
+        }
+      };
+
+      runners.push({ estimateStart, place, finish });
     }
+
+    // Empate (ex: todas as pistas livres no começo) fica com a primeira
+    // pista, o que naturalmente alterna entre elas conforme cada uma
+    // vai ocupando.
+    for (const pair of unscheduled) {
+      let best = runners[0];
+      let bestStart = Infinity;
+      for (const runner of runners) {
+        const start = await runner.estimateStart(pair);
+        if (start < bestStart) {
+          best = runner;
+          bestStart = start;
+        }
+      }
+      await best.place(pair);
+    }
+    for (const runner of runners) await runner.finish();
+
+    await this.syncSpecialEventEnds(day.id, specialEntryIds);
 
     const [hydrated] = await this.hydrateDays([day]);
     return hydrated;
+  }
+
+  // Todo evento especial termina no MESMO horário em todas as pistas
+  // (pedido do usuário): cada pista o começa quando chega nele, então o
+  // fim comum é o maior fim entre as pistas, e nas outras o evento é
+  // estendido até lá (a duração informada é só o mínimo). Estender
+  // empurra o que vem depois na pista e pode desalinhar o aquecimento,
+  // então reconcilia em seguida. Processa em ordem cronológica (menor
+  // fim primeiro): sincronizar um evento só empurra o que vem depois,
+  // nunca o que já foi sincronizado antes dele. A área de aquecimento
+  // fica como está (mantém o aquecimento correndo em paralelo), o fim
+  // comum vale só pras pistas.
+  private async syncSpecialEventEnds(
+    dayId: string,
+    specialEntryIds: Map<string, string[]>,
+  ): Promise<void> {
+    const multiMat = [...specialEntryIds.entries()].filter(
+      ([, ids]) => ids.length > 1,
+    );
+    if (multiMat.length === 0) return;
+
+    const day = await this.daysRepo.findOneByOrFail({ id: dayId });
+    const mats = await this.resourcesRepo.find({
+      where: { scheduleDayId: dayId, supportsPresentations: true },
+    });
+    const pending = new Set(multiMat.map(([eventId]) => eventId));
+
+    while (pending.size > 0) {
+      const entries = await this.entriesRepo.find({
+        where: { resourceId: In(mats.map((m) => m.id)) },
+        order: { order: 'ASC' },
+      });
+      const endById = new Map<string, number>();
+      const byResource = new Map<string, ScheduleEntry[]>();
+      for (const entry of entries) {
+        const list = byResource.get(entry.resourceId) ?? [];
+        list.push(entry);
+        byResource.set(entry.resourceId, list);
+      }
+      for (const list of byResource.values()) {
+        let cursor = day.startMinutes;
+        for (const entry of list) {
+          cursor += entry.durationMinutes;
+          endById.set(entry.id, cursor);
+        }
+      }
+
+      let nextEventId: string | null = null;
+      let nextEnd = Infinity;
+      for (const eventId of pending) {
+        const ids = specialEntryIds.get(eventId) ?? [];
+        const commonEnd = Math.max(...ids.map((id) => endById.get(id) ?? 0));
+        if (commonEnd < nextEnd) {
+          nextEnd = commonEnd;
+          nextEventId = eventId;
+        }
+      }
+      if (nextEventId === null) return;
+
+      for (const id of specialEntryIds.get(nextEventId) ?? []) {
+        const end = endById.get(id) ?? nextEnd;
+        if (end >= nextEnd) continue;
+        const entry = entries.find((e) => e.id === id);
+        if (!entry) continue;
+        entry.durationMinutes += nextEnd - end;
+        await this.entriesRepo.save(entry);
+      }
+      pending.delete(nextEventId);
+      await this.reconcileWarmupDelays(dayId);
+      await this.reconcileMatGaps(dayId);
+    }
   }
 
   // Copia o horário do dia (início/fim, tempo padrão de aquecimento),
@@ -1302,19 +1531,97 @@ export class ScheduleService {
       dto.durationMinutes ?? this.presentationDurationMinutes(category);
     const warmupDurationMinutes = day.defaultWarmupMinutes;
 
+    const matSiblings = await this.entriesRepo.find({
+      where: { resourceId: resource.id },
+      order: { order: 'ASC' },
+    });
+    // Se a posição pedida cai no meio do "grupo" de uma apresentação
+    // (entre a espera/intervalo dela e ela mesma), cola na frente do
+    // grupo: as esperas pertencem à apresentação seguinte e são
+    // recalculadas em função dela, então separar os dois deixava a
+    // espera órfã na frente da apresentação errada.
+    const insertAt = this.snapToPresentationGroupStart(
+      matSiblings,
+      Math.max(0, Math.min(dto.order, matSiblings.length)),
+    );
+    const laterPresentationIds = new Set(
+      matSiblings
+        .slice(insertAt)
+        .filter((e) => e.type === ScheduleEntryType.PRESENTATION)
+        .map((e) => e.id),
+    );
+
     const warmupResource = await this.getAvailableWarmupResourceForMat(
       day,
       resource,
+      laterPresentationIds,
     );
     const warmupSiblings = await this.entriesRepo.find({
       where: { resourceId: warmupResource.id },
       order: { order: 'ASC' },
     });
-    // Posição natural do aquecimento — sempre entra no fim da fila
-    // daquele recurso.
+    // O aquecimento entra na fila na MESMA ordem relativa da
+    // apresentação na pista: logo antes do aquecimento da primeira
+    // apresentação que vem depois dela (com a espera de disponibilidade
+    // dela, se houver, ficando junto do aquecimento dela) — ou no fim
+    // da fila quando não há nenhuma depois. Sempre no fim (como era)
+    // mandava o aquecimento de uma apresentação encaixada na frente
+    // pro final do dia, e ela ficava esperando lá atrás.
+    // Eventos especiais (Almoço, Premiação...) da pista que ficam depois
+    // do ponto de inserção também têm um bloco correspondente na fila de
+    // aquecimento (ver autoGenerate/insertSpecial) — o aquecimento novo
+    // precisa entrar ANTES dele também, senão a apresentação (que fica
+    // antes do evento na pista) esperaria um aquecimento que só acontece
+    // depois do evento.
+    const laterSpecialCounts = new Map<string, number>();
+    for (const e of matSiblings.slice(insertAt)) {
+      if (
+        e.linkedEntryId === null &&
+        e.type !== ScheduleEntryType.PRESENTATION &&
+        e.type !== ScheduleEntryType.WARMUP
+      ) {
+        const key = `${e.type}|${e.label ?? ''}`;
+        laterSpecialCounts.set(key, (laterSpecialCounts.get(key) ?? 0) + 1);
+      }
+    }
+    let warmupInsertAt = warmupSiblings.length;
+    let laterLinkedId: string | null = null;
+    for (let i = 0; i < warmupSiblings.length; i++) {
+      const e = warmupSiblings[i];
+      if (
+        e.type === ScheduleEntryType.WARMUP &&
+        e.linkedEntryId !== null &&
+        laterPresentationIds.has(e.linkedEntryId)
+      ) {
+        warmupInsertAt = i;
+        laterLinkedId = e.linkedEntryId;
+        break;
+      }
+      if (e.linkedEntryId === null && e.type !== ScheduleEntryType.WARMUP) {
+        const key = `${e.type}|${e.label ?? ''}`;
+        const remaining = laterSpecialCounts.get(key) ?? 0;
+        if (remaining > 0) {
+          warmupInsertAt = i;
+          break;
+        }
+      }
+    }
+    // A espera de disponibilidade da apresentação seguinte fica junto do
+    // aquecimento dela (não separa os dois).
+    if (laterLinkedId !== null) {
+      while (
+        warmupInsertAt > 0 &&
+        warmupSiblings[warmupInsertAt - 1].type === ScheduleEntryType.BREAK &&
+        warmupSiblings[warmupInsertAt - 1].linkedEntryId === laterLinkedId
+      ) {
+        warmupInsertAt--;
+      }
+    }
     const naturalWarmupStart =
       day.startMinutes +
-      warmupSiblings.reduce((sum, e) => sum + e.durationMinutes, 0);
+      warmupSiblings
+        .slice(0, warmupInsertAt)
+        .reduce((sum, e) => sum + e.durationMinutes, 0);
 
     // A mesma equipe não pode estar se aquecendo pra esta categoria
     // enquanto apresenta (ou se aquece) em outra — se a posição natural
@@ -1330,11 +1637,6 @@ export class ScheduleService {
     const warmupDelayMinutes = warmupStart - naturalWarmupStart;
     const warmupEndMinutes = warmupStart + warmupDurationMinutes;
 
-    const matSiblings = await this.entriesRepo.find({
-      where: { resourceId: resource.id },
-      order: { order: 'ASC' },
-    });
-    const insertAt = Math.max(0, Math.min(dto.order, matSiblings.length));
     // "Primeira apresentação da pista" = nenhuma apresentação entre os
     // irmãos que ficam ANTES do ponto de inserção — não é simplesmente
     // "a pista está vazia", porque o usuário pode inserir uma
@@ -1376,7 +1678,7 @@ export class ScheduleService {
     });
 
     if (warmupDelayMinutes > 0) {
-      await this.insertIntoResource(warmupResource.id, warmupSiblings.length, {
+      await this.insertIntoResource(warmupResource.id, warmupInsertAt, {
         type: ScheduleEntryType.BREAK,
         durationMinutes: warmupDelayMinutes,
         label: 'Aguardando disponibilidade da equipe',
@@ -1407,8 +1709,7 @@ export class ScheduleService {
       });
     }
 
-    const warmupOrder =
-      warmupSiblings.length + (warmupDelayMinutes > 0 ? 1 : 0);
+    const warmupOrder = warmupInsertAt + (warmupDelayMinutes > 0 ? 1 : 0);
     const warmup = await this.insertIntoResource(
       warmupResource.id,
       warmupOrder,
@@ -1918,9 +2219,44 @@ export class ScheduleService {
   // o que tem o próximo horário livre mais cedo (menor soma de duração
   // das entries já existentes) — "a linha de tempo com espaço
   // disponível mais próximo".
+  // Uma apresentação vem sempre precedida das esperas/intervalos
+  // automáticos ligados a ela (linkedEntryId). Se `index` aponta pra uma
+  // dessas esperas ou pra própria apresentação, devolve o índice do
+  // início do grupo — inserir algo ali dentro separaria a espera da
+  // apresentação a que ela pertence.
+  private snapToPresentationGroupStart(
+    entries: ScheduleEntry[],
+    index: number,
+  ): number {
+    const target = entries[index];
+    if (!target) return index;
+    const presentationId =
+      target.type === ScheduleEntryType.PRESENTATION
+        ? target.id
+        : target.type === ScheduleEntryType.BREAK
+          ? target.linkedEntryId
+          : null;
+    if (!presentationId) return index;
+    let start = index;
+    while (
+      start > 0 &&
+      entries[start - 1].type === ScheduleEntryType.BREAK &&
+      entries[start - 1].linkedEntryId === presentationId
+    ) {
+      start--;
+    }
+    return start;
+  }
+
+  // `preferForPresentationIds`: apresentações que ficam DEPOIS do ponto
+  // de inserção na pista — quando há mais de uma área de aquecimento,
+  // prefere as que já têm o aquecimento de alguma delas, pra a nova
+  // entrar na frente (na mesma ordem relativa) em vez de num recurso
+  // "mais livre" onde a ordem não corresponde.
   private async getAvailableWarmupResourceForMat(
     day: ScheduleDay,
     matResource: ScheduleResource,
+    preferForPresentationIds?: ReadonlySet<string>,
   ): Promise<ScheduleResource> {
     const candidates = await this.resourcesRepo.find({
       where: { scheduleDayId: day.id, pairedResourceId: matResource.id },
@@ -1933,6 +2269,33 @@ export class ScheduleService {
     }
     if (candidates.length === 1) return candidates[0];
 
+    if (preferForPresentationIds && preferForPresentationIds.size > 0) {
+      const laterWarmups = await this.entriesRepo.find({
+        where: {
+          resourceId: In(candidates.map((c) => c.id)),
+          type: ScheduleEntryType.WARMUP,
+        },
+      });
+      const preferredResourceIds = new Set(
+        laterWarmups
+          .filter(
+            (e) =>
+              e.linkedEntryId !== null &&
+              preferForPresentationIds.has(e.linkedEntryId),
+          )
+          .map((e) => e.resourceId),
+      );
+      const preferred = candidates.filter((c) => preferredResourceIds.has(c.id));
+      if (preferred.length > 0) {
+        return this.pickLeastElapsedResource(preferred);
+      }
+    }
+    return this.pickLeastElapsedResource(candidates);
+  }
+
+  private async pickLeastElapsedResource(
+    candidates: ScheduleResource[],
+  ): Promise<ScheduleResource> {
     let best = candidates[0];
     let bestElapsed = await this.getResourceElapsedMinutes(best.id);
     for (const candidate of candidates.slice(1)) {

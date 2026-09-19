@@ -22,6 +22,7 @@ import { UsersService } from '../../users/services/users.service';
 import { Category } from '../../categories/entities/category.entity';
 import { ProgramParticipation } from '../../programs/entities/program-participation.entity';
 import { ScheduleDay } from '../../schedule/entities/schedule-day.entity';
+import { ScheduleAutoSettings } from '../../schedule/entities/schedule-auto-settings.entity';
 import { Regulation } from '../../regulations/entities/regulation.entity';
 import { StorageService } from '../../common/services/storage.service';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
@@ -48,6 +49,7 @@ const EVENT_SCOPED_ENTITIES = [
   Category,
   ProgramParticipation,
   ScheduleDay,
+  ScheduleAutoSettings,
   Regulation,
   JudgeParticipation,
   SpecialRoleAssignment,

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleDay } from './entities/schedule-day.entity';
 import { ScheduleResource } from './entities/schedule-resource.entity';
 import { ScheduleEntry } from './entities/schedule-entry.entity';
+import { ScheduleAutoSettings } from './entities/schedule-auto-settings.entity';
 import { Team } from '../teams/entities/team.entity';
 import { Category } from '../categories/entities/category.entity';
 import { ScheduleController } from './controllers/schedule.controller';
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       ScheduleDay,
       ScheduleResource,
       ScheduleEntry,
+      ScheduleAutoSettings,
       Team,
       Category,
     ]),

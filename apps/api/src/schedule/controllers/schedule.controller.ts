@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { MoveScheduleResourceDto } from '../dto/move-schedule-resource.dto';
 import { CreateScheduleEntryDto } from '../dto/create-schedule-entry.dto';
 import { MoveScheduleEntryDto } from '../dto/move-schedule-entry.dto';
 import { AutoGenerateScheduleDto } from '../dto/auto-generate-schedule.dto';
+import { UpdateAutoGenerateSettingsDto } from '../dto/update-auto-generate-settings.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -61,6 +63,19 @@ export class ScheduleController {
   )
   getDays(@Param('eventId') eventId: string) {
     return this.scheduleService.getDays(eventId);
+  }
+
+  @Get('auto-generate-settings')
+  getAutoSettings(@Param('eventId') eventId: string) {
+    return this.scheduleService.getAutoSettings(eventId);
+  }
+
+  @Put('auto-generate-settings')
+  updateAutoSettings(
+    @Param('eventId') eventId: string,
+    @Body() dto: UpdateAutoGenerateSettingsDto,
+  ) {
+    return this.scheduleService.updateAutoSettings(eventId, dto);
   }
 
   @Post('days')
