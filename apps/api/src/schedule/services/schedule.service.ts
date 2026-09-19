@@ -11,6 +11,7 @@ import { ScheduleResource } from '../entities/schedule-resource.entity';
 import { ScheduleEntry } from '../entities/schedule-entry.entity';
 import { ScheduleEntryType } from '../enums/schedule-entry-type.enum';
 import { ScheduleAutoSettings } from '../entities/schedule-auto-settings.entity';
+import { ScoreEvent } from '../../scoring/entities/score-event.entity';
 import {
   findSpecialEventsProblem,
   planSpecialEvents,
@@ -100,6 +101,10 @@ export class ScheduleService {
     private readonly entriesRepo: Repository<ScheduleEntry>,
     @InjectRepository(ScheduleAutoSettings)
     private readonly autoSettingsRepo: Repository<ScheduleAutoSettings>,
+    // Só pra checar se uma apresentação já tem nota (repo direto, sem
+    // importar ScoringModule — evita ciclo entre os módulos).
+    @InjectRepository(ScoreEvent)
+    private readonly scoreEventsRepo: Repository<ScoreEvent>,
     @InjectRepository(Team)
     private readonly teamsRepo: Repository<Team>,
     @InjectRepository(Category)
@@ -632,6 +637,24 @@ export class ScheduleService {
     return this.attachNames([entry]);
   }
 
+  // Mover ou remover uma apresentação a RECRIA com outro id (o
+  // aquecimento e as esperas são recalculados em torno da nova posição),
+  // e ScoreEvent guarda `scheduleEntryId` como coluna simples, sem FK —
+  // com nota já lançada, a nota ficaria ligada a um id que não existe
+  // mais e a súmula passaria a enxergar zero notas ("notas nunca podem
+  // ser perdidas"). Por isso, depois que alguma nota existe, a
+  // apresentação fica travada (mesmo critério da desistência).
+  private async assertPresentationHasNoScores(entryId: string): Promise<void> {
+    const scores = await this.scoreEventsRepo.countBy({
+      scheduleEntryId: entryId,
+    });
+    if (scores > 0) {
+      throw new ConflictException(
+        'Esta apresentação já tem notas lançadas, então não pode mais ser movida nem removida.',
+      );
+    }
+  }
+
   async moveEntry(
     eventId: string,
     dayId: string,
@@ -652,6 +675,7 @@ export class ScheduleService {
     // apresentação atrás) — o usuário pode reposicionar o aquecimento
     // de forma independente sem afetar quando a equipe se apresenta.
     if (entry.type === ScheduleEntryType.PRESENTATION) {
+      await this.assertPresentationHasNoScores(entry.id);
       const teamName = entry.teamId
         ? (await this.teamsRepo.findOneBy({ id: entry.teamId }))?.name
         : null;
@@ -827,6 +851,9 @@ export class ScheduleService {
   ): Promise<void> {
     await this.findDayOrThrow(eventId, dayId);
     const entry = await this.findEntryInDayOrThrow(dayId, entryId);
+    if (entry.type === ScheduleEntryType.PRESENTATION) {
+      await this.assertPresentationHasNoScores(entry.id);
+    }
 
     // Aquecimento e intervalos "Aguardando aquecimento"/"Aguardando
     // disponibilidade da equipe" são todos gerados automaticamente

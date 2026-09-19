@@ -5,6 +5,7 @@ import { ScheduleResource } from './entities/schedule-resource.entity';
 import { ScheduleEntry } from './entities/schedule-entry.entity';
 import { ScheduleAutoSettings } from './entities/schedule-auto-settings.entity';
 import { Team } from '../teams/entities/team.entity';
+import { ScoreEvent } from '../scoring/entities/score-event.entity';
 import { Category } from '../categories/entities/category.entity';
 import { ScheduleController } from './controllers/schedule.controller';
 import { ScheduleService } from './services/schedule.service';
@@ -18,6 +19,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       ScheduleResource,
       ScheduleEntry,
       ScheduleAutoSettings,
+      ScoreEvent,
       Team,
       Category,
     ]),
