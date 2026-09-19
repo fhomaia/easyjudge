@@ -95,7 +95,7 @@ export function AddComponentEntryDialog({
         <div className="grid gap-1.5">
           <DialogTitle className="text-xl font-medium">Adicionar ao cronograma</DialogTitle>
           <DialogDescription>
-            {def?.label ?? "Componente"} · {def?.durationMinutes ?? 0} min
+            {def?.label ?? "Evento especial"} · {def?.durationMinutes ?? 0} min
           </DialogDescription>
         </div>
 

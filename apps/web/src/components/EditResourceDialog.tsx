@@ -175,14 +175,26 @@ export function EditResourceDialog({
               )}
 
               <div className="border-t border-border/60 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setConfirmDeleteOpen(true)}
-                  className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-destructive"
-                >
-                  <Trash2 className="size-3.5" />
-                  Excluir recurso
-                </button>
+                {supportsPresentations ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteOpen(true)}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Excluir recurso
+                  </button>
+                ) : (
+                  // Recurso de aquecimento não pode ser excluído
+                  // diretamente (backend rejeita com 400, ver
+                  // ScheduleService.removeResource) — só some junto da
+                  // pista vinculada, mesmo raciocínio já aplicado ao
+                  // aquecimento agendado em si (2026-08-16).
+                  <p className="text-xs text-muted-foreground">
+                    Um recurso de aquecimento não pode ser excluído diretamente — exclua a pista
+                    vinculada a ele para excluí-lo junto.
+                  </p>
+                )}
               </div>
 
               <FormError message={error} />
@@ -209,7 +221,7 @@ export function EditResourceDialog({
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
         title="Remover recurso"
-        description={`Remover "${resource?.name}"? Todos os itens agendados nessa linha também serão removidos.`}
+        description={`Remover "${resource?.name}"? Todos os itens agendados nessa pista, os aquecimentos vinculados a eles (mesmo em outra linha) e qualquer área de aquecimento vinculada a esta pista também serão removidos.`}
         confirmLabel="Remover"
         confirmingLabel="Removendo..."
         onConfirm={handleConfirmDelete}

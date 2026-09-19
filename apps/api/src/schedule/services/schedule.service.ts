@@ -390,7 +390,71 @@ export class ScheduleService {
   ): Promise<void> {
     await this.findDayOrThrow(eventId, dayId);
     const resource = await this.findResourceOrThrow(dayId, resourceId);
+
+    // Recurso de aquecimento só existe em função da(s) pista(s) que ele
+    // atende (pairedResourceId, ver getAvailableWarmupResourceForMat)
+    // — excluí-lo sozinho não faz sentido de forma independente, mesmo
+    // raciocínio já aplicado à entry de aquecimento em si (não pode ser
+    // excluída direto, só junto da apresentação). Só sai excluindo pela
+    // pista (ver bloco mais abaixo, que leva os recursos de aquecimento
+    // pareados a ela junto) — pedido do usuário, 2026-08-16.
+    if (!resource.supportsPresentations) {
+      throw new BadRequestException(
+        'Um recurso de aquecimento não pode ser excluído diretamente — exclua a pista vinculada a ele para excluí-lo junto.',
+      );
+    }
+
+    // Apresentações agendadas neste recurso têm o aquecimento (e os
+    // intervalos "Aguardando aquecimento"/"Aguardando disponibilidade
+    // da equipe") vinculados por linkedEntryId, quase sempre num
+    // recurso DIFERENTE (a fila de aquecimento pareada) — a FK de
+    // linkedEntryId é `onDelete: SET NULL`, não CASCADE, então excluir
+    // só o recurso (cascade cuida apenas das entries QUE VIVEM nele)
+    // deixaria esses aquecimentos órfãos presos na fila pra sempre, sem
+    // apresentação nenhuma. Excluir o recurso deve levar junto tudo que
+    // só existe por causa das apresentações que estavam nele (pedido do
+    // usuário, 2026-08-16).
+    const presentations = await this.entriesRepo.find({
+      where: { resourceId, type: ScheduleEntryType.PRESENTATION },
+    });
+    const affectedResourceIds = new Set<string>();
+    for (const presentation of presentations) {
+      const linkedEntries = await this.entriesRepo.find({
+        where: { linkedEntryId: presentation.id },
+      });
+      for (const linked of linkedEntries) {
+        affectedResourceIds.add(linked.resourceId);
+        await this.entriesRepo.remove(linked);
+      }
+    }
+    affectedResourceIds.delete(resourceId);
+
+    // Recursos de aquecimento pareados a esta pista (pairedResourceId
+    // aponta pra cá) só existem em função dela (ver guard acima) —
+    // excluir a pista sem eles deixaria um recurso de aquecimento vazio
+    // e sem dono, impossível de excluir depois (o guard bloqueia
+    // exclusão direta de recurso de aquecimento).
+    const pairedWarmupResources = await this.resourcesRepo.find({
+      where: { scheduleDayId: dayId, pairedResourceId: resourceId },
+    });
+    for (const paired of pairedWarmupResources) {
+      affectedResourceIds.delete(paired.id);
+    }
+
     await this.resourcesRepo.remove(resource);
+    if (pairedWarmupResources.length > 0) {
+      await this.resourcesRepo.remove(pairedWarmupResources);
+    }
+
+    for (const otherResourceId of affectedResourceIds) {
+      await this.renumberResource(otherResourceId);
+    }
+    // Remover aquecimentos do meio da fila de outro recurso libera
+    // tempo pras apresentações seguintes dela — precisa reconciliar os
+    // dois lados de novo pra encolher/remover esperas que ficaram
+    // desnecessárias (mesmo raciocínio de removeEntry/moveEntry acima).
+    await this.reconcileWarmupDelays(dayId);
+    await this.reconcileMatGaps(dayId);
   }
 
   async moveResource(
@@ -569,7 +633,14 @@ export class ScheduleService {
     if (oldResourceId !== dto.resourceId) {
       await this.renumberResource(oldResourceId);
     }
+    // Mesma causa/fix do bug de removeEntry (2026-08-16): reordenar
+    // qualquer item (intervalo, componente, aquecimento) numa pista ou
+    // num recurso de aquecimento desloca o horário natural da
+    // apresentação vinculada — sem reconcileMatGaps o "Aguardando
+    // aquecimento" existente não encolhe/expande pra cobrir a nova
+    // folga, sobrepondo aquecimento e apresentação.
     await this.reconcileWarmupDelays(dayId);
+    await this.reconcileMatGaps(dayId);
     const updated = await this.entriesRepo.findOneBy({ id: entryId });
     const [view] = await this.attachNames([updated!]);
     return view;
@@ -711,24 +782,30 @@ export class ScheduleService {
     await this.findDayOrThrow(eventId, dayId);
     const entry = await this.findEntryInDayOrThrow(dayId, entryId);
 
-    // Intervalos "Aguardando aquecimento"/"Aguardando disponibilidade
-    // da equipe" são gerados automaticamente pra evitar um conflito de
-    // agenda real (a equipe se apresentando e se aquecendo ao mesmo
-    // tempo) — só eles (e o "Intervalo entre apresentações", excluído
-    // abaixo) têm linkedEntryId apontando pra uma presentation sem
-    // eles mesmos serem presentation/warmup. Removê-los sozinhos (sem
-    // remover a apresentação/aquecimento que os originou) reabre o
-    // conflito que existiam pra evitar, e diferente de removeEntry
-    // "normal", não tem como a reconciliação recriar um intervalo que
-    // falta (só ajusta/remove os que já existem) — ficaria sem jeito
-    // de consertar pela UI. Só sai removendo a apresentação
-    // correspondente (que aí sim limpa o grupo inteiro).
+    // Aquecimento e intervalos "Aguardando aquecimento"/"Aguardando
+    // disponibilidade da equipe" são todos gerados automaticamente
+    // junto com a apresentação (ver createPresentationWithWarmup/
+    // autoGenerate) — nenhum dos dois pode ser excluído sozinho:
+    // excluir só o aquecimento deixaria a apresentação sem aquecimento
+    // vinculado (createPresentationWithWarmup/movePresentationWithWarmup
+    // assumem que toda apresentação tem um); excluir só uma das esperas
+    // reabre o conflito de agenda que ela existia pra evitar. Diferente
+    // do removeEntry "normal", não tem como a reconciliação recriar
+    // uma espera que falta (só ajusta/remove as que já existem) —
+    // ficaria sem jeito de consertar pela UI. Só sai removendo a
+    // apresentação correspondente (que aí sim limpa o grupo inteiro,
+    // ver abaixo).
     //
     // "Intervalo entre apresentações" é diferente: não existe pra
     // evitar um conflito de agenda, é só um espaçamento fixo que o
     // organizador pediu — pode ser removido direto (a apresentação
     // continua existindo), só o inverso (excluir a apresentação também
     // exclui o intervalo, ver bloco abaixo) é automático.
+    if (entry.type === ScheduleEntryType.WARMUP) {
+      throw new BadRequestException(
+        'O aquecimento não pode ser excluído diretamente — remova a apresentação correspondente para excluí-lo junto.',
+      );
+    }
     if (
       entry.type === ScheduleEntryType.BREAK &&
       entry.linkedEntryId &&
@@ -742,18 +819,13 @@ export class ScheduleService {
     // A apresentação é o "centro" do grupo — aquecimento e os
     // intervalos de espera criados pra encaixar os dois (ver
     // createPresentationWithWarmup/autoGenerate) todos apontam
-    // linkedEntryId pra ela. Resolver sempre pro id da apresentação,
-    // mesmo removendo a partir do aquecimento, permite limpar o grupo
-    // inteiro (aquecimento + "Aguardando aquecimento" + "Aguardando
-    // disponibilidade da equipe") em uma consulta só — excluir a
-    // apresentação sem eles deixaria buracos órfãos na timeline que
-    // dessincronizam o horário do resto do dia.
-    let presentationId: string | null = null;
-    if (entry.type === ScheduleEntryType.PRESENTATION) {
-      presentationId = entry.id;
-    } else if (entry.type === ScheduleEntryType.WARMUP && entry.linkedEntryId) {
-      presentationId = entry.linkedEntryId;
-    }
+    // linkedEntryId pra ela. Resolver pro id da apresentação permite
+    // limpar o grupo inteiro (aquecimento + "Aguardando aquecimento" +
+    // "Aguardando disponibilidade da equipe") em uma consulta só —
+    // excluir a apresentação sem eles deixaria buracos órfãos na
+    // timeline que dessincronizam o horário do resto do dia.
+    const presentationId =
+      entry.type === ScheduleEntryType.PRESENTATION ? entry.id : null;
 
     if (presentationId) {
       const linkedEntries = await this.entriesRepo.find({
@@ -783,6 +855,12 @@ export class ScheduleService {
     await this.entriesRepo.remove(entry);
     await this.renumberResource(resourceId);
     await this.reconcileWarmupDelays(dayId);
+    // Remover o "Intervalo entre apresentações" muda o horário natural
+    // de início da apresentação seguinte na mesma pista — sem isso, um
+    // "Aguardando aquecimento" já existente não encolhe/expande pra
+    // cobrir a nova folga, deixando aquecimento e apresentação
+    // sobrepostos (conflito real, reportado pelo usuário 2026-08-16).
+    await this.reconcileMatGaps(dayId);
   }
 
   async autoGenerate(

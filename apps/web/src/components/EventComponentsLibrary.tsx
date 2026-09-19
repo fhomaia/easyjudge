@@ -92,9 +92,9 @@ export function EventComponentsLibrary({ eventId, day, onCreated }: EventCompone
   return (
     <>
       <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Componentes do evento</h3>
+        <h3 className="text-sm font-semibold text-foreground">Eventos especiais</h3>
         <p className="text-xs text-muted-foreground">
-          Arraste até uma pista ou clique num componente para escolher a posição.
+          Arraste até uma pista ou clique num evento especial para escolher a posição.
         </p>
         <div className="flex flex-col gap-2">
           {COMPONENT_BLOCKS.map((def) => (

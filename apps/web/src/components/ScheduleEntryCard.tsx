@@ -52,7 +52,11 @@ export function ScheduleEntryCard({
 }: ScheduleEntryCardProps) {
   const style = SCHEDULE_TYPE_STYLES[entry.type];
   const hasConflict = conflictReasons.length > 0;
-  const isWaitBreak = isAutoWaitBreak(entry);
+  // Aquecimento (2026-08-16, pedido do usuário) e os breaks
+  // "Aguardando..." nunca são excluíveis sozinhos, só junto da
+  // apresentação (ver ScheduleService.removeEntry) — botão "X" some
+  // pros dois.
+  const isWaitBreak = isAutoWaitBreak(entry) || entry.type === "warmup";
   const { title, subtitle, timeRange, tooltip } = getScheduleEntryDisplay(
     entry,
     startMinutes,

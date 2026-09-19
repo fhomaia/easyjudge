@@ -276,18 +276,24 @@ function TableEntryCell({
       )}
     >
       {/* Sempre visível, não só no hover (era `hidden group-hover:block`)
-          — sem hover em touch/tablet, esse botão nunca aparecia lá. */}
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute right-1 top-1 touch-none rounded-full bg-black/10 p-0.5 hover:bg-black/20"
-      >
-        <X className="size-3" />
-      </button>
+          — sem hover em touch/tablet, esse botão nunca aparecia lá.
+          Aquecimento (2026-08-16, pedido do usuário) nunca é excluível
+          sozinho, só junto da apresentação (ver
+          ScheduleService.removeEntry) — mesmo guard já aplicado no
+          ScheduleEntryCard da linha do tempo. */}
+      {entry.type !== "warmup" && (
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="absolute right-1 top-1 touch-none rounded-full bg-black/10 p-0.5 hover:bg-black/20"
+        >
+          <X className="size-3" />
+        </button>
+      )}
       <p className="truncate pr-4 font-medium">{title}</p>
       {subtitle && <p className="truncate pr-4 opacity-80">{subtitle}</p>}
       <p className="truncate pr-4 opacity-70">{timeRange}</p>

@@ -473,7 +473,7 @@ export function SchedulePage() {
             refetchDays();
           });
         })
-        .catch(() => setError("Não foi possível adicionar este componente."))
+        .catch(() => setError("Não foi possível adicionar este evento especial."))
         .finally(() => setScheduleMutationPending(false));
       return;
     }
@@ -811,7 +811,7 @@ export function SchedulePage() {
         open={replicateOpen}
         onOpenChange={setReplicateOpen}
         title="Repetir cronograma em todos os dias"
-        description="O horário do dia (início/fim, tempo de aquecimento), as pistas, aquecimentos, componentes (Almoço, Abertura, Premiação, Contestação de notas, intervalos personalizados) e as apresentações/aquecimentos das equipes do dia selecionado serão copiados para todos os outros dias do evento — substituindo completamente o que já existir neles."
+        description="O horário do dia (início/fim, tempo de aquecimento), as pistas, aquecimentos, eventos especiais (Almoço, Abertura, Premiação, Contestação de notas, intervalos personalizados) e as apresentações/aquecimentos das equipes do dia selecionado serão copiados para todos os outros dias do evento — substituindo completamente o que já existir neles."
         confirmLabel="Repetir mesmo assim"
         confirmingLabel="Repetindo..."
         onConfirm={handleReplicateToAllDays}
@@ -823,7 +823,7 @@ export function SchedulePage() {
         title="Excluir dia"
         description={
           dayToDelete
-            ? `O dia ${format(parseISO(dayToDelete.date), "dd/MM")} será excluído, junto com todas as pistas, aquecimentos, componentes e apresentações agendadas nele. Essa ação não pode ser desfeita.`
+            ? `O dia ${format(parseISO(dayToDelete.date), "dd/MM")} será excluído, junto com todas as pistas, aquecimentos, eventos especiais e apresentações agendadas nele. Essa ação não pode ser desfeita.`
             : ""
         }
         confirmLabel="Excluir dia"
