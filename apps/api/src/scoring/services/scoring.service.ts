@@ -615,73 +615,116 @@ export class ScoringService {
     eventId: string,
     days: Awaited<ReturnType<ScheduleService['getDays']>>,
   ) {
-    const templateCache = new Map<string, CriterionAssignmentsState>();
-    const categoryCache = new Map<string, Category | null>();
-    const specialRolesCache = new Map<
-      string,
-      Awaited<ReturnType<JudgingService['getSpecialRoles']>>
-    >();
+    type Day = (typeof days)[number];
+    type Resource = Day['resources'][number];
+    type Entry = Resource['entries'][number];
 
-    const completed: Array<{
-      day: (typeof days)[number];
-      resource: (typeof days)[number]['resources'][number];
-      entry: (typeof days)[number]['resources'][number]['entries'][number];
-      category: Category;
-    }> = [];
+    const candidates: Array<{ day: Day; resource: Resource; entry: Entry }> =
+      [];
     for (const day of days) {
       for (const resource of day.resources) {
         for (const entry of resource.entries) {
           if (
-            entry.type !== ScheduleEntryType.PRESENTATION ||
-            !entry.categoryId ||
-            !entry.teamId
+            entry.type === ScheduleEntryType.PRESENTATION &&
+            entry.categoryId &&
+            entry.teamId
           ) {
-            continue;
+            candidates.push({ day, resource, entry });
           }
-
-          let category = categoryCache.get(entry.categoryId);
-          if (category === undefined) {
-            category = await this.categoriesRepo.findOne({
-              where: { id: entry.categoryId },
-              relations: ['scoringTemplate'],
-            });
-            categoryCache.set(entry.categoryId, category);
-          }
-          if (!category?.scoringTemplateId) continue;
-
-          let assignmentsState = templateCache.get(category.scoringTemplateId);
-          if (!assignmentsState) {
-            assignmentsState = await this.judgingService.getAssignments(
-              eventId,
-              category.scoringTemplateId,
-            );
-            templateCache.set(category.scoringTemplateId, assignmentsState);
-          }
-
-          let specialRoles = specialRolesCache.get(entry.resourceId);
-          if (!specialRoles) {
-            specialRoles = await this.judgingService.getSpecialRoles(
-              eventId,
-              entry.resourceId,
-            );
-            specialRolesCache.set(entry.resourceId, specialRoles);
-          }
-
-          const complete = await this.isPresentationFullyScored(
-            entry.id,
-            entry.resourceId,
-            assignmentsState,
-            specialRoles,
-          );
-          // Desistida é a única exceção ao "só entra se 100%
-          // pontuada" — nunca vai ficar completa (ninguém pode mais
-          // lançar nota pra ela), mas precisa aparecer marcada nas
-          // súmulas mesmo assim (ver ScoringService.withdrawPresentation).
-          if (!complete && !entry.withdrawnAt) continue;
-
-          completed.push({ day, resource, entry, category });
         }
       }
+    }
+    if (candidates.length === 0) return [];
+
+    // Tudo que a checagem precisa é buscado em lote e em paralelo, em
+    // vez de uma ida ao banco por apresentação/categoria/pista (eram
+    // dezenas de consultas em sequência, ~2s em produção).
+    const categoryIds = [
+      ...new Set(candidates.map((c) => c.entry.categoryId!)),
+    ];
+    const categories = await this.categoriesRepo.find({
+      where: { id: In(categoryIds) },
+      relations: ['scoringTemplate'],
+    });
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+    const withTemplate = candidates.filter(
+      (c) => categoryById.get(c.entry.categoryId!)?.scoringTemplateId,
+    );
+    if (withTemplate.length === 0) return [];
+
+    const templateIds = [
+      ...new Set(
+        withTemplate.map(
+          (c) => categoryById.get(c.entry.categoryId!)!.scoringTemplateId!,
+        ),
+      ),
+    ];
+    const resourceIds = [
+      ...new Set(withTemplate.map((c) => c.entry.resourceId)),
+    ];
+    const entryIds = withTemplate.map((c) => c.entry.id);
+
+    const [assignmentStates, specialRolesList, submittedEvents] =
+      await Promise.all([
+        Promise.all(
+          templateIds.map((id) =>
+            this.judgingService.getAssignments(eventId, id),
+          ),
+        ),
+        Promise.all(
+          resourceIds.map((id) =>
+            this.judgingService.getSpecialRoles(eventId, id),
+          ),
+        ),
+        this.scoreEventsRepo.find({
+          where: {
+            scheduleEntryId: In(entryIds),
+            kind: ScoreEventKind.SHEET_SUBMITTED,
+          },
+          select: { scheduleEntryId: true, judgeParticipationId: true },
+        }),
+      ]);
+    const assignmentsByTemplate = new Map(
+      templateIds.map((id, i) => [id, assignmentStates[i]]),
+    );
+    const specialRolesByResource = new Map(
+      resourceIds.map((id, i) => [id, specialRolesList[i]]),
+    );
+    const submittedByEntry = new Map<string, Set<string>>();
+    for (const e of submittedEvents) {
+      let set = submittedByEntry.get(e.scheduleEntryId);
+      if (!set) {
+        set = new Set();
+        submittedByEntry.set(e.scheduleEntryId, set);
+      }
+      set.add(e.judgeParticipationId);
+    }
+
+    const completed: Array<{
+      day: Day;
+      resource: Resource;
+      entry: Entry;
+      category: Category;
+    }> = [];
+    for (const { day, resource, entry } of withTemplate) {
+      const category = categoryById.get(entry.categoryId!)!;
+      const judgeIds = this.requiredJudgeIds(
+        entry.resourceId,
+        assignmentsByTemplate.get(category.scoringTemplateId!)!,
+        specialRolesByResource.get(entry.resourceId)!,
+      );
+      const submitted = submittedByEntry.get(entry.id);
+      const complete =
+        judgeIds.size > 0 &&
+        [...judgeIds].every((judgeId) => submitted?.has(judgeId));
+      // Desistida é a única exceção ao "só entra se 100%
+      // pontuada" — nunca vai ficar completa (ninguém pode mais
+      // lançar nota pra ela), mas precisa aparecer marcada nas
+      // súmulas mesmo assim (ver ScoringService.withdrawPresentation).
+      if (!complete && !entry.withdrawnAt) continue;
+
+      completed.push({ day, resource, entry, category });
     }
     return completed;
   }
@@ -1808,12 +1851,14 @@ export class ScoringService {
   // critério, o que deixava uma apresentação julgada só por
   // legalidade/head-judge (zero critérios atribuídos) nunca "completa"
   // — mesmo bug corrigido em `getHeadJudgeRoster`, ver ali.
-  private async isPresentationFullyScored(
-    scheduleEntryId: string,
+  // Jurados que precisam ter enviado a súmula pra apresentação numa
+  // pista contar como concluída (quem julga algum critério ali + quem
+  // tem função especial na pista).
+  private requiredJudgeIds(
     resourceId: string,
     assignmentsState: CriterionAssignmentsState,
     specialRoles: Awaited<ReturnType<JudgingService['getSpecialRoles']>>,
-  ): Promise<boolean> {
+  ): Set<string> {
     const judgeIds = new Set<string>();
     for (const assignment of assignmentsState.criterionAssignments) {
       if (assignment.resourceId !== resourceId) continue;
@@ -1822,6 +1867,20 @@ export class ScoringService {
     for (const { judgeIds: roleJudgeIds } of specialRoles) {
       for (const judgeId of roleJudgeIds) judgeIds.add(judgeId);
     }
+    return judgeIds;
+  }
+
+  private async isPresentationFullyScored(
+    scheduleEntryId: string,
+    resourceId: string,
+    assignmentsState: CriterionAssignmentsState,
+    specialRoles: Awaited<ReturnType<JudgingService['getSpecialRoles']>>,
+  ): Promise<boolean> {
+    const judgeIds = this.requiredJudgeIds(
+      resourceId,
+      assignmentsState,
+      specialRoles,
+    );
     if (judgeIds.size === 0) return false;
 
     const submittedEvents = await this.scoreEventsRepo.find({
