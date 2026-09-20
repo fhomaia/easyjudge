@@ -678,12 +678,12 @@ cross-origin sem erro de CORS, mensagem de erro certa na tela —
 confirma a cadeia inteira (Workers → Render → Neon) funcionando junta.
 
 **Pontas soltas conscientes**: Render Free em cold-start (ver item 4
-acima), sem `www.cheercup.com.br` configurado (só o domínio raiz), e o
-bundle do frontend passou de 2MB/500KB recomendado (aviso do próprio
-Vite no build, `apps/web/dist/assets/index-*.js` ~636KB gzipped —
-corrigir exigiria code-splitting por rota com `React.lazy`/`Suspense`,
-não tentado). Nenhuma das três bloqueia uso, registradas como
-pendência.
+acima). As outras duas foram resolvidas em 2026-09-20: `www.cheercup.com.br`
+já estava configurado (confere por `dig`/`curl`: resolve pro Cloudflare,
+cert válido, serve o app e as rotas SPA; **serve direto, não redireciona
+pro domínio raiz**, então existem duas URLs válidas — redirect é
+opcional), e o bundle do frontend passou por code-splitting (ver seção
+"Code-splitting por rota" mais abaixo).
 
 ## Ajustes no cadastro por papel + identidade visual do email de verificação (2026-07-31)
 
@@ -1518,6 +1518,33 @@ mesma sessão. Ainda não deployada (ver "Deploy" abaixo).
 - **Deploy**: migration `AddSketchTextSetToScoreEventKind` ainda
   precisa rodar no Neon (usuário, `DATABASE_URL` inline no terminal
   dele) antes de qualquer push que inclua este backend.
+
+## Code-splitting por rota (2026-09-20)
+
+`apps/web/src/App.tsx`: todas as páginas, exceto `LoginPage`, viraram
+`React.lazy` (`import("@/pages/X").then((m) => ({ default: m.X }))`,
+já que as páginas são exports nomeados), dentro de um `<Suspense>` com
+fallback "Carregando..." que envolve as `<Routes>`. `LoginPage`,
+`ProtectedRoute` e `GuestRoute` continuam no bundle inicial (primeira
+tela de quem está deslogado e guardas de rota).
+
+- **Medido no build**: chunk principal `index-*.js` de 2.233 kB (670 kB
+  gzip) para 379 kB (118 kB gzip); o aviso de chunk > 500 kB do Vite
+  sumiu. Peças pesadas passaram a carregar só onde são usadas
+  (`PdfViewer`, `jspdf`, `xlsx`, `html2canvas`).
+- **Testado**: `vite preview` do build, no navegador deslogado (origem
+  `localhost:4173`, sem sessão): `/terms` baixa o chunk
+  `TermsOfUsePage` sob demanda; rota protegida sem sessão redireciona
+  pra `/login` sem baixar chunk de página. **Não testado**: navegar
+  pelas páginas protegidas já logado com o build de produção (exigiria
+  sessão) — conferir em produção depois do deploy.
+- **Risco conhecido, não tratado**: quem está com uma aba aberta
+  durante um deploy tem os nomes de chunk antigos (com hash) no
+  `index-*.js` já carregado; ao navegar pra uma página ainda não
+  visitada, o chunk antigo some do servidor e o fallback de SPA
+  (`not_found_handling`) devolve `index.html` no lugar do JS — a
+  navegação falha até recarregar a aba. Se virar problema real,
+  tratar o erro de `import()` com um reload automático.
 
 ## Próximos passos (não iniciados ainda)
 
