@@ -605,12 +605,16 @@ export class ScoringService {
   // ficam ocultas, não aparecem nem desabilitadas — decisão consciente
   // do usuário). Autorização (ser admin/assessor do evento) já foi
   // feita pelo guard do controller, sem checagem extra aqui.
-  async getAdminOverview(eventId: string): Promise<AdminOverviewEntryView[]> {
-    const days = await this.scheduleService.getDays(eventId);
-    const regulation = await this.regulationsService.getForEvent(eventId);
-    const deductionValueByType = new Map(
-      regulation.deductions.map((r) => [r.type, r.value]),
-    );
+  // Apresentações "concluídas" do evento (100% pontuadas, ou desistidas
+  // — ver comentário em getAdminOverview), SEM calcular o resultado.
+  // Separado de getAdminOverview porque getCompletedPresentationIds só
+  // precisa dos ids (alimenta o cronograma ao vivo) e antes pagava o
+  // cálculo completo da súmula de cada apresentação por isso (~2s medido
+  // em produção, o endpoint mais lento das telas do evento ao vivo).
+  private async findCompletedEntries(
+    eventId: string,
+    days: Awaited<ReturnType<ScheduleService['getDays']>>,
+  ) {
     const templateCache = new Map<string, CriterionAssignmentsState>();
     const categoryCache = new Map<string, Category | null>();
     const specialRolesCache = new Map<
@@ -618,7 +622,12 @@ export class ScoringService {
       Awaited<ReturnType<JudgingService['getSpecialRoles']>>
     >();
 
-    const results: AdminOverviewEntryView[] = [];
+    const completed: Array<{
+      day: (typeof days)[number];
+      resource: (typeof days)[number]['resources'][number];
+      entry: (typeof days)[number]['resources'][number]['entries'][number];
+      category: Category;
+    }> = [];
     for (const day of days) {
       for (const resource of day.resources) {
         for (const entry of resource.entries) {
@@ -670,28 +679,47 @@ export class ScoringService {
           // súmulas mesmo assim (ver ScoringService.withdrawPresentation).
           if (!complete && !entry.withdrawnAt) continue;
 
-          const { finalResult, percentage } = entry.withdrawnAt
-            ? { finalResult: 0, percentage: 0 }
-            : await this.computePresentationResult(
-                entry.id,
-                category,
-                deductionValueByType,
-              );
-
-          results.push({
-            scheduleEntryId: entry.id,
-            teamName: entry.teamName ?? 'Equipe',
-            categoryName: entry.categoryName ?? '',
-            resourceName: resource.name,
-            dayDate: day.date,
-            contestationRequested: !!entry.contestationRequestedAt,
-            contestationResolved: !!entry.contestationResolvedAt,
-            finalResult,
-            percentage,
-            withdrawn: !!entry.withdrawnAt,
-          });
+          completed.push({ day, resource, entry, category });
         }
       }
+    }
+    return completed;
+  }
+
+  async getAdminOverview(eventId: string): Promise<AdminOverviewEntryView[]> {
+    const days = await this.scheduleService.getDays(eventId);
+    const regulation = await this.regulationsService.getForEvent(eventId);
+    const deductionValueByType = new Map(
+      regulation.deductions.map((r) => [r.type, r.value]),
+    );
+
+    const results: AdminOverviewEntryView[] = [];
+    for (const {
+      day,
+      resource,
+      entry,
+      category,
+    } of await this.findCompletedEntries(eventId, days)) {
+      const { finalResult, percentage } = entry.withdrawnAt
+        ? { finalResult: 0, percentage: 0 }
+        : await this.computePresentationResult(
+            entry.id,
+            category,
+            deductionValueByType,
+          );
+
+      results.push({
+        scheduleEntryId: entry.id,
+        teamName: entry.teamName ?? 'Equipe',
+        categoryName: entry.categoryName ?? '',
+        resourceName: resource.name,
+        dayDate: day.date,
+        contestationRequested: !!entry.contestationRequestedAt,
+        contestationResolved: !!entry.contestationResolvedAt,
+        finalResult,
+        percentage,
+        withdrawn: !!entry.withdrawnAt,
+      });
     }
 
     return results;
@@ -820,7 +848,8 @@ export class ScoringService {
           valuesForCriterion = new Map();
           byCriterion.set(criterionId, valuesForCriterion);
         }
-        const teamsAtValue = valuesForCriterion.get(rounded) ?? new Set<string>();
+        const teamsAtValue =
+          valuesForCriterion.get(rounded) ?? new Set<string>();
         teamsAtValue.add(teamName);
         valuesForCriterion.set(rounded, teamsAtValue);
 
@@ -1478,8 +1507,9 @@ export class ScoringService {
   // getAdminOverview (que já filtra só as completas) em vez de
   // duplicar o loop de completude.
   async getCompletedPresentationIds(eventId: string): Promise<string[]> {
-    const overview = await this.getAdminOverview(eventId);
-    return overview.map((e) => e.scheduleEntryId);
+    const days = await this.scheduleService.getDays(eventId);
+    const completed = await this.findCompletedEntries(eventId, days);
+    return completed.map(({ entry }) => entry.id);
   }
 
   // Horário real de início de cada apresentação já iniciada (primeiro
@@ -2069,9 +2099,10 @@ export class ScoringService {
         groups.set(root.id, group);
       }
 
-      const subgroupDescriptions: { name: string; description: string }[] =
-        [];
-      let ancestor = criterion.parentId ? byId.get(criterion.parentId) : undefined;
+      const subgroupDescriptions: { name: string; description: string }[] = [];
+      let ancestor = criterion.parentId
+        ? byId.get(criterion.parentId)
+        : undefined;
       while (ancestor && ancestor.id !== root.id) {
         if (ancestor.description) {
           subgroupDescriptions.push({
@@ -2386,8 +2417,7 @@ export class ScoringService {
         };
         groups.set(root.id, group);
       }
-      const subgroupDescriptions: { name: string; description: string }[] =
-        [];
+      const subgroupDescriptions: { name: string; description: string }[] = [];
       let ancestor = leaf.parentId ? byId.get(leaf.parentId) : undefined;
       while (ancestor && ancestor.id !== root.id) {
         if (ancestor.description) {

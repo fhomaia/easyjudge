@@ -38,15 +38,62 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+// GETs idênticos disparados ao mesmo tempo (ex: o guard da página e a
+// própria página, ambos pedindo `/events/:id` ao montar) compartilham
+// uma só requisição em vez de cada um pagar a viagem até a API.
+// Só vale enquanto a resposta não chega — nada é reaproveitado depois
+// disso, então o dado nunca fica velho (importante pro realtime, que
+// refaz o GET quando o socket avisa que algo mudou). A chave inclui o
+// token, pra impersonation/troca de conta nunca herdar resposta de
+// outro usuário.
+const inflightGets = new Map<string, Promise<unknown>>();
+
+// `/users/me` quase nunca muda e era refeito a cada troca de menu;
+// guardado por 60s, e descartado em qualquer requisição que não seja
+// GET (perfil editado, login/logout etc. passam por aqui também).
+const USERS_ME_TTL_MS = 60_000;
+const usersMeCache = new Map<string, { at: number; value: Promise<unknown> }>();
+
 function authRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const accessToken = useAuthStore.getState().accessToken;
-  return request<T>(path, {
-    ...options,
-    headers: {
-      ...options.headers,
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
+  const send = () =>
+    request<T>(path, {
+      ...options,
+      headers: {
+        ...options.headers,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+
+  const isGet = !options.method || options.method.toUpperCase() === "GET";
+  if (!isGet) {
+    usersMeCache.clear();
+    return send();
+  }
+
+  const key = `${accessToken ?? ""}|${path}`;
+
+  if (path === "/users/me") {
+    const cached = usersMeCache.get(key);
+    if (cached && Date.now() - cached.at < USERS_ME_TTL_MS) {
+      return cached.value as Promise<T>;
+    }
+    const value = send();
+    usersMeCache.set(key, { at: Date.now(), value });
+    // Erro não pode ficar guardado por 60s.
+    value.catch(() => {
+      if (usersMeCache.get(key)?.value === value) usersMeCache.delete(key);
+    });
+    return value;
+  }
+
+  const inflight = inflightGets.get(key);
+  if (inflight) return inflight as Promise<T>;
+  const promise = send().finally(() => {
+    inflightGets.delete(key);
   });
+  inflightGets.set(key, promise);
+  return promise;
 }
 
 // Upload de arquivo (multipart) — não usa request()/authRequest() porque
@@ -54,6 +101,9 @@ function authRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
 // boundary do FormData (o navegador precisa definir o Content-Type
 // sozinho nesse caso).
 async function authUpload<T>(path: string, formData: FormData): Promise<T> {
+  // Upload também é escrita (ex: avatar muda o `/users/me`) — ver
+  // usersMeCache mais abaixo.
+  usersMeCache.clear();
   const accessToken = useAuthStore.getState().accessToken;
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
