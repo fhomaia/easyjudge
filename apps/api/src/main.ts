@@ -25,6 +25,9 @@ async function bootstrap() {
   // o domínio próprio tenha algum problema.
   app.enableCors({
     origin: ['https://cheercup.com.br', 'https://cheercup-web.fhomaia.workers.dev'],
+    // Sem isso o Chrome só guarda o preflight por 5s e toda chamada com
+    // Authorization paga uma ida e volta extra (~350ms medido em produção).
+    maxAge: 7200,
   });
 
   await app.listen(process.env.PORT ?? 3000);
