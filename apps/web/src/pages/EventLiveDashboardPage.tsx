@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Bell,
@@ -356,9 +357,7 @@ export function EventLiveDashboardPage() {
 
   if (!event || !live) {
     return (
-      <div className="flex h-svh items-center justify-center bg-background text-sm text-muted-foreground">
-        Carregando...
-      </div>
+      <RouteLoadingFallback />
     );
   }
 

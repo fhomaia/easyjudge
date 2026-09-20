@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "@/pages/LoginPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { GuestRoute } from "@/components/GuestRoute";
+import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 
 const HomePage = lazy(() =>
   import("@/pages/HomePage").then((m) => ({ default: m.HomePage })),
@@ -105,13 +106,7 @@ const PrivacyPolicyPage = lazy(() =>
 
 function App() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-          Carregando...
-        </div>
-      }
-    >
+    <Suspense fallback={<RouteLoadingFallback />}>
       <Routes>
         {/* Fora de GuestRoute/ProtectedRoute de propósito — precisa
           funcionar logado ou deslogado (ver JoinEventPage). Mesmo

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import { Building2, CalendarDays, ChevronLeft, MapPin, Trophy } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -83,9 +84,7 @@ export function EventLiveTeamNotesPage() {
 
   if (!event || !entries) {
     return (
-      <div className="flex h-svh items-center justify-center bg-background text-sm text-muted-foreground">
-        Carregando...
-      </div>
+      <RouteLoadingFallback />
     );
   }
 

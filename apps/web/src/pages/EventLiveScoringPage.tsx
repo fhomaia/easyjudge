@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { EventDocumentsButton } from "@/components/EventDocumentsButton";
@@ -437,9 +438,7 @@ export function EventLiveScoringPage() {
 
   if (!event || !sheet || !hydrated) {
     return (
-      <div className="flex h-svh items-center justify-center bg-background text-sm text-muted-foreground">
-        Carregando...
-      </div>
+      <RouteLoadingFallback />
     );
   }
 
