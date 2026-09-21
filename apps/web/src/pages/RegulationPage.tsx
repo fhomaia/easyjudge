@@ -1,3 +1,4 @@
+import { trackUpload } from "@/store/uploads";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Star } from "lucide-react";
@@ -12,6 +13,7 @@ import {
   regulationApi,
   scoringTemplatesApi,
   usersApi,
+  type CustomDeductionInput,
   type DeductionType,
   type Regulation,
   type RegulationDocument,
@@ -59,7 +61,11 @@ export function RegulationPage() {
 
   async function handleUploadDocument(kind: RegulationDocumentKind, file: File, name?: string) {
     if (!id) return;
-    const updated = await regulationApi.uploadDocument(id, kind, file, name);
+    const updated = await trackUpload(
+      name ?? file.name,
+      regulationApi.uploadDocument(id, kind, file, name),
+      (err) => (err instanceof ApiError ? err.message : "Erro inesperado. Tente novamente."),
+    );
     setRegulation(updated);
   }
 
@@ -79,6 +85,18 @@ export function RegulationPage() {
     setRegulation(updated);
   }
 
+  async function handleCustomDeductionsChange(list: CustomDeductionInput[]) {
+    if (!id) return;
+    const updated = await regulationApi.updateDeductions(id, { customDeductions: list });
+    setRegulation(updated);
+  }
+
+  async function handleHiddenDeductionsChange(list: DeductionType[]) {
+    if (!id) return;
+    const updated = await regulationApi.updateDeductions(id, { hiddenDeductions: list });
+    setRegulation(updated);
+  }
+
   async function handleValueChange(type: DeductionType, value: number) {
     if (!id) return;
     const updated = await regulationApi.updateDeductions(id, {
@@ -91,7 +109,7 @@ export function RegulationPage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"
@@ -99,7 +117,7 @@ export function RegulationPage() {
             className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            Voltar para configuração do evento
+            Sair
           </button>
           <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
@@ -131,8 +149,11 @@ export function RegulationPage() {
                 <DeductionRulesSection
                   deductionMode={regulation.deductionMode}
                   deductions={regulation.deductions}
+                  hiddenDeductions={regulation.hiddenDeductions}
                   onModeChange={handleModeChange}
                   onValueChange={handleValueChange}
+                  onCustomDeductionsChange={handleCustomDeductionsChange}
+                  onHiddenDeductionsChange={handleHiddenDeductionsChange}
                 />
 
                 <ScoringTemplatesSummarySection

@@ -11,6 +11,12 @@ import { RegulationDocument } from './regulation-document.entity';
 import { RegulationDeductionMode } from '../enums/regulation-deduction-mode.enum';
 import { DeductionType } from '../enums/deduction-type.enum';
 
+export interface CustomDeduction {
+  id: string;
+  label: string;
+  value: number;
+}
+
 // Config de regulamento de um evento (documentos + deduções) — 1:1 com
 // Event, endereçada sempre por eventId (nunca pelo próprio id, ver
 // RegulationsService). Não existe até o primeiro PATCH/upload — GET
@@ -41,6 +47,17 @@ export class Regulation {
   // ausentes caem pro valor padrão IASF (ver iasf-deductions.ts).
   @Column({ name: 'deduction_values', type: 'jsonb', nullable: true })
   deductionValues: Partial<Record<DeductionType, number>> | null;
+
+  // Tipos de dedução criados pelo organizador (só valem no modo
+  // 'custom'). `id` é a chave usada nas notas (custom_<uuid>), estável
+  // mesmo renomeando; `value` fica sempre <= 0 (subtrai do total).
+  @Column({ name: 'custom_deductions', type: 'jsonb', nullable: true })
+  customDeductions: CustomDeduction[] | null;
+
+  // Tipos PADRÃO removidos no modo 'custom' (valores de DeductionType).
+  // Só oculta neste evento; ver RegulationsService.updateDeductions.
+  @Column({ name: 'hidden_deductions', type: 'jsonb', nullable: true })
+  hiddenDeductions: string[] | null;
 
   @OneToMany(() => RegulationDocument, (document) => document.regulation)
   documents: RegulationDocument[];

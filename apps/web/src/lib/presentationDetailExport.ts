@@ -2,7 +2,6 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import JSZip from "jszip";
 import { formatElapsed } from "@/lib/deductionIcons";
-import { DEDUCTION_LABELS } from "@/lib/deductionLabels";
 import { formatPercent, formatPoints } from "@/lib/formatNumber";
 import { sumMaxScores } from "@/lib/scoringSummary";
 import { isPresentationHitZero } from "@/lib/hitZero";
@@ -245,7 +244,7 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
       detail.legality.deductions.length > 0
         ? detail.legality.deductions.map((d) => [
             d.presentationElapsedMs !== null ? formatElapsed(d.presentationElapsedMs) : "--:--",
-            DEDUCTION_LABELS[d.type],
+            d.label,
           ])
         : [["—", "Nenhuma dedução registrada."]];
     autoTable(doc, {

@@ -33,6 +33,10 @@ import { AthletesService } from '../../athletes/services/athletes.service';
 import { ScoringCriteriaService } from '../../scoring-templates/services/scoring-criteria.service';
 import { DeductionType } from '../../regulations/enums/deduction-type.enum';
 import {
+  DEDUCTION_LABELS,
+  UNKNOWN_DEDUCTION_LABEL,
+} from '../../regulations/constants/iasf-deductions';
+import {
   RegulationsService,
   type DeductionRuleView,
 } from '../../regulations/services/regulations.service';
@@ -137,7 +141,9 @@ export interface HeadJudgeLogEntryView {
   criterionId: string | null;
   criterionName: string | null;
   value: number | null;
-  deductionType: DeductionType | null;
+  deductionType: string | null;
+  // Nome do tipo (padrão ou personalizado), pronto pra exibir.
+  deductionLabel: string | null;
   undoesEventId: string | null;
   clientCreatedAt: Date;
 }
@@ -202,7 +208,8 @@ export interface PresentationDetailGroupView {
 export interface PresentationDetailLegalityView {
   judgeName: string;
   deductions: Array<{
-    type: DeductionType;
+    type: string;
+    label: string;
     value: number;
     presentationElapsedMs: number | null;
     clientCreatedAt: Date;
@@ -561,7 +568,7 @@ export class ScoringService {
     );
     await this.assertHeadJudgeParticipation(eventId, userId, entry.resourceId);
 
-    const [events, allJudges] = await Promise.all([
+    const [events, allJudges, regulation] = await Promise.all([
       this.scoreEventsRepo.find({
         where: {
           scheduleEntryId: entry.id,
@@ -574,7 +581,11 @@ export class ScoringService {
         order: { clientCreatedAt: 'DESC' },
       }),
       this.judgesService.findAllForEvent(eventId),
+      this.regulationsService.getForEvent(eventId),
     ]);
+    const deductionLabelByType = new Map(
+      regulation.deductions.map((r) => [r.type, r.label]),
+    );
 
     const judgeNameById = new Map(allJudges.map((j) => [j.id, j.name]));
     const criterionNameById = new Map(allCriteria.map((c) => [c.id, c.name]));
@@ -595,6 +606,9 @@ export class ScoringService {
         : null,
       value: event.value,
       deductionType: event.deductionType,
+      deductionLabel: event.deductionType
+        ? this.deductionLabel(deductionLabelByType, event.deductionType)
+        : null,
       undoesEventId: event.undoesEventId,
       clientCreatedAt: event.clientCreatedAt,
     }));
@@ -941,7 +955,7 @@ export class ScoringService {
   private async computePresentationResult(
     scheduleEntryId: string,
     category: Category,
-    deductionValueByType: Map<DeductionType, number>,
+    deductionValueByType: Map<string, number>,
   ): Promise<{
     totalScore: number;
     deductionsTotal: number;
@@ -1705,6 +1719,17 @@ export class ScoringService {
     return { savedIds: rows.map((r) => r.id) };
   }
 
+  // Nome de um tipo de dedução. Tipo que não está mais na lista do
+  // regulamento (ex. personalizado apagado) cai no nome padrão, se for
+  // padrão, ou num rótulo genérico — nunca quebra a súmula.
+  private deductionLabel(byType: Map<string, string>, type: string): string {
+    return (
+      byType.get(type) ??
+      DEDUCTION_LABELS[type as DeductionType] ??
+      UNKNOWN_DEDUCTION_LABEL
+    );
+  }
+
   // Valida cada evento do lote contra as atribuições do DONO da nota
   // (`ownerParticipationId` — quem é jurado daquele critério/legalidade,
   // não necessariamente quem está fazendo a chamada) e monta as linhas
@@ -2197,6 +2222,9 @@ export class ScoringService {
     const deductionValueByType = new Map(
       regulation.deductions.map((r) => [r.type, r.value]),
     );
+    const deductionLabelByType = new Map(
+      regulation.deductions.map((r) => [r.type, r.label]),
+    );
 
     const legalityRole = specialRoles.find(
       (r) => r.role === SpecialJudgeRole.LEGALITY_JUDGE,
@@ -2209,6 +2237,7 @@ export class ScoringService {
             .filter((d) => !undoneDeductionIds.has(d.id))
             .map((d) => ({
               type: d.deductionType!,
+              label: this.deductionLabel(deductionLabelByType, d.deductionType!),
               value: deductionValueByType.get(d.deductionType!) ?? 0,
               presentationElapsedMs: d.presentationElapsedMs,
               clientCreatedAt: d.clientCreatedAt,

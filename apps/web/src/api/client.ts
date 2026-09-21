@@ -1054,16 +1054,10 @@ export const judgingApi = {
 export type RegulationDeductionMode = "iasf" | "custom";
 export type RegulationDocumentKind =
   "official_regulation" | "safety_rules" | "code_of_conduct" | "additional";
-export type DeductionType =
-  | "athlete_fall"
-  | "major_athlete_fall"
-  | "building_bobble"
-  | "building_fall"
-  | "major_building_fall"
-  | "legality_infractions"
-  | "skill_out_of_level"
-  | "time_limit_violations"
-  | "boundary_violations";
+// Chave do tipo: um dos 9 padrão IASF ("athlete_fall", "legality_infractions",
+// ...) OU "custom_<uuid>" (tipo criado pelo organizador no regulamento).
+// Por isso é string — o nome exibido vem sempre de `DeductionRuleView.label`.
+export type DeductionType = string;
 
 export interface RegulationDocument {
   id: string;
@@ -1077,7 +1071,20 @@ export interface RegulationDocument {
 
 export interface DeductionRuleView {
   type: DeductionType;
-  defaultValue: number;
+  label: string;
+  isCustom: boolean;
+  // null nos tipos personalizados (não existe padrão IASF).
+  defaultValue: number | null;
+  // Sempre <= 0 (é somado ao total). Na tela do regulamento mostrar o
+  // valor absoluto, sem sinal.
+  value: number;
+}
+
+export interface CustomDeductionInput {
+  // Ausente = tipo novo. Presente = mantém o tipo (mesmo renomeando).
+  id?: string;
+  label: string;
+  // Magnitude em pontos; o sinal é ignorado pelo servidor.
   value: number;
 }
 
@@ -1085,6 +1092,8 @@ export interface Regulation {
   eventId: string;
   deductionMode: RegulationDeductionMode;
   deductions: DeductionRuleView[];
+  // Tipos padrão removidos neste evento (modo custom), pra restaurar.
+  hiddenDeductions: DeductionRuleView[];
   documents: RegulationDocument[];
   updatedAt: string | null;
 }
@@ -1092,6 +1101,10 @@ export interface Regulation {
 export interface UpdateRegulationPayload {
   deductionMode?: RegulationDeductionMode;
   deductionValues?: Partial<Record<DeductionType, number>>;
+  // Lista COMPLETA dos tipos personalizados (só no modo "custom").
+  customDeductions?: CustomDeductionInput[];
+  // Lista COMPLETA dos tipos padrão removidos (só no modo "custom").
+  hiddenDeductions?: DeductionType[];
 }
 
 export const regulationApi = {
@@ -1511,6 +1524,7 @@ export interface HeadJudgeLogEntry {
   criterionName: string | null;
   value: number | null;
   deductionType: DeductionType | null;
+  deductionLabel: string | null;
   undoesEventId: string | null;
   clientCreatedAt: string;
 }
@@ -1559,6 +1573,7 @@ export interface PresentationDetailLegality {
   judgeName: string;
   deductions: Array<{
     type: DeductionType;
+    label: string;
     value: number;
     presentationElapsedMs: number | null;
     clientCreatedAt: string;

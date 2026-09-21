@@ -3,7 +3,7 @@ import { Check, Pencil, Scale, Trash2, Undo2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DeductionLogEntry } from "@/lib/scoreEventsReducer";
 import { DEDUCTION_ICONS, DEDUCTION_FALLBACK_ICON, formatElapsed, parseElapsed } from "@/lib/deductionIcons";
-import { DEDUCTION_LABELS } from "@/lib/deductionLabels";
+import { getDeductionLabel } from "@/lib/deductionLabels";
 import type { DeductionRuleView, DeductionType } from "@/api/client";
 
 // Extraído de EventLiveScoringPage/EventLiveScoringDesktopView pra ser
@@ -78,7 +78,7 @@ export function LegalityDeductionsPanel({
             >
               <Icon className="size-4 text-red-500" />
               <span className="text-[11px] leading-tight font-medium text-foreground">
-                {DEDUCTION_LABELS[rule.type]}
+                {rule.label}
               </span>
             </button>
           );
@@ -150,7 +150,7 @@ export function LegalityDeductionsPanel({
                       <Pencil className="size-2.5 shrink-0 opacity-60" />
                     </button>
                   )}
-                  <span className="flex-1 truncate text-sm text-foreground">{DEDUCTION_LABELS[d.deductionType]}</span>
+                  <span className="flex-1 truncate text-sm text-foreground">{getDeductionLabel(d.deductionType, rules)}</span>
                   <button
                     type="button"
                     onClick={() => onUndoDeduction(d.id)}

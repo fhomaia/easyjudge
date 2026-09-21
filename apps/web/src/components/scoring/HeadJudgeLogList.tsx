@@ -1,5 +1,4 @@
 import { Loader2, Pencil, Scale, Undo2 } from "lucide-react";
-import { DEDUCTION_LABELS } from "@/lib/deductionLabels";
 import type { HeadJudgeLogEntry } from "@/api/client";
 
 // Aba "Logs" do Painel Head Judge — substitui a "Ocorrências" do print
@@ -16,7 +15,7 @@ function describeEntry(entry: HeadJudgeLogEntry): string {
   if (entry.kind === "score_set") {
     return `${entry.criterionName ?? "Critério"} → ${entry.value?.toFixed(1) ?? "—"}`;
   }
-  const label = entry.deductionType ? DEDUCTION_LABELS[entry.deductionType] : "Dedução";
+  const label = entry.deductionType ? (entry.deductionLabel ?? "Dedução") : "Dedução";
   return entry.kind === "deduction_add" ? `+ ${label}` : `Desfeito: ${label}`;
 }
 

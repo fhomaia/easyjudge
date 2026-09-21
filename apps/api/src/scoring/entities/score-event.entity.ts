@@ -6,7 +6,6 @@ import {
   Index,
 } from 'typeorm';
 import { ScoreEventKind } from '../enums/score-event-kind.enum';
-import { DeductionType } from '../../regulations/enums/deduction-type.enum';
 
 // Tabela append-only (só INSERT, nunca UPDATE/DELETE) — é a peça que
 // implementa "notas nunca podem ser perdidas" (ver CLAUDE.md,
@@ -64,13 +63,11 @@ export class ScoreEvent {
   value: number | null;
 
   // DEDUCTION_ADD
-  @Column({
-    name: 'deduction_type',
-    type: 'enum',
-    enum: DeductionType,
-    nullable: true,
-  })
-  deductionType: DeductionType | null;
+  // Chave do tipo: um valor de DeductionType (padrão) OU custom_<uuid>
+  // (tipo criado pelo organizador no regulamento). Texto livre, não enum,
+  // de propósito — ver migration DeductionTypeToVarchar.
+  @Column({ name: 'deduction_type', type: 'varchar', nullable: true })
+  deductionType: string | null;
 
   // DEDUCTION_REMOVE — aponta pro id do DEDUCTION_ADD sendo desfeito;
   // desfazer também é um INSERT novo, nunca apaga o evento original.

@@ -1,6 +1,5 @@
 import { AlertTriangle, Scale } from "lucide-react";
 import { formatElapsed } from "@/lib/deductionIcons";
-import { DEDUCTION_LABELS } from "@/lib/deductionLabels";
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
 import { HitZeroCelebration } from "@/components/scoring/HitZeroCelebration";
 import { sumMaxScores } from "@/lib/scoringSummary";
@@ -115,7 +114,7 @@ export function PresentationNotesDetail({
                   <span className="w-14 shrink-0 text-xs font-medium text-red-600">
                     {d.presentationElapsedMs !== null ? formatElapsed(d.presentationElapsedMs) : "--:--"}
                   </span>
-                  <span className="flex-1 text-sm text-foreground">{DEDUCTION_LABELS[d.type]}</span>
+                  <span className="flex-1 text-sm text-foreground">{d.label}</span>
                 </div>
               ))}
             </div>

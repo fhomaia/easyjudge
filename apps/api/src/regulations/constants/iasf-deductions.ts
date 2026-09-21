@@ -24,3 +24,25 @@ export const IASF_DEFAULT_DEDUCTIONS: Record<DeductionType, number> = {
   [DeductionType.TIME_LIMIT_VIOLATIONS]: -1.0,
   [DeductionType.BOUNDARY_VIOLATIONS]: -1.0,
 };
+
+// Nome exibido de cada tipo padrão (os tipos personalizados carregam o
+// próprio nome, ver Regulation.customDeductions).
+export const DEDUCTION_LABELS: Record<DeductionType, string> = {
+  [DeductionType.ATHLETE_FALL]: 'Athlete Fall',
+  [DeductionType.MAJOR_ATHLETE_FALL]: 'Major Athlete Fall',
+  [DeductionType.BUILDING_BOBBLE]: 'Building Bobble',
+  [DeductionType.BUILDING_FALL]: 'Building Fall',
+  [DeductionType.MAJOR_BUILDING_FALL]: 'Major Building Fall',
+  [DeductionType.LEGALITY_INFRACTIONS]: 'Legality Infractions',
+  [DeductionType.SKILL_OUT_OF_LEVEL]: 'Skill Performed Out of Level',
+  [DeductionType.TIME_LIMIT_VIOLATIONS]: 'Time Limit Violations',
+  [DeductionType.BOUNDARY_VIOLATIONS]: 'Boundary Violations',
+};
+
+// Prefixo da chave de um tipo personalizado (custom_<uuid>) — nunca
+// colide com os valores de DeductionType.
+export const CUSTOM_DEDUCTION_PREFIX = 'custom_';
+
+// Nome mostrado quando uma dedução já registrada aponta pra um tipo que
+// não existe mais no regulamento.
+export const UNKNOWN_DEDUCTION_LABEL = 'Dedução removida';
