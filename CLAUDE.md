@@ -1546,6 +1546,133 @@ tela de quem está deslogado e guardas de rota).
   navegação falha até recarregar a aba. Se virar problema real,
   tratar o erro de `import()` com um reload automático.
 
+## Ajustes do teste cego com usuário (2026-09-21)
+
+Rodada grande, feita um achado por vez com o usuário. Deploy em 3
+commits (`baa9ef8` deduções, `8af691e` vínculo por email, `536c3bd` UX),
+mais um de carregamento e este arquivo. Migrations novas rodadas no
+Neon pelo usuário ANTES do push: `DeductionTypeToVarchar` e
+`AddHiddenDeductionsToRegulations`.
+
+**Cadastro (`RegisterDialog`)**
+- Fechar o modal (X/clique fora/Esc) NÃO zera o formulário: o
+  componente fica montado na `LoginPage`, então reabrir retoma da etapa
+  onde parou. Só em memória (nada no `localStorage`: CPF, nascimento e
+  senha não podem ficar gravados). Só o fim do cadastro chama `reset()`.
+- Nome virou UM campo (`fullName`), com validação nativa (`pattern`,
+  mesmo padrão do email); `splitFullName` separa no 1º espaço só na hora
+  de enviar (API continua com `firstName`/`lastName`, sem migration).
+  Programa segue com nome único e `lastName` vazio.
+- Nenhum tipo de conta vem pré-selecionado: `role: "judge"` no
+  `INITIAL_STATE` é só valor interno; a seleção mostrada vem de
+  `roleChosen`. Erros do servidor aparecem em cada passo (entre o campo
+  e o botão), não mais no topo do modal.
+- `DatePicker` é digitável (máscara `dd/mm/aaaa`, `formatDateInput` em
+  `lib/masks.ts`) e abre o calendário pelo ícone; `value` continua
+  `yyyy-MM-dd`. Data inválida ou fora de `maxDate`/`startMonth` zera o
+  valor (o "Continuar" trava).
+
+**Deduções por evento (regulamento, modo Personalizado)**
+- Modelo: `Regulation.customDeductions` (jsonb, `{id: "custom_<uuid>",
+  label, value}`) e `Regulation.hiddenDeductions` (tipos IASF ocultados).
+  `score_events.deduction_type` virou `varchar` (antes enum do Postgres).
+  `DeductionRuleView` ganhou `label`/`isCustom`; `RegulationView`
+  ganhou `hiddenDeductions` (pra restaurar). Nomes vêm da API em todo o
+  front (`getDeductionLabel` só como fallback).
+- Só no modo Personalizado (400 no IASF). Nome único (sem repetir os 9
+  padrão nem outro criado), máx. 30 tipos, mínimo de 1 tipo visível.
+- Excluir/ocultar tipo já usado em nota lançada, ou voltar pro IASF
+  com tipo criado em uso, dá 409 (consulta em `score_events` via
+  `schedule_entries`/`schedule_resources`/`schedule_days`). O valor da
+  dedução NÃO fica na nota: é resolvido na leitura pelo tipo, então
+  apagar/ocultar um tipo em uso mudaria notas já julgadas (por isso o
+  bloqueio). Mudar o valor de um tipo depois de lançado continua
+  retroativo (comportamento antigo, não travado).
+- Ingestão de notas TOLERANTE de propósito: `deductionType` é string
+  livre (não valida contra o regulamento). O jurado reenvia lotes do
+  buffer offline; recusar um tipo apagado travaria o lote inteiro
+  (contra o requisito "notas nunca perdidas"). Tipo desconhecido vira
+  valor 0 e rótulo "Dedução removida".
+- Sinal: a API guarda SEMPRE negativo (`toDeductionValue`, ignora o
+  sinal recebido); a UI do regulamento mostra/pede só a magnitude
+  ("Pontos deduzidos"). Súmulas continuam mostrando o "-". Nunca
+  enviar lista parcial de `customDeductions`: linha ausente = exclusão.
+
+**Contas, email e vínculo com evento**
+- Tipo de conta é FIXO (só definido no cadastro; não existe troca).
+  Decisão do usuário: manter assim por enquanto. Um email = uma conta,
+  então quem quer ser jurado E programa precisa de dois emails.
+- Jurado é atividade (qualquer conta menos Programa); Programa é
+  identidade da conta. Por isso NÃO existe "papel de programa por
+  evento". `linkUnclaimedMembersByEmail(userId, email, accountRole)`
+  só reclama o papel PROGRAM do roster para conta Programa e JUDGE para
+  conta não-Programa; linha pendente fica pendente (sem acesso pela
+  metade).
+- Cadastrar/editar jurado com email de conta Programa, ou programa com
+  email de conta não-Programa, dá 409 (só checa quando o email muda:
+  o formulário reenvia o email a cada salvamento). Editar agora vincula
+  de verdade (`syncNewlyLinkedJudge/Program`: perfil, roster, atletas,
+  remove o convite pendente antigo) — antes só gravava o `userId`.
+- `JudgeFormFields` detecta email de conta pelo catálogo já carregado
+  (sem endpoint novo de consulta por email: evita enumeração), mostra
+  "Este email já pertence a X", vincula e trava o nome. Marca amarela
+  "Aguardando conta" em jurado/programa sem `userId`.
+- `EventsService.setEventLogo` só exigia o papel GLOBAL: agora exige
+  admin/assessor do evento (era brecha: qualquer jurado/org trocava a
+  foto de qualquer evento por `aliasId`).
+
+**Upload de documentos do regulamento**
+- `store/uploads.ts` (`trackUpload`) + `UploadStatusBanner` (renderizado
+  em `App.tsx`): painel fixo com enviando/enviado/erro que sobrevive à
+  navegação (o `fetch` continua depois da tela desmontar). Minimizável e
+  arrastável (pointer events, posição só em memória); erro reexpande.
+  Só o regulamento passa por ele (logo/avatar não).
+- `useBeforeUnloadWarning` avisa ao fechar/recarregar com envio ativo.
+  Texto é do navegador (não dá pra citar o arquivo) e no celular é
+  pouco confiável (iOS praticamente ignora).
+
+**Carregamento**
+- `PageLoadingOverlay` + `useMinimumLoading` (mín. 500 ms, teto de 10 s
+  contra travar): raio por cima de TODAS as telas de dados (config,
+  Home, Perfil, Atletas, sistemas de pontuação) e mínimo nas telas ao
+  vivo. EXCEÇÃO deliberada: `EventLiveScoringPage` (lançar nota) sem o
+  mínimo, por causa do requisito de velocidade percebida.
+- Descoberta: React Router v7 troca de tela em transição, então o
+  `Suspense` de `App.tsx` NÃO mostra o fallback na navegação interna,
+  só no carregamento inicial da página.
+
+**Outros ajustes de UX**
+- `main` com `overflow-y-auto` precisa ser `relative` (23 telas): sem
+  isso, elementos `sr-only` (absolutos) escapam do recorte e criam um
+  segundo scroll no documento.
+- Menu "⋯" do evento: "Configurar evento" (→ Setup, só em `created`) e
+  "Dados do evento" (popup; antes "Editar"). Botão das telas de etapa:
+  "Sair". Botão do Setup: "Gerenciar equipe" (título da página idem).
+- Foto do evento editável (`EventPhotoField`, compartilhado com criar);
+  não dá pra remover foto (backend só troca). Sigla do evento só com
+  letras/números (`\p{L}\p{N}`). Logo do menu lateral leva à Home.
+- Linha inteira de Jurado de Legalidade/Head Judge abre o modal (1º
+  recurso; célula de outra pista abre a dela). Painel de jurados ganhou
+  o banner "Próxima etapa recomendada" (→ Setup/publicação); resumo do
+  Setup mostra "Publique o evento!" com todas as etapas prontas.
+
+**Gotchas desta rodada**
+- Testar no navegador (Claude in Chrome): com a aba em segundo plano os
+  `setTimeout` viram ~1 s, então loops longos estouram os 45 s do CDP —
+  e o script CONTINUA rodando na página depois do erro, contaminando a
+  próxima medição (esperar terminar). Hash de bundle de produção nunca
+  bate com o do build local (o Cloudflare compila com `VITE_API_URL`):
+  conferir por conteúdo (uma string nova), não por nome de arquivo.
+- O auto mode bloqueia ler o segredo do `.env` para gerar token de
+  login: teste autenticado de ponta a ponta precisa de conta de teste
+  fornecida pelo usuário.
+- Plano do Render NÃO confirmado (as notas dizem Free; usuário lembrou
+  de "trocar pra Starter" mas não há registro). Conferir em Settings ->
+  Instance Type antes de qualquer competição real.
+- Pendências de teste em produção: 409 de excluir tipo de dedução já
+  usado (a consulta SQL nunca rodou), vínculo por email jurado/programa
+  ponta a ponta, e o raio nas telas de Atletas/sistemas de pontuação.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
