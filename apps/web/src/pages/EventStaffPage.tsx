@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MoreHorizontal, Plus, Trash2, UserCog } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -77,6 +78,7 @@ export function EventStaffPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={!event && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

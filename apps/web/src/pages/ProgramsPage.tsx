@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -190,6 +191,7 @@ export function ProgramsPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={programs === null && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -295,7 +296,9 @@ export function EventLiveSchedulePage() {
     refreshDays();
   }
 
-  if (!event || !days || !teams) {
+  // Meio segundo no mínimo (useMinimumLoading), pro raio não piscar.
+  const showLoading = useMinimumLoading(!event || !days || !teams);
+  if (showLoading || !event || !days || !teams) {
     return (
       <RouteLoadingFallback />
     );

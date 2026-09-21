@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import { Building2, CalendarDays, ChevronLeft, MapPin, Trophy } from "lucide-react";
@@ -82,7 +83,9 @@ export function EventLiveTeamNotesPage() {
     navigate("/login");
   }
 
-  if (!event || !entries) {
+  // Meio segundo no mínimo (useMinimumLoading), pro raio não piscar.
+  const showLoading = useMinimumLoading(!event || !entries);
+  if (showLoading || !event || !entries) {
     return (
       <RouteLoadingFallback />
     );

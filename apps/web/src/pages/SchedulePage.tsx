@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -93,6 +94,9 @@ export function SchedulePage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [days, setDays] = useState<ScheduleDay[]>([]);
+  // `days` começa como [] (não null), então precisa de um flag próprio
+  // pro indicador de carregamento inicial.
+  const [daysLoaded, setDaysLoaded] = useState(false);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [unscheduled, setUnscheduled] = useState<UnscheduledPair[]>([]);
   const [addingDay, setAddingDay] = useState(false);
@@ -157,7 +161,8 @@ export function SchedulePage() {
         setDays(loaded);
         setSelectedDayId((current) => current ?? loaded[0]?.id ?? null);
       })
-      .catch(() => setError("Não foi possível carregar o cronograma. Tente novamente."));
+      .catch(() => setError("Não foi possível carregar o cronograma. Tente novamente."))
+      .finally(() => setDaysLoaded(true));
   }
 
   function refetchUnscheduled() {
@@ -565,6 +570,7 @@ export function SchedulePage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={!daysLoaded} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <DndContext

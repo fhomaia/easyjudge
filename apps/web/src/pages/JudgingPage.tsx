@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, ArrowRight, CheckCircle2, Info, Star, Users } from "lucide-react";
@@ -53,6 +54,9 @@ export function JudgingPage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  // `categories` começa como [] (não null): flag próprio pro indicador
+  // de carregamento inicial.
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [criteria, setCriteria] = useState<ScoringCriterion[]>([]);
@@ -91,7 +95,11 @@ export function JudgingPage() {
 
   useEffect(() => {
     if (!id) return;
-    categoriesApi.list(id).then(setCategories).catch(() => setCategories([]));
+    categoriesApi
+      .list(id)
+      .then(setCategories)
+      .catch(() => setCategories([]))
+      .finally(() => setCategoriesLoaded(true));
     judgesApi.list(id).then(setJudges).catch(() => setJudges([]));
   }, [id]);
 
@@ -530,6 +538,7 @@ export function JudgingPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={!categoriesLoaded || !templateStatsLoaded} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>

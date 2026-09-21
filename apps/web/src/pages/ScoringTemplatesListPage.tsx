@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
@@ -58,6 +59,7 @@ export function ScoringTemplatesListPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={templates === null} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -149,7 +150,9 @@ export function EventLiveNotesPage() {
   const todayCompleted = todayItems.filter((item) => item.submitted).length;
   const todayPercent = todayItems.length > 0 ? Math.round((todayCompleted / todayItems.length) * 100) : 0;
 
-  if (!event || !assignment || !submittedIds) {
+  // Meio segundo no mínimo (useMinimumLoading), pro raio não piscar.
+  const showLoading = useMinimumLoading(!event || !assignment || !submittedIds);
+  if (showLoading || !event || !assignment || !submittedIds) {
     return (
       <RouteLoadingFallback />
     );

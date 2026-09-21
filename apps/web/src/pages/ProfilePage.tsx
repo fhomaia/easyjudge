@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -50,6 +51,7 @@ export function ProfilePage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={profile === null} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">

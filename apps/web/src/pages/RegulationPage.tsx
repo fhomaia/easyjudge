@@ -1,4 +1,5 @@
 import { trackUpload } from "@/store/uploads";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Star } from "lucide-react";
@@ -107,6 +108,7 @@ export function RegulationPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={(regulation === null || templates === null) && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

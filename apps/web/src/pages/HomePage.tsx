@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Ticket } from "lucide-react";
@@ -228,6 +229,7 @@ export function HomePage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={events === null && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">

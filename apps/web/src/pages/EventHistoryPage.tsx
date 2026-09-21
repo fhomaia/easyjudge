@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, History } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -56,6 +57,7 @@ export function EventHistoryPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={(!event || entries === null) && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

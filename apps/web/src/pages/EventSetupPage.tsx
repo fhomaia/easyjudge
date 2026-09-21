@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, UserCog } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -321,6 +322,7 @@ export function EventSetupPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={(!event || regulation === null || templates === null) && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

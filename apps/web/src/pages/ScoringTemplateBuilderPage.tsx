@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Award, CheckCircle2, Download, FileSpreadsheet, FileText, Lock, Pencil } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -203,6 +204,7 @@ export function ScoringTemplateBuilderPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={(!template || criteria === null) && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

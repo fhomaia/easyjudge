@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Plus, Trash2, Users } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -68,6 +69,7 @@ export function AthletesManagementPage() {
 
   return (
     <div className="flex h-svh bg-background">
+      <PageLoadingOverlay loading={athletes === null} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
