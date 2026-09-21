@@ -4,6 +4,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { GuestRoute } from "@/components/GuestRoute";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
+import { UploadStatusBanner } from "@/components/UploadStatusBanner";
 
 const HomePage = lazy(() =>
   import("@/pages/HomePage").then((m) => ({ default: m.HomePage })),
@@ -106,6 +107,7 @@ const PrivacyPolicyPage = lazy(() =>
 
 function App() {
   return (
+    <>
     <Suspense fallback={<RouteLoadingFallback />}>
       <Routes>
         {/* Fora de GuestRoute/ProtectedRoute de propósito — precisa
@@ -169,6 +171,8 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
+    <UploadStatusBanner />
+    </>
   );
 }
 

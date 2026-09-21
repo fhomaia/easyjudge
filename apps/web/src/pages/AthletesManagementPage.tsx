@@ -70,7 +70,7 @@ export function AthletesManagementPage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto pt-14 sm:pt-0">
+      <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
         <div className="w-full px-6 py-10 sm:px-10 lg:px-16">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">

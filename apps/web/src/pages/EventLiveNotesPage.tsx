@@ -417,7 +417,7 @@ export function EventLiveNotesPage() {
         eventNavItems={eventNavTabs}
       />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
           {isAdminOrAssessor && assignment.isJudge ? (
             <>
               <div className="mx-4 mt-4">

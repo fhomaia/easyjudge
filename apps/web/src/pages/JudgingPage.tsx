@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
-import { ArrowLeft, CheckCircle2, Info, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Info, Star, Users } from "lucide-react";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -533,7 +533,7 @@ export function JudgingPage() {
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <main className="flex flex-1 flex-col overflow-y-auto">
+        <main className="relative flex flex-1 flex-col overflow-y-auto">
           <div className="flex items-center justify-between px-10 pt-6">
             <button
               type="button"
@@ -541,7 +541,7 @@ export function JudgingPage() {
               className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-4" />
-              Voltar para configuração do evento
+              Sair
             </button>
             <NotificationBell unreadCount={notificationsUnreadCount} />
           </div>
@@ -741,6 +741,28 @@ export function JudgingPage() {
                           Dica: arraste um jurado para a coluna de uma pista (nos critérios ou
                           grupos) para atribuir. Clique numa célula para editar os jurados
                           atribuídos ali.
+                        </div>
+
+                        <div className="flex flex-col gap-4 rounded-xl border border-amber-300/60 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-400/20 dark:bg-amber-500/10">
+                          <div className="flex items-start gap-3">
+                            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-600 dark:text-amber-400">
+                              <Star className="size-5" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground">Próxima etapa recomendada</p>
+                              <p className="text-sm text-muted-foreground">
+                                Agora revise a configuração e publique o evento para os participantes.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/events/${id}/setup`)}
+                            className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                          >
+                            Ir para publicação
+                            <ArrowRight className="size-4" />
+                          </button>
                         </div>
                       </>
                     )}

@@ -127,7 +127,7 @@ export function EventLiveTeamNotesPage() {
           </button>
         </header>
 
-        <main className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-4">
+        <main className="relative mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-4">
           {selectedId && detail ? (
             <div>
               <div className="mb-4 flex items-center justify-between gap-3">
@@ -179,7 +179,7 @@ export function EventLiveTeamNotesPage() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="relative flex-1 overflow-y-auto p-6">
             {selectedId && detail ? (
               <div>
                 <div className="mb-4 flex items-center justify-between gap-3">

@@ -46,8 +46,7 @@ const SIGNUP_ROLE_ORDER: SignupRole[] = [
 // que a conta pendente e o código já foram criados.
 const STEPS = [
   "role",
-  "firstName",
-  "lastName",
+  "name",
   "document",
   "birthDate",
   "email",
@@ -64,10 +63,9 @@ type StepKey = (typeof STEPS)[number];
 // por definição não tem vínculo). "team" também não faz sentido pra
 // espectador (que declara de propósito não ter equipe), pra atleta (o
 // email do programa, coletado em "programEmail", já é suficiente — não
-// faz sentido pedir os dois) nem pra programa (a etapa "firstName" já
+// faz sentido pedir os dois) nem pra programa (a etapa "name" já
 // pede o nome do próprio programa/ginásio, perguntar de novo seria
-// redundante). "lastName" também não faz sentido pra programa — é uma
-// instituição, não uma pessoa com nome+sobrenome. "birthDate" só faz
+// redundante). "birthDate" só faz
 // sentido pra quem usa CPF (pedido de LGPD) — nunca pra CNPJ. Pra
 // atleta/espectador (só aceitam CPF, ver isOptionalCpfOnlyRole) sempre
 // pergunta, mesmo que o documento em si tenha sido pulado — não faz
@@ -82,7 +80,6 @@ function isStepApplicable(
   if (key === "team") {
     return role !== "spectator" && role !== "athlete" && role !== "program";
   }
-  if (key === "lastName") return role !== "program";
   if (key === "birthDate") {
     if (isOptionalCpfOnlyRole(role)) return true;
     return form.documentType === "cpf";
@@ -95,6 +92,19 @@ function isStepApplicable(
 // diferente dos demais papéis, que continuam com CPF/CNPJ obrigatório.
 function isOptionalCpfOnlyRole(role: SignupRole): boolean {
   return role === "athlete" || role === "spectator";
+}
+
+// Backend guarda firstName/lastName separados. Separa no primeiro
+// espaço: "Maria da Silva" -> "Maria" + "da Silva". Programa é um nome
+// só (lastName vazio, ver RegisterDto).
+function splitFullName(
+  fullName: string,
+  role: SignupRole,
+): { firstName: string; lastName: string } {
+  const name = fullName.trim().replace(/\s+/g, " ");
+  if (role === "program") return { firstName: name, lastName: "" };
+  const i = name.indexOf(" ");
+  return { firstName: name.slice(0, i), lastName: name.slice(i + 1) };
 }
 
 const LOCKED_STEPS: StepKey[] = ["verify", "password"];
@@ -139,9 +149,12 @@ function OptionCard({
 
 const INITIAL_STATE = {
   role: "judge" as SignupRole,
+  // `role` acima é só um valor interno padrão (o tipo não é nulo); a
+  // etapa "role" só mostra uma opção selecionada depois que o usuário
+  // de fato escolhe uma, senão "Jurado" já viria destacado.
+  roleChosen: false,
   documentType: "cpf" as DocumentType,
-  firstName: "",
-  lastName: "",
+  fullName: "",
   documentNumber: "",
   birthDate: "",
   email: "",
@@ -203,8 +216,14 @@ export function RegisterDialog({
     setPendingToken(null);
   }
 
+  // Fechar (X, clique fora, Esc) NÃO zera o formulário: o componente
+  // continua montado na LoginPage, então reabrir o popup retoma da
+  // etapa onde o usuário parou (teste cego: fechar sem querer obrigava
+  // a recomeçar). Só o fim do cadastro zera (completeRegistration).
+  // Fica só em memória, nada vai pro localStorage (CPF, data de
+  // nascimento e senha não devem ficar gravados no navegador).
   function handleOpenChange(next: boolean) {
-    if (!next) reset();
+    if (!next) setError(null);
     onOpenChange(next);
   }
 
@@ -259,8 +278,7 @@ export function RegisterDialog({
         // Espectador não existe pro backend — vira athlete comum, sem
         // equipe/vínculo (ver comentário de SIGNUP_ROLE_ORDER acima).
         role: form.role === "spectator" ? "athlete" : form.role,
-        firstName: form.firstName,
-        lastName: form.lastName,
+        ...splitFullName(form.fullName, form.role),
         // Atleta/espectador podem ter pulado o documento (opcional, ver
         // isOptionalCpfOnlyRole) — nesse caso os dois campos vão undefined,
         // nunca um documentType solto sem número.
@@ -354,7 +372,8 @@ export function RegisterDialog({
   async function completeRegistration() {
     if (!pendingToken) return;
     login(pendingToken);
-    handleOpenChange(false);
+    reset();
+    onOpenChange(false);
     onSuccess();
   }
 
@@ -382,8 +401,6 @@ export function RegisterDialog({
             )}
             <Progress value={progress} className="flex-1" />
           </div>
-
-          <FormError message={error} />
 
           {/* Alguns passos (ex. "role", com 5 opções desde que "Espectador"
             foi acrescentado) ficam mais altos que um min-h fixo
@@ -445,10 +462,11 @@ export function RegisterDialog({
                       Qual será seu tipo de conta?
                     </h3>
                     <RadioGroup
-                      value={form.role}
+                      value={form.roleChosen ? form.role : ""}
                       onValueChange={(v) => {
                         const role = v as SignupRole;
                         update("role", role);
+                        update("roleChosen", true);
                         // Se o usuário já tinha escolhido CNPJ (ex.: veio de
                         // "Programa") e volta pra trocar pra atleta/espectador,
                         // força de volta pra CPF — os únicos aceitos aqui.
@@ -464,7 +482,11 @@ export function RegisterDialog({
                           key={r}
                           value={r}
                           label={SIGNUP_ROLE_LABELS[r]}
-                          onSelect={r === form.role ? goNext : undefined}
+                          onSelect={
+                            form.roleChosen && r === form.role
+                              ? goNext
+                              : undefined
+                          }
                         />
                       ))}
                     </RadioGroup>
@@ -476,7 +498,7 @@ export function RegisterDialog({
                   </div>
                 )}
 
-                {step === "firstName" && (
+                {step === "name" && (
                   <form
                     onSubmit={submitSimpleStep}
                     className="grid gap-5 short:gap-3"
@@ -484,40 +506,37 @@ export function RegisterDialog({
                     <h3 className="text-xl font-medium short:text-lg">
                       {form.role === "program"
                         ? "Qual o nome do seu programa/ginásio?"
-                        : "Qual é o seu nome?"}
+                        : "Qual é o seu nome completo?"}
                     </h3>
                     <Input
                       autoFocus
                       aria-label={
                         form.role === "program"
                           ? "Nome do programa/ginásio"
-                          : "Nome"
+                          : "Nome completo"
                       }
-                      value={form.firstName}
-                      onChange={(e) => update("firstName", e.target.value)}
+                      autoComplete={
+                        form.role === "program" ? "organization" : "name"
+                      }
+                      placeholder={
+                        form.role === "program" ? undefined : "Nome e sobrenome"
+                      }
+                      value={form.fullName}
+                      onChange={(e) => update("fullName", e.target.value)}
+                      // Pessoa precisa de nome + sobrenome (o backend exige
+                      // os dois); programa é um nome só. Validação nativa,
+                      // mesmo padrão do passo de email.
+                      pattern={
+                        form.role === "program" ? undefined : "\\s*\\S+\\s+\\S.*"
+                      }
+                      title={
+                        form.role === "program"
+                          ? undefined
+                          : "Informe seu nome completo (nome e sobrenome)."
+                      }
                       required
                     />
-                    <Button type="submit" className="w-full">
-                      Continuar
-                    </Button>
-                  </form>
-                )}
-
-                {step === "lastName" && (
-                  <form
-                    onSubmit={submitSimpleStep}
-                    className="grid gap-5 short:gap-3"
-                  >
-                    <h3 className="text-xl font-medium short:text-lg">
-                      E o seu sobrenome?
-                    </h3>
-                    <Input
-                      autoFocus
-                      aria-label="Sobrenome"
-                      value={form.lastName}
-                      onChange={(e) => update("lastName", e.target.value)}
-                      required
-                    />
+                    <FormError message={error} />
                     <Button type="submit" className="w-full">
                       Continuar
                     </Button>
@@ -579,6 +598,7 @@ export function RegisterDialog({
                       }
                       required={!isOptionalCpfOnlyRole(form.role)}
                     />
+                    <FormError message={error} />
                     <Button type="submit" className="w-full">
                       {isOptionalCpfOnlyRole(form.role) &&
                       form.documentNumber === ""
@@ -604,7 +624,6 @@ export function RegisterDialog({
                       id="birthDate"
                       value={form.birthDate}
                       onChange={(v) => update("birthDate", v)}
-                      placeholder="Selecione a data de nascimento"
                       captionLayout="dropdown"
                       startMonth={
                         new Date(new Date().getFullYear() - 100, 0, 1)
@@ -612,6 +631,7 @@ export function RegisterDialog({
                       endMonth={getMaxBirthDate()}
                       maxDate={getMaxBirthDate()}
                     />
+                    <FormError message={error} />
                     <Button
                       type="submit"
                       className="w-full"
@@ -638,6 +658,7 @@ export function RegisterDialog({
                       onChange={(e) => update("email", e.target.value.trim())}
                       required
                     />
+                    <FormError message={error} />
                     <Button type="submit" className="w-full">
                       Continuar
                     </Button>
@@ -663,6 +684,7 @@ export function RegisterDialog({
                         update("teamOrInstitutionName", e.target.value)
                       }
                     />
+                    <FormError message={error} />
                     <Button type="submit" className="w-full">
                       {form.teamOrInstitutionName ? "Continuar" : "Pular"}
                     </Button>
@@ -694,6 +716,7 @@ export function RegisterDialog({
                         update("programEmail", e.target.value.trim())
                       }
                     />
+                    <FormError message={error} />
                     <Button type="submit" className="w-full">
                       {form.programEmail ? "Continuar" : "Pular"}
                     </Button>
@@ -712,7 +735,7 @@ export function RegisterDialog({
                       />
                       <SummaryRow
                         label="Nome"
-                        value={`${form.firstName} ${form.lastName}`.trim()}
+                        value={form.fullName.trim()}
                       />
                       <SummaryRow
                         label={form.documentType === "cpf" ? "CPF" : "CNPJ"}
@@ -748,7 +771,7 @@ export function RegisterDialog({
                         onCheckedChange={(value) =>
                           update("acceptedTerms", value === true)
                         }
-                        className="mt-0.5"
+                        className="mt-0.5 border-2 border-primary"
                       />
                       <span>
                         Li e concordo com os{" "}
@@ -774,6 +797,7 @@ export function RegisterDialog({
                         .
                       </span>
                     </label>
+                    <FormError message={error} />
                     <Button
                       type="button"
                       disabled={loading || !form.acceptedTerms}
@@ -812,6 +836,7 @@ export function RegisterDialog({
                     >
                       Reenviar código
                     </button>
+                    <FormError message={error} />
                     <Button type="submit" disabled={loading} className="w-full">
                       {loading ? "Verificando..." : "Confirmar"}
                     </Button>
@@ -878,6 +903,7 @@ export function RegisterDialog({
                         )}
                     </div>
 
+                    <FormError message={error} />
                     <Button
                       type="submit"
                       disabled={

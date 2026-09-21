@@ -322,7 +322,7 @@ export function EventLiveDesktopView({
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col overflow-y-auto p-8">
+      <main className="relative flex flex-1 flex-col overflow-y-auto p-8">
         <div className="grid shrink-0 grid-cols-4 gap-4">
           {/* PRÓXIMA APRESENTAÇÃO */}
           <div className="rounded-2xl border border-border bg-card p-4">

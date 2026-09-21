@@ -60,7 +60,7 @@ export function ScoringTemplatesListPage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="flex justify-end px-10 pt-6">
           <NotificationBell />
         </div>

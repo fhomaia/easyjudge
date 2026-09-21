@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,9 @@ export function RegulationAdditionalDocuments({
   }
 
   function handleDialogOpenChange(open: boolean) {
+    // Fechar o popup no meio do envio esconderia o andamento — mantém
+    // aberto até concluir (ou falhar).
+    if (!open && uploading) return;
     if (!open) {
       setPendingFile(null);
       setTitle("");
@@ -126,9 +129,26 @@ export function RegulationAdditionalDocuments({
               />
             </div>
 
-            <Button type="submit" disabled={uploading} className="w-full">
-              {uploading ? "Enviando..." : "Enviar documento"}
+            <Button
+              type="submit"
+              disabled={uploading}
+              aria-busy={uploading}
+              className="w-full disabled:opacity-100"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                "Enviar documento"
+              )}
             </Button>
+            {uploading && (
+              <p className="-mt-2 text-center text-xs text-muted-foreground">
+                Não feche esta página até o envio terminar.
+              </p>
+            )}
           </form>
         </DialogContent>
       </Dialog>

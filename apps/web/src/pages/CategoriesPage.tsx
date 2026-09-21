@@ -209,7 +209,7 @@ export function CategoriesPage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"
@@ -217,7 +217,7 @@ export function CategoriesPage() {
             className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            Voltar para configuração do evento
+            Sair
           </button>
           <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>

@@ -495,7 +495,7 @@ export function EventLiveScoringPage() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-4">
+      <main className="relative flex-1 overflow-y-auto pb-4">
         {sheet.contestationRequested && (
           <div
             className={cn(

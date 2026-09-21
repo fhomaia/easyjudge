@@ -69,7 +69,12 @@ function RoleAssignmentCell({
     <button
       ref={setNodeRef}
       type="button"
-      onClick={() => onSelectCell(role, resourceId)}
+      onClick={(e) => {
+        // A linha inteira também abre o modal (do 1º recurso) — sem
+        // parar a propagação, esse clique subiria e trocaria o recurso.
+        e.stopPropagation();
+        onSelectCell(role, resourceId);
+      }}
       className={cn(
         "flex min-h-9 items-center rounded-md px-1.5 transition-colors hover:bg-muted/40",
         selected && "bg-primary/[0.06]",
@@ -119,6 +124,8 @@ export function SpecialRolesCard({
   selectedResourceId,
   onSelectCell,
 }: SpecialRolesCardProps) {
+  const firstResourceId = resources[0]?.id ?? null;
+
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-sm font-semibold text-foreground">
@@ -149,8 +156,30 @@ export function SpecialRolesCard({
           return (
             <div
               key={role}
+              // Clicar em QUALQUER ponto da linha abre o modal de
+              // atribuição. Com mais de uma pista, abre a primeira
+              // (o título do modal diz qual); clicar direto na célula
+              // de outra pista continua abrindo a dela.
+              role={firstResourceId ? "button" : undefined}
+              tabIndex={firstResourceId ? 0 : undefined}
+              onClick={firstResourceId ? () => onSelectCell(role, firstResourceId) : undefined}
+              onKeyDown={
+                firstResourceId
+                  ? (e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectCell(role, firstResourceId);
+                      }
+                    }
+                  : undefined
+              }
               style={{ gridTemplateColumns: `1.6fr repeat(${resources.length}, 160px)` }}
-              className="grid items-center gap-3 py-4 first:pt-0 last:pb-0"
+              className={cn(
+                "grid items-center gap-3 py-4 first:pt-0 last:pb-0",
+                firstResourceId &&
+                  "-mx-2 cursor-pointer rounded-md px-2 outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring",
+              )}
             >
               <div className="flex items-center gap-3">
                 <div

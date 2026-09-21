@@ -8,7 +8,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getAccountLabel } from "@/lib/roleLabels";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -64,9 +64,22 @@ function isNavItemActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
-export function BrandMark({ compact }: { compact?: boolean }) {
+// Logo + nome: sempre leva pra Home ("/"). `onNavigate` deixa o menu
+// deslizante do mobile fechar junto com o clique.
+export function BrandMark({
+  compact,
+  onNavigate,
+}: {
+  compact?: boolean;
+  onNavigate?: () => void;
+}) {
   return (
-    <div className="flex items-center gap-3">
+    <Link
+      to="/"
+      onClick={onNavigate}
+      aria-label="Ir para a página inicial"
+      className="flex items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+    >
       <img
         src="/favicon.png"
         alt=""
@@ -83,7 +96,7 @@ export function BrandMark({ compact }: { compact?: boolean }) {
       >
         Cheer<span className="text-brand-yellow-bright">Cup</span>
       </p>
-    </div>
+    </Link>
   );
 }
 
@@ -138,7 +151,7 @@ export function MobileNavSheet({
         >
           <SheetTitle className="sr-only">Menu</SheetTitle>
           <div className="flex items-center justify-between gap-3 border-b border-white/10 p-6">
-            <BrandMark />
+            <BrandMark onNavigate={() => onOpenChange(false)} />
             <button
               type="button"
               onClick={() => onOpenChange(false)}

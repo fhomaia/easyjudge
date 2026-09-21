@@ -8,7 +8,7 @@ import {
   Menu,
   UserCog,
 } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getAccountLabel } from "@/lib/roleLabels";
 import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
@@ -348,7 +348,9 @@ export function AppSidebar({
           )}
         >
           {collapsed ? (
-            <img src="/favicon.png" alt="" className="size-7 shrink-0 rounded-md" />
+            <Link to="/" aria-label="Ir para a página inicial" className="shrink-0">
+              <img src="/favicon.png" alt="" className="size-7 rounded-md" />
+            </Link>
           ) : (
             <BrandMark />
           )}

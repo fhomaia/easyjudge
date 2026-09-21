@@ -37,7 +37,10 @@ export function SetupProgressSummary({ steps, published }: SetupProgressSummaryP
           <p className="text-sm text-muted-foreground">
             {completedCount === 0
               ? "Vamos começar a configurar o seu evento!"
-              : "Falta pouco para o seu evento ficar pronto!"}
+              : allStepsCompleted && !published
+                ? // Só falta a última etapa (publicar).
+                  "Publique o evento!"
+                : "Falta pouco para o seu evento ficar pronto!"}
           </p>
         </div>
       </div>

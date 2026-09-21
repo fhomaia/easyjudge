@@ -320,7 +320,7 @@ export function EventLiveSchedulePage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} eventNavItems={eventNavTabs} />
 
-      <main className="flex flex-1 flex-col overflow-x-hidden overflow-y-auto pt-14 sm:pt-0">
+      <main className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto pt-14 sm:pt-0">
         <header className="border-b border-border bg-card px-4 py-5 sm:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600">

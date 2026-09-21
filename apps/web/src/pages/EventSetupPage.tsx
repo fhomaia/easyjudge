@@ -323,7 +323,7 @@ export function EventSetupPage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"
@@ -356,12 +356,12 @@ export function EventSetupPage() {
                 {(event.currentUserRoles.includes("admin") ||
                   event.currentUserRoles.includes("assessor")) && (
                   <Button
-                    variant="outline"
-                    className="mt-4 shrink-0"
+                    size="lg"
+                    className="mt-4 shrink-0 shadow-md"
                     onClick={() => navigate(`/events/${id}/access`)}
                   >
                     <UserCog data-icon="inline-start" />
-                    Gerenciar acessos
+                    Gerenciar equipe
                   </Button>
                 )}
               </div>

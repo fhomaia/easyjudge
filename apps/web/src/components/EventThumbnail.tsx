@@ -7,13 +7,18 @@ const STOPWORDS = new Set([
 ]);
 
 function getEventInitials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
+  // Separa em qualquer coisa que não seja letra ou número (espaço,
+  // hífen, emoji, "#", etc.), pra símbolos nunca virarem sigla. \p{L}
+  // cobre acentuadas (Águia -> Á), não só A-Z.
+  const words = name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const significant = words.filter((w) => !STOPWORDS.has(w.toLowerCase()));
   const source = significant.length > 0 ? significant : words;
-  return source
+  const initials = source
     .slice(0, 3)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+  // Nome sem nenhuma letra/número (ex. só símbolos): evita o quadrado vazio.
+  return initials || "?";
 }
 
 interface EventThumbnailProps {

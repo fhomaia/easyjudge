@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FormError } from "@/components/FormError";
 import { EventFormFields, type EventFormValues } from "@/components/EventFormFields";
+import { EventPhotoField } from "@/components/EventPhotoField";
 import { eventsApi, ApiError, type Event } from "@/api/client";
 
 interface EditEventDialogProps {
@@ -41,13 +42,20 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const isLocked = event?.status === "published" || event?.status === "started";
 
   useEffect(() => {
     if (event) {
       setForm(toFormValues(event));
-      setError(null);
+      setPhoto(null);
+      setPhotoPreview(null);
+      // Sem setError(null) aqui de propósito: o erro já é limpo ao
+      // fechar (handleOpenChange), e este efeito também roda depois de
+      // salvar (o pai devolve o evento atualizado) — apagaria o aviso
+      // de "dados salvos, mas a foto falhou".
     }
   }, [event]);
 
@@ -70,12 +78,27 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
     }
     setLoading(true);
     try {
-      const updated = await eventsApi.update(event.aliasId, {
+      let updated = await eventsApi.update(event.aliasId, {
         name: form.name,
         startDate: form.startDate,
         location: form.location,
         venue: form.venue,
       });
+      if (photo) {
+        try {
+          updated = await eventsApi.uploadLogo(event.aliasId, photo);
+        } catch (err) {
+          // Os dados já foram salvos — repassa o evento atualizado pro
+          // pai e mantém o popup aberto só pra avisar da foto.
+          onUpdated(updated);
+          setError(
+            err instanceof ApiError
+              ? `Dados salvos, mas a foto não foi enviada: ${err.message}`
+              : "Dados salvos, mas a foto não foi enviada. Tente novamente.",
+          );
+          return;
+        }
+      }
       onUpdated(updated);
       handleOpenChange(false);
     } catch (err) {
@@ -96,7 +119,7 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
       <Dialog open={event !== null} onOpenChange={handleOpenChange}>
         <DialogContent className="gap-7 p-10 sm:max-w-lg">
           <div className="grid gap-1.5">
-            <DialogTitle className="text-xl font-medium">Editar evento</DialogTitle>
+            <DialogTitle className="text-xl font-medium">Dados do evento</DialogTitle>
             <DialogDescription>Atualize os dados básicos do evento.</DialogDescription>
           </div>
 
@@ -112,6 +135,22 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
               )}
 
               <form onSubmit={handleSubmit} className="grid gap-5">
+                <EventPhotoField
+                  name={form.name}
+                  currentLogoUrl={event?.logoUrl ?? null}
+                  preview={photoPreview}
+                  onSelect={(file, preview) => {
+                    setPhoto(file);
+                    setPhotoPreview(preview);
+                  }}
+                  onClear={() => {
+                    setPhoto(null);
+                    setPhotoPreview(null);
+                  }}
+                  onError={setError}
+                  disabled={isLocked}
+                />
+
                 <EventFormFields form={form} onChange={update} disabled={isLocked} />
 
                 {isLocked ? (

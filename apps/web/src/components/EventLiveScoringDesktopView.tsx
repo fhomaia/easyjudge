@@ -285,7 +285,7 @@ export function EventLiveScoringDesktopView({
         )}
       </header>
 
-      <main className="flex flex-1 flex-col overflow-y-auto p-6">
+      <main className="relative flex flex-1 flex-col overflow-y-auto p-6">
         {sheet.contestationRequested && (
           <div
             className={cn(

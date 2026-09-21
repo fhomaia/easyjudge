@@ -1,4 +1,5 @@
-import { History, Pencil, QrCode, Send, Trash2, Undo2, MoreVertical } from "lucide-react";
+import { History, Pencil, QrCode, Send, Settings, Trash2, Undo2, MoreVertical } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +37,14 @@ export function EventActionsMenu({
   onTogglePublish,
   onShare,
 }: EventActionsMenuProps) {
+  const navigate = useNavigate();
+
   if (!isAdmin && !isAssessor) return null;
+
+  // Mesmo destino do clique no card de um evento em "Criado" (ver
+  // EventListItem/EventGridItem) — aqui com nome explícito, pra não
+  // confundir com "Dados do evento" (popup de nome/data/local/foto).
+  const canConfigure = event.status === "created";
 
   const canTogglePublish =
     isAdmin && (event.status === "created" || event.status === "published");
@@ -57,10 +65,18 @@ export function EventActionsMenu({
           <MoreVertical className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {canConfigure && (
+            <DropdownMenuItem
+              onClick={() => navigate(`/events/${event.aliasId}/setup`)}
+            >
+              <Settings data-icon="inline-start" />
+              Configurar evento
+            </DropdownMenuItem>
+          )}
           {isAdmin && (
             <DropdownMenuItem onClick={() => onEdit(event)}>
               <Pencil data-icon="inline-start" />
-              Editar
+              Dados do evento
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={() => onViewHistory(event)}>

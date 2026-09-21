@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,12 +6,10 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/FormError";
 import { EventFormFields } from "@/components/EventFormFields";
-import { EventThumbnail } from "@/components/EventThumbnail";
+import { EventPhotoField } from "@/components/EventPhotoField";
 import { eventsApi, ApiError, type Event } from "@/api/client";
-import { ImagePlus, X } from "lucide-react";
 
 interface CreateEventDialogProps {
   open: boolean;
@@ -26,51 +24,15 @@ const initialForm = {
   venue: "",
 };
 
-const ACCEPTED_LOGO_TYPES = "image/png,image/jpeg,image/webp,image/svg+xml";
-const MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024;
-
 export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEventDialogProps) {
   const [form, setForm] = useState(initialForm);
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function update(key: keyof typeof initialForm, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  function handlePhotoChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    // Reseta já aqui (não só no caminho de erro abaixo) — sem isso, o
-    // navegador não dispara `change` de novo se o usuário reabrir o
-    // seletor e escolher EXATAMENTE o mesmo arquivo (mesmo path), o que
-    // pareceria "preciso escolher a foto duas vezes" quando na
-    // verdade a segunda escolha nem chegava a chamar este handler.
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > MAX_LOGO_SIZE_BYTES) {
-      setError("A foto deve ter no máximo 5MB.");
-      return;
-    }
-    setError(null);
-    setPhoto(file);
-    // data: URL, não `URL.createObjectURL` — o Safari/iOS tem um bug
-    // conhecido onde a blob: URL às vezes não pinta no <img> logo após
-    // selecionar o arquivo (fica quebrada até algo forçar um reflow,
-    // ex. a navegação pra listagem depois de criar o evento, que já usa
-    // a URL definitiva do servidor). data: URL não depende desse
-    // registro interno do navegador, então não sofre esse problema.
-    const reader = new FileReader();
-    reader.onload = () => setPhotoPreview(reader.result as string);
-    reader.readAsDataURL(file);
-  }
-
-  function removePhoto() {
-    setPhoto(null);
-    setPhotoPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function resetForm() {
@@ -126,56 +88,19 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
         <FormError message={error} />
 
         <form onSubmit={handleSubmit} className="grid gap-5">
-          <div className="grid gap-2">
-            <Label>
-              Foto do evento{" "}
-              <span className="text-sm font-normal text-muted-foreground">(opcional)</span>
-            </Label>
-            <div className="flex items-center gap-3">
-              {photoPreview ? (
-                <div className="relative">
-                  <img
-                    // key força o React a trocar o nó da imagem em vez
-                    // de só atualizar `src` num nó já existente — nó
-                    // novo sempre pinta, evita qualquer chance de ficar
-                    // "preso" num paint antigo enquanto o popup ainda
-                    // está no meio da animação de entrada (mesma classe
-                    // de bug de repaint do comentário abaixo).
-                    key={photoPreview}
-                    src={photoPreview}
-                    alt=""
-                    className="size-16 rounded-lg object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={removePhoto}
-                    aria-label="Remover foto"
-                    className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ) : (
-                <EventThumbnail name={form.name || "Evento"} logoUrl={null} className="size-16 text-base" />
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <ImagePlus data-icon="inline-start" />
-                {photoPreview ? "Trocar foto" : "Adicionar foto"}
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={ACCEPTED_LOGO_TYPES}
-                className="hidden"
-                onChange={handlePhotoChange}
-              />
-            </div>
-          </div>
+          <EventPhotoField
+            name={form.name}
+            preview={photoPreview}
+            onSelect={(file, preview) => {
+              setPhoto(file);
+              setPhotoPreview(preview);
+            }}
+            onClear={() => {
+              setPhoto(null);
+              setPhotoPreview(null);
+            }}
+            onError={setError}
+          />
 
           <EventFormFields form={form} onChange={update} />
 

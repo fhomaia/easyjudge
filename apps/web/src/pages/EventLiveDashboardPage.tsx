@@ -436,7 +436,7 @@ export function EventLiveDashboardPage() {
         eventNavItems={eventNavTabs}
       />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="mx-auto max-w-xl">
           <div className="flex items-center justify-between gap-3 px-4 pt-4">
             <div className="flex flex-wrap items-center gap-2">

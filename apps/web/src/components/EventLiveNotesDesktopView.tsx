@@ -313,7 +313,7 @@ export function EventLiveNotesDesktopView({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="relative flex-1 overflow-y-auto p-6">
           {isAdminOrAssessor && assignment.isJudge ? (
             <>
               <ReleaseFlagsPanel eventId={event.aliasId} />

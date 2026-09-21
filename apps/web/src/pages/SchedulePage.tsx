@@ -574,7 +574,7 @@ export function SchedulePage() {
         onDragEnd={handleDragEnd}
         onDragCancel={clearActiveDrag}
       >
-        <main className="flex flex-1 flex-col overflow-y-auto">
+        <main className="relative flex flex-1 flex-col overflow-y-auto">
           <div className="flex items-center justify-between px-10 pt-6">
             <button
               type="button"
@@ -582,7 +582,7 @@ export function SchedulePage() {
               className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-4" />
-              Voltar para configuração do evento
+              Sair
             </button>
             <NotificationBell unreadCount={notificationsUnreadCount} />
           </div>

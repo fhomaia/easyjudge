@@ -52,7 +52,7 @@ export function ProfilePage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto pt-14 sm:pt-0">
+      <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
         <div className="w-full px-6 py-10 sm:px-10 lg:px-16">
           <h1 className="text-2xl font-semibold text-foreground">Meu perfil</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -457,7 +457,6 @@ function BirthDateCard({
           id="profile-birth-date"
           value={birthDate}
           onChange={setBirthDate}
-          placeholder="Selecione a data de nascimento"
           captionLayout="dropdown"
           startMonth={new Date(new Date().getFullYear() - 100, 0, 1)}
           endMonth={getMaxBirthDate()}

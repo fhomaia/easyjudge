@@ -205,7 +205,7 @@ export function ScoringTemplateBuilderPage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"
