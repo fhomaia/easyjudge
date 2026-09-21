@@ -67,6 +67,11 @@ function JudgeCard({ judge, itemsCount, totalCriteria, onRemove }: JudgeCardProp
             {itemsCount} {itemsCount === 1 ? "item" : "itens"}
           </span>
         </div>
+        {!judge.userId && (
+          <p className="truncate text-xs font-medium text-amber-700 dark:text-amber-400">
+            Aguardando conta
+          </p>
+        )}
         <Progress value={workloadPct} className="mt-1.5" />
       </div>
 

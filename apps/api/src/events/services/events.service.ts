@@ -1,3 +1,4 @@
+import { UserRole } from '../../common/enums/user-role.enum';
 import {
   ConflictException,
   ForbiddenException,
@@ -527,10 +528,21 @@ export class EventsService {
     );
   }
 
-  async setEventLogo(aliasId: string, file: Express.Multer.File) {
-    const event = await this.findEventOrThrow(aliasId);
+  async setEventLogo(
+    aliasId: string,
+    file: Express.Multer.File,
+    userId: string,
+  ): Promise<EventWithRole> {
+    // Mesmo par de papéis de updateEvent: só quem edita as configurações
+    // do evento pode trocar a foto (o @Roles do controller é só o papel
+    // GLOBAL, não diz nada sobre este evento específico).
+    const event = await this.getOwnEventOrThrow(aliasId, userId, [
+      EventMemberRole.ADMIN,
+      EventMemberRole.ASSESSOR,
+    ]);
     event.logoUrl = await this.storageService.upload(file, 'logos');
-    return this.eventsRepo.save(event);
+    const saved = await this.eventsRepo.save(event);
+    return this.attachRole(saved, userId);
   }
 
   // Tela "Histórico" (acessível a partir do menu "⋯" da lista de
@@ -803,18 +815,42 @@ export class EventsService {
   // evento — mesmo padrão de JudgesService.linkUnclaimedJudgesByEmail/
   // ProgramsService.linkUnclaimedProgramsByEmail, mas cobrindo qualquer
   // papel do roster (não só jurado).
+  //
+  // A conta continua sendo o que a pessoa escolheu: o papel PROGRAM do
+  // roster só é reclamado por conta do tipo Programa, e o papel JUDGE
+  // só por conta que NÃO é Programa (Programa não pode ser jurado). Sem
+  // isso o cadastro feito por um organizador com o email da pessoa
+  // dava acesso ao evento pela metade (papel sem o vínculo de programa/
+  // jurado por trás). Linha com outros papéis é reclamada só com os
+  // papéis compatíveis; se não sobrar nenhum, fica pendente.
   async linkUnclaimedMembersByEmail(
     userId: string,
     email: string,
+    accountRole: UserRole,
   ): Promise<number> {
-    const result = await this.membersRepo
-      .createQueryBuilder()
-      .update(EventMember)
-      .set({ userId })
-      .where('LOWER(email) = LOWER(:email)', { email })
-      .andWhere('userId IS NULL')
-      .execute();
-    return result.affected ?? 0;
+    const pending = await this.membersRepo
+      .createQueryBuilder('m')
+      .where('LOWER(m.email) = LOWER(:email)', { email })
+      .andWhere('m.userId IS NULL')
+      .getMany();
+
+    const incompatibleRole =
+      accountRole === UserRole.PROGRAM
+        ? EventMemberRole.JUDGE
+        : EventMemberRole.PROGRAM;
+
+    let claimed = 0;
+    for (const member of pending) {
+      if (member.roles.includes(incompatibleRole)) {
+        const remaining = member.roles.filter((r) => r !== incompatibleRole);
+        if (remaining.length === 0) continue;
+        member.roles = remaining;
+      }
+      member.userId = userId;
+      await this.membersRepo.save(member);
+      claimed++;
+    }
+    return claimed;
   }
 
   // Gera um Event.eventCode ainda não usado — tenta persistir dentro

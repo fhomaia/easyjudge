@@ -197,8 +197,19 @@ export class ProgramsService {
         'Este programa já está vinculado a uma conta própria — os dados são editados pelo próprio programa, não pelo organizador.',
       );
     }
+    // Conta a vincular: escolhida no catálogo (dto.userId) OU a conta
+    // Programa dona do email digitado — mesma regra do create. Email de
+    // conta que não é Programa dá erro (findEligibleProgramUserByEmail).
+    let linkedUser: User | null = null;
     if (dto.userId) {
-      await this.assertProgramUser(dto.userId);
+      linkedUser = await this.assertProgramUser(dto.userId);
+    } else if (
+      dto.email &&
+      dto.email.toLowerCase() !== participation.email.toLowerCase()
+    ) {
+      // Só quando o email de fato mudou — o formulário reenvia o email
+      // em todo salvamento, e editar só a cidade não deve dar erro.
+      linkedUser = await this.findEligibleProgramUserByEmail(dto.email);
     }
     if (dto.email) {
       await this.assertEmailNotDuplicateInCatalog(
@@ -208,8 +219,13 @@ export class ProgramsService {
         participation.id,
       );
     }
+    const previousEmail = participation.email;
     Object.assign(participation, stripUndefined(dto));
+    if (linkedUser) participation.userId = linkedUser.id;
     const saved = await this.participationsRepo.save(participation);
+    if (linkedUser) {
+      await this.syncNewlyLinkedProgram(saved, linkedUser, previousEmail);
+    }
     await this.activityLogService.record(
       saved.aliasId,
       userId,
@@ -256,7 +272,7 @@ export class ProgramsService {
     return participation;
   }
 
-  private async assertProgramUser(userId: string): Promise<void> {
+  private async assertProgramUser(userId: string): Promise<User> {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('Usuário não encontrado');
     if (user.role !== UserRole.PROGRAM) {
@@ -264,13 +280,58 @@ export class ProgramsService {
         'O usuário selecionado não é do tipo Programa.',
       );
     }
+    return user;
   }
 
+  // Mesmo que o create() faz ao já nascer vinculado: perfil canônico,
+  // acesso "programa" no roster e acesso dos atletas já vinculados.
+  // Sem isso, vincular pela EDIÇÃO só gravava o userId e a conta não
+  // ganhava acesso ao evento. Remove também o convite pendente que
+  // ficou no roster com o email antigo do programa.
+  private async syncNewlyLinkedProgram(
+    participation: ProgramParticipation,
+    user: User,
+    previousEmail: string,
+  ): Promise<void> {
+    await this.getOrCreateProfile(user.id, {
+      name: user.teamOrInstitutionName || buildUserDisplayName(user),
+      contactEmail: user.email,
+      city: participation.city,
+      state: participation.state,
+    });
+    await this.eventsService.removeMemberRole(
+      participation.aliasId,
+      EventMemberRole.PROGRAM,
+      { userId: null, email: previousEmail },
+    );
+    await this.eventsService.upsertMemberRole(
+      participation.aliasId,
+      EventMemberRole.PROGRAM,
+      {
+        userId: user.id,
+        email: user.email,
+        firstName: buildUserDisplayName(user),
+      },
+    );
+    await this.athletesService.grantEventAccessForNewProgramEvent(
+      user.id,
+      participation.aliasId,
+    );
+  }
+
+  // Email de uma conta que NÃO é Programa dá erro claro: antes virava
+  // "sem conta" e criava um programa solto (sem dono) com o email de
+  // alguém que já tem conta e nunca poderá ser Programa.
   private async findEligibleProgramUserByEmail(
     email: string,
   ): Promise<User | null> {
     const user = await this.usersService.findByEmailInsensitive(email);
-    if (!user || user.role !== UserRole.PROGRAM) return null;
+    if (!user) return null;
+    if (user.role !== UserRole.PROGRAM) {
+      throw new ConflictException(
+        'Este email pertence a uma conta que não é do tipo Programa.',
+      );
+    }
     return user;
   }
 

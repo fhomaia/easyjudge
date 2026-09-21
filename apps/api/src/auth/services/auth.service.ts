@@ -200,7 +200,11 @@ export class AuthService {
     // grava no roster (papel "jurado"), e faz isso buscando a linha
     // pelo userId já vinculado — se essa chamada rodasse antes, criaria
     // uma linha duplicada em vez de achar a pendente.
-    await this.eventsService.linkUnclaimedMembersByEmail(user.id, user.email);
+    await this.eventsService.linkUnclaimedMembersByEmail(
+      user.id,
+      user.email,
+      user.role,
+    );
 
     // Cadastro só é considerado completo aqui (com senha definida) —
     // é o momento certo pra vincular automaticamente qualquer

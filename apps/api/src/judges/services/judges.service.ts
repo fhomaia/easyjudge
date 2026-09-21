@@ -159,8 +159,19 @@ export class JudgesService {
         'Este jurado já está vinculado a uma conta própria — os dados são editados pelo próprio jurado, não pelo organizador.',
       );
     }
+    // Conta a vincular: escolhida no catálogo (dto.userId) OU a conta
+    // dona do email digitado — mesma regra do create. Email de conta
+    // Programa dá erro (findEligibleJudgeUserByEmail). Só checa o email
+    // quando ele de fato mudou: o formulário reenvia o email em todo
+    // salvamento.
+    let linkedUser: User | null = null;
     if (dto.userId) {
-      await this.assertJudgeUser(dto.userId);
+      linkedUser = await this.assertJudgeUser(dto.userId);
+    } else if (
+      dto.email &&
+      dto.email.toLowerCase() !== participation.email.toLowerCase()
+    ) {
+      linkedUser = await this.findEligibleJudgeUserByEmail(dto.email);
     }
     if (dto.name || dto.email) {
       await this.assertNoDuplicateInCatalog(
@@ -170,9 +181,44 @@ export class JudgesService {
         participation.id,
       );
     }
+    const previousEmail = participation.email;
     Object.assign(participation, stripUndefined(dto));
+    if (linkedUser) participation.userId = linkedUser.id;
     const saved = await this.participationsRepo.save(participation);
+    if (linkedUser) {
+      await this.syncNewlyLinkedJudge(saved, linkedUser, previousEmail);
+    }
     return this.toJudgeView(saved);
+  }
+
+  // Mesmo que o create() faz ao já nascer vinculado: perfil canônico e
+  // acesso "jurado" no roster. Sem isso, vincular pela EDIÇÃO só gravava
+  // o userId e a conta não ganhava acesso ao evento. Remove também o
+  // convite pendente que ficou no roster com o email antigo.
+  private async syncNewlyLinkedJudge(
+    participation: JudgeParticipation,
+    user: User,
+    previousEmail: string,
+  ): Promise<void> {
+    await this.getOrCreateProfile(user.id, {
+      name: `${user.firstName} ${user.lastName}`,
+      contactEmail: user.email,
+    });
+    await this.eventsService.removeMemberRole(
+      participation.aliasId,
+      EventMemberRole.JUDGE,
+      { userId: null, email: previousEmail },
+    );
+    await this.eventsService.upsertMemberRole(
+      participation.aliasId,
+      EventMemberRole.JUDGE,
+      {
+        userId: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+    );
   }
 
   async remove(eventId: string, id: string): Promise<void> {
@@ -225,7 +271,7 @@ export class JudgesService {
 
   // Qualquer usuário pode assumir o papel de jurado num evento, exceto
   // contas PROGRAM (a instituição/academia, não uma pessoa que julga).
-  private async assertJudgeUser(userId: string): Promise<void> {
+  private async assertJudgeUser(userId: string): Promise<User> {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('Usuário não encontrado');
     if (user.role === UserRole.PROGRAM) {
@@ -233,13 +279,22 @@ export class JudgesService {
         'Uma conta do tipo Programa não pode ser jurado.',
       );
     }
+    return user;
   }
 
+  // Conta de Programa não pode ser jurado: dá erro claro em vez de
+  // devolver "sem conta" (o que criava um jurado solto com o email de
+  // uma conta que nunca poderia se vincular a ele).
   private async findEligibleJudgeUserByEmail(
     email: string,
   ): Promise<User | null> {
     const user = await this.usersService.findByEmailInsensitive(email);
-    if (!user || user.role === UserRole.PROGRAM) return null;
+    if (!user) return null;
+    if (user.role === UserRole.PROGRAM) {
+      throw new ConflictException(
+        'Este email pertence a uma conta do tipo Programa, que não pode ser jurado.',
+      );
+    }
     return user;
   }
 

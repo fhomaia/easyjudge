@@ -125,9 +125,10 @@ export class EventsController {
   @UseInterceptors(FileInterceptor('file', logoUploadOptions))
   setEventLogo(
     @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Arquivo de logo obrigatório');
-    return this.eventsService.setEventLogo(id, file);
+    return this.eventsService.setEventLogo(id, file, req.user.userId);
   }
 }

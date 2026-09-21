@@ -192,7 +192,7 @@ export function ProgramsPage() {
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"
@@ -200,7 +200,7 @@ export function ProgramsPage() {
             className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            Voltar para configuração do evento
+            Sair
           </button>
           <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
@@ -263,6 +263,11 @@ export function ProgramsPage() {
                             <p className="truncate text-xs text-muted-foreground">
                               {program.city} · {program.state}
                             </p>
+                            {!program.userId && (
+                              <p className="truncate text-xs font-medium text-amber-700 dark:text-amber-400">
+                                Aguardando conta Programa
+                              </p>
+                            )}
                           </div>
                           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                             {program.teamsCount ?? 0} {program.teamsCount === 1 ? "equipe" : "equipes"}
@@ -307,9 +312,16 @@ export function ProgramsPage() {
                                 <p className="text-lg font-semibold text-foreground">
                                   {selectedProgram.name}
                                 </p>
-                                {selectedProgram.userId && (
+                                {selectedProgram.userId ? (
                                   <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                                     Vinculado
+                                  </span>
+                                ) : (
+                                  <span
+                                    title="Nenhuma conta do tipo Programa está vinculada a este programa: a instituição não consegue ver as próprias equipes, notas e resultados. Use “Editar dados do programa” para vincular a conta ou corrigir o email."
+                                    className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+                                  >
+                                    Aguardando conta Programa
                                   </span>
                                 )}
                               </div>

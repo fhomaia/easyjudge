@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,34 @@ export function JudgeFormFields({ form, onChange }: JudgeFormFieldsProps) {
   useEffect(() => {
     judgesApi.getCatalog().then(setCatalog).catch(() => setCatalog([]));
   }, []);
+
+  // Email digitado que já é de uma conta da plataforma: o backend vincula
+  // o jurado a ela e mostra SEMPRE o nome real da conta (o que foi
+  // digitado no campo nome é descartado). Então já mostra o aviso, vincula
+  // (userId, igual a escolher no catálogo) e trava o nome com o da conta.
+  const typedEmail = form.email.trim().toLowerCase();
+  const accountMatch =
+    typedEmail === ""
+      ? null
+      : (catalog.find(
+          (e) => e.source === "platform" && e.email.toLowerCase() === typedEmail,
+        ) ?? null);
+  // Nome que o usuário tinha digitado antes do vínculo automático, pra
+  // devolver se ele trocar o email por um que não é de conta nenhuma.
+  const typedNameRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (accountMatch) {
+      if (typedNameRef.current === null) typedNameRef.current = form.name;
+      if (form.userId !== (accountMatch.userId ?? "")) onChange("userId", accountMatch.userId ?? "");
+      if (form.name !== accountMatch.name) onChange("name", accountMatch.name);
+    } else if (typedNameRef.current !== null) {
+      onChange("userId", "");
+      onChange("name", typedNameRef.current);
+      typedNameRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMatch?.userId, accountMatch?.name]);
 
   function handleSelect(key: string) {
     setSelectedKey(key);
@@ -104,6 +132,7 @@ export function JudgeFormFields({ form, onChange }: JudgeFormFieldsProps) {
           id="judge-name"
           value={form.name}
           onChange={(e) => onChange("name", e.target.value)}
+          disabled={accountMatch !== null}
           required
         />
       </div>
@@ -117,6 +146,11 @@ export function JudgeFormFields({ form, onChange }: JudgeFormFieldsProps) {
           onChange={(e) => onChange("email", e.target.value)}
           required
         />
+        {accountMatch && (
+          <p className="text-xs text-muted-foreground">
+            Este email já pertence a {accountMatch.name}
+          </p>
+        )}
       </div>
     </>
   );
