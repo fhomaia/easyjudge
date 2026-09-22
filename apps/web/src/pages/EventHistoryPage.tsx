@@ -57,10 +57,10 @@ export function EventHistoryPage() {
 
   return (
     <div className="flex h-svh bg-background">
-      <PageLoadingOverlay loading={(!event || entries === null) && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">
+        <PageLoadingOverlay loading={(!event || entries === null) && !error} />
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"

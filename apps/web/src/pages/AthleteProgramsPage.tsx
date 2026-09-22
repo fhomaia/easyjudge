@@ -46,10 +46,10 @@ export function AthleteProgramsPage() {
 
   return (
     <div className="flex h-svh bg-background">
-      <PageLoadingOverlay loading={links === null} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
+        <PageLoadingOverlay loading={links === null} />
         <div className="w-full px-6 py-10 sm:px-10 lg:px-16">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">

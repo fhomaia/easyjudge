@@ -570,7 +570,6 @@ export function SchedulePage() {
 
   return (
     <div className="flex h-svh bg-background">
-      <PageLoadingOverlay loading={!daysLoaded} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <DndContext
@@ -581,6 +580,7 @@ export function SchedulePage() {
         onDragCancel={clearActiveDrag}
       >
         <main className="relative flex flex-1 flex-col overflow-y-auto">
+          <PageLoadingOverlay loading={!daysLoaded} />
           <div className="flex items-center justify-between px-10 pt-6">
             <button
               type="button"

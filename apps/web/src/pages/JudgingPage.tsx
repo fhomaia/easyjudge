@@ -538,11 +538,11 @@ export function JudgingPage() {
 
   return (
     <div className="flex h-svh bg-background">
-      <PageLoadingOverlay loading={!categoriesLoaded || !templateStatsLoaded} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <main className="relative flex flex-1 flex-col overflow-y-auto">
+          <PageLoadingOverlay loading={!categoriesLoaded || !templateStatsLoaded} />
           <div className="flex items-center justify-between px-10 pt-6">
             <button
               type="button"

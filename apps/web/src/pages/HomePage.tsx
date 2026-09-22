@@ -229,10 +229,10 @@ export function HomePage() {
 
   return (
     <div className="flex h-svh bg-background">
-      <PageLoadingOverlay loading={events === null && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
+        <PageLoadingOverlay loading={events === null && !error} />
         <div className="flex justify-end px-4 pt-4 sm:px-10 sm:pt-6">
           <NotificationBell />
         </div>

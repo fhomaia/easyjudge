@@ -78,10 +78,10 @@ export function EventStaffPage() {
 
   return (
     <div className="flex h-svh bg-background">
-      <PageLoadingOverlay loading={!event && !error} />
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">
+        <PageLoadingOverlay loading={!event && !error} />
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"
