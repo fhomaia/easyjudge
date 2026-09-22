@@ -38,6 +38,7 @@ export function EventListItem({
 }: EventListItemProps) {
   const isAdmin = event.currentUserRole === "admin";
   const isAssessor = event.currentUserRole === "assessor";
+  const canManage = isAdmin || isAssessor;
   const navigate = useNavigate();
   const isConfigurable = event.status === "created";
   const isLive = event.status === "published" || event.status === "started";
@@ -49,7 +50,13 @@ export function EventListItem({
       whileHover={{ y: -2 }}
       onClick={
         isConfigurable
-          ? () => navigate(`/events/${event.aliasId}/setup`)
+          ? canManage
+            ? () => navigate(`/events/${event.aliasId}/setup`)
+            // Jurado (único outro papel que enxerga um evento "criado",
+            // ver EventsService.findAllForUser/STAFF_ROLES) não edita
+            // configuração nenhuma — vai direto pro evento em si, não
+            // pro setup (pedido do usuário, 2026-09-22).
+            : () => onOpenLive(event)
           : isLive
             ? () => onOpenLive(event)
             : undefined

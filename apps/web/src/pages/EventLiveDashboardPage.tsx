@@ -225,13 +225,21 @@ export function EventLiveDashboardPage() {
     },
   });
 
-  // Essa tela é só pra evento publicado/em andamento — "created" volta
-  // pro setup, "completed" ainda não tem uma tela própria de resumo
-  // pós-evento, então volta pra Home por enquanto.
+  // "created" só volta pro setup pra quem edita a configuração
+  // (admin/assessor) — jurado é o único outro papel que enxerga um
+  // evento "criado" na Home (ver EventsService.findAllForUser/
+  // STAFF_ROLES) e não tem nada pra configurar, então fica aqui mesmo
+  // vendo o evento (pedido do usuário, 2026-09-22). "completed" ainda
+  // não tem uma tela própria de resumo pós-evento, então volta pra
+  // Home por enquanto (vale pra todo mundo).
   useEffect(() => {
     if (!event) return;
-    if (event.status === "created") navigate(`/events/${event.aliasId}/setup`, { replace: true });
-    else if (event.status === "completed") navigate("/", { replace: true });
+    const canManage = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
+    if (event.status === "created" && canManage) {
+      navigate(`/events/${event.aliasId}/setup`, { replace: true });
+    } else if (event.status === "completed") {
+      navigate("/", { replace: true });
+    }
   }, [event, navigate]);
 
   // Sem WebSocket ainda (ver "Próximos passos" do projeto) — o horário
