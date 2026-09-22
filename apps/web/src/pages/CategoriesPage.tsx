@@ -136,7 +136,11 @@ export function CategoriesPage() {
       (fetched) => {
         const found = fetched.filter((t): t is ScoringTemplate => t !== null);
         if (found.length === 0) return;
-        setScoringTemplates((prev) => [...prev, ...found]);
+        setScoringTemplates((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          const newOnes = found.filter((t) => !existingIds.has(t.id));
+          return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+        });
       },
     );
   }, [categories, scoringTemplates]);

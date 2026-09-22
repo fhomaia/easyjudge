@@ -162,11 +162,13 @@ export function CategoryFormFields({
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {scoringTemplates.map((template) => (
-              <SelectItem key={template.id} value={template.id}>
-                {template.name}
-              </SelectItem>
-            ))}
+            {Array.from(new Map(scoringTemplates.map((t) => [t.id, t])).values()).map(
+              (template) => (
+                <SelectItem key={template.id} value={template.id}>
+                  {template.name}
+                </SelectItem>
+              ),
+            )}
           </SelectContent>
         </Select>
         {scoringTemplates.length === 0 && (
