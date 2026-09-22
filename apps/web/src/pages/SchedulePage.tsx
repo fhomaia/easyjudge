@@ -916,7 +916,7 @@ export function SchedulePage() {
         open={replicateOpen}
         onOpenChange={setReplicateOpen}
         title="Repetir cronograma em todos os dias"
-        description="O horário do dia (início/fim, tempo de aquecimento), as pistas, aquecimentos, eventos especiais (Almoço, Abertura, Premiação, Contestação de notas, intervalos personalizados) e as apresentações/aquecimentos das equipes do dia selecionado serão copiados para todos os outros dias do evento — substituindo completamente o que já existir neles."
+        description="O horário do dia (início/fim, intervalo entre apresentações), as pistas, aquecimentos, eventos especiais (Almoço, Abertura, Premiação, Contestação de notas, intervalos personalizados) e as apresentações/aquecimentos das equipes do dia selecionado serão copiados para todos os outros dias do evento — substituindo completamente o que já existir neles."
         confirmLabel="Repetir mesmo assim"
         confirmingLabel="Repetindo..."
         onConfirm={handleReplicateToAllDays}
