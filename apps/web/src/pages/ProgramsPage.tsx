@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
+  Building2,
   Mail,
   MapPin,
   Pencil,
@@ -188,6 +189,8 @@ export function ProgramsPage() {
   );
 
   const hasAnyPrograms = (programs?.length ?? 0) > 0;
+  const totalPrograms = programs?.length ?? 0;
+  const totalTeams = (programs ?? []).reduce((sum, p) => sum + (p.teamsCount ?? 0), 0);
 
   return (
     <div className="flex h-svh bg-background">
@@ -218,6 +221,16 @@ export function ProgramsPage() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     Cadastre os programas participantes e as equipes inscritas em cada categoria.
                   </p>
+                  <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="size-4" />
+                      {totalPrograms} {totalPrograms === 1 ? "programa" : "programas"}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Users className="size-4" />
+                      {totalTeams} {totalTeams === 1 ? "equipe" : "equipes"}
+                    </span>
+                  </div>
                 </div>
                 <Button onClick={() => setCreateProgramOpen(true)}>
                   <Plus data-icon="inline-start" />
