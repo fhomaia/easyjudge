@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../entities/category.entity';
+import { CategoryFormat } from '../enums/category-format.enum';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
 import { EventsService } from '../../events/services/events.service';
@@ -30,6 +31,14 @@ export class CategoriesService {
       dto.scoringTemplateId,
       userId,
     );
+    await this.assertNoDuplicateCategory(event.aliasId, {
+      modality: dto.modality,
+      division: dto.division,
+      categoryFormat: dto.categoryFormat,
+      customFormatLabel: dto.customFormatLabel ?? null,
+      level: dto.level,
+      nonTumbling: dto.nonTumbling ?? false,
+    });
     const category = this.categoriesRepo.create({
       ...dto,
       aliasId: event.aliasId,
@@ -67,6 +76,18 @@ export class CategoriesService {
       );
     }
     Object.assign(category, stripUndefined(dto));
+    await this.assertNoDuplicateCategory(
+      category.aliasId,
+      {
+        modality: category.modality,
+        division: category.division,
+        categoryFormat: category.categoryFormat,
+        customFormatLabel: category.customFormatLabel ?? null,
+        level: category.level,
+        nonTumbling: category.nonTumbling,
+      },
+      category.id,
+    );
     const saved = await this.categoriesRepo.save(category);
     await this.activityLogService.record(
       saved.aliasId,
@@ -99,6 +120,55 @@ export class CategoriesService {
     });
     if (!category) throw new NotFoundException('Categoria não encontrada');
     return category;
+  }
+
+  // Modalidade + formato + divisão + nível (+ non-tumbling, quando o
+  // formato permite variar) definem a "mesma" categoria pro domínio —
+  // não há constraint única no banco pra isso, checagem em
+  // application-level segue o mesmo padrão de
+  // ProgramsService.assertEmailNotDuplicateInCatalog.
+  private async assertNoDuplicateCategory(
+    aliasId: string,
+    values: Pick<
+      Category,
+      | 'modality'
+      | 'division'
+      | 'categoryFormat'
+      | 'customFormatLabel'
+      | 'level'
+      | 'nonTumbling'
+    >,
+    excludeId?: string,
+  ): Promise<void> {
+    const qb = this.categoriesRepo
+      .createQueryBuilder('category')
+      .where('category.aliasId = :aliasId', { aliasId })
+      .andWhere('category.modality = :modality', { modality: values.modality })
+      .andWhere('category.division = :division', { division: values.division })
+      .andWhere('category.categoryFormat = :categoryFormat', {
+        categoryFormat: values.categoryFormat,
+      })
+      .andWhere('category.level = :level', { level: values.level })
+      .andWhere('category.nonTumbling = :nonTumbling', {
+        nonTumbling: values.nonTumbling,
+      });
+
+    if (values.categoryFormat === CategoryFormat.CUSTOM) {
+      qb.andWhere('LOWER(category.customFormatLabel) = LOWER(:customFormatLabel)', {
+        customFormatLabel: values.customFormatLabel ?? '',
+      });
+    }
+
+    if (excludeId) {
+      qb.andWhere('category.id != :excludeId', { excludeId });
+    }
+
+    const conflict = await qb.getOne();
+    if (conflict) {
+      throw new ConflictException(
+        'Já existe uma categoria com essa combinação de modalidade, formato, divisão e nível.',
+      );
+    }
   }
 
   // save() não hidrata relações (só a coluna scoringTemplateId) — sem
