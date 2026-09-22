@@ -57,7 +57,7 @@ export function AddTeamCategoryPopover({
       >
         <Plus className="size-4" />
       </PopoverTrigger>
-      <PopoverContent className="grid w-72 gap-4 p-4" align="start">
+      <PopoverContent className="grid w-96 max-w-[90vw] gap-4 p-4" align="start">
         <div className="grid gap-1.5">
           <p className="text-sm font-medium text-foreground">Adicionar categorias à equipe</p>
           <p className="text-xs text-muted-foreground">{team.name}</p>
