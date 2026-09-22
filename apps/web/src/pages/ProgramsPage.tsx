@@ -177,9 +177,9 @@ export function ProgramsPage() {
     handleTeamUpdated(team);
   }
 
-  const filteredPrograms = (programs ?? []).filter((p) =>
-    p.name.toLowerCase().includes(search.trim().toLowerCase()),
-  );
+  const filteredPrograms = (programs ?? [])
+    .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   const totalPages = Math.max(1, Math.ceil(filteredPrograms.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginatedPrograms = filteredPrograms.slice(

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import type { Category, Team } from "@/api/client";
 
 interface AddTeamCategoryPopoverProps {
@@ -19,13 +20,20 @@ export function AddTeamCategoryPopover({
   const [open, setOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
 
   const linkedIds = new Set(team.categories.map((c) => c.id));
-  const availableCategories = categories.filter((c) => !linkedIds.has(c.id));
+  const unlinkedCategories = categories.filter((c) => !linkedIds.has(c.id));
+  const availableCategories = unlinkedCategories
+    .filter((c) => c.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, "pt-BR"));
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    if (!next) setSelectedIds(new Set());
+    if (!next) {
+      setSelectedIds(new Set());
+      setSearch("");
+    }
   }
 
   function toggleCategory(categoryId: string, checked: boolean) {
@@ -64,27 +72,44 @@ export function AddTeamCategoryPopover({
         </div>
 
         <div className="grid min-w-0 gap-2">
-          {availableCategories.length === 0 ? (
+          {unlinkedCategories.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               Todas as categorias do evento já estão vinculadas a esta equipe.
             </p>
           ) : (
-            <div className="grid max-h-64 gap-1 overflow-y-auto">
-              {availableCategories.map((category) => (
-                <label
-                  key={category.id}
-                  className="flex items-center gap-2 rounded-md p-1.5 text-sm hover:bg-muted/60"
-                >
-                  <Checkbox
-                    checked={selectedIds.has(category.id)}
-                    onCheckedChange={(value) =>
-                      toggleCategory(category.id, value === true)
-                    }
-                  />
-                  <span className="min-w-0 truncate text-foreground">{category.name}</span>
-                </label>
-              ))}
-            </div>
+            <>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar categoria..."
+                  className="h-8 pl-8 text-sm"
+                />
+              </div>
+              {availableCategories.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nenhuma categoria encontrada.
+                </p>
+              ) : (
+                <div className="grid max-h-64 gap-1 overflow-y-auto">
+                  {availableCategories.map((category) => (
+                    <label
+                      key={category.id}
+                      className="flex items-center gap-2 rounded-md p-1.5 text-sm hover:bg-muted/60"
+                    >
+                      <Checkbox
+                        checked={selectedIds.has(category.id)}
+                        onCheckedChange={(value) =>
+                          toggleCategory(category.id, value === true)
+                        }
+                      />
+                      <span className="min-w-0 truncate text-foreground">{category.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
 
