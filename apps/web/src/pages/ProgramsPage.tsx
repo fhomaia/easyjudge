@@ -165,9 +165,9 @@ export function ProgramsPage() {
     );
   }
 
-  async function handleAddCategory(teamId: string, categoryId: string) {
+  async function handleAddCategory(teamId: string, categoryIds: string[]) {
     if (!id || !selectedProgramId) return;
-    const team = await teamsApi.addCategory(id, selectedProgramId, teamId, categoryId);
+    const team = await teamsApi.addCategory(id, selectedProgramId, teamId, categoryIds);
     handleTeamUpdated(team);
   }
 
@@ -434,8 +434,8 @@ export function ProgramsPage() {
                                       <AddTeamCategoryPopover
                                         team={team}
                                         categories={categories}
-                                        onAdd={(categoryId) =>
-                                          handleAddCategory(team.id, categoryId)
+                                        onAdd={(categoryIds) =>
+                                          handleAddCategory(team.id, categoryIds)
                                         }
                                       />
                                     </div>

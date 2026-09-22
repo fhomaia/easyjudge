@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Team } from '../entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
 import { CreateTeamDto } from '../dto/create-team.dto';
@@ -123,21 +123,24 @@ export class TeamsService {
     eventId: string,
     programId: string,
     teamId: string,
-    categoryId: string,
+    categoryIds: string[],
   ): Promise<Team> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     await this.findTeamOrThrow(eventId, programId, teamId);
-    const category = await this.categoriesRepo.findOneBy({
-      id: categoryId,
+    const uniqueIds = [...new Set(categoryIds)];
+    const categories = await this.categoriesRepo.findBy({
+      id: In(uniqueIds),
       aliasId: event.aliasId,
     });
-    if (!category) throw new NotFoundException('Categoria não encontrada');
+    if (categories.length !== uniqueIds.length) {
+      throw new NotFoundException('Categoria não encontrada');
+    }
 
     await this.teamsRepo
       .createQueryBuilder()
       .relation(Team, 'categories')
       .of(teamId)
-      .add(categoryId);
+      .add(uniqueIds);
 
     return this.findTeamWithCategories(teamId);
   }

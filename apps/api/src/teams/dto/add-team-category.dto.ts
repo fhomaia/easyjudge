@@ -1,6 +1,7 @@
-import { IsUUID } from 'class-validator';
+import { ArrayNotEmpty, IsUUID } from 'class-validator';
 
 export class AddTeamCategoryDto {
-  @IsUUID()
-  categoryId: string;
+  @ArrayNotEmpty()
+  @IsUUID(undefined, { each: true })
+  categoryIds: string[];
 }

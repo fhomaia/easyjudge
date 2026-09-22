@@ -728,11 +728,11 @@ export const teamsApi = {
     eventId: string,
     programId: string,
     teamId: string,
-    categoryId: string,
+    categoryIds: string[],
   ) =>
     authRequest<Team>(
       `/events/${eventId}/programs/${programId}/teams/${teamId}/categories`,
-      { method: "POST", body: JSON.stringify({ categoryId }) },
+      { method: "POST", body: JSON.stringify({ categoryIds }) },
     ),
 
   removeCategory: (

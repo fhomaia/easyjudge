@@ -94,7 +94,7 @@ export class TeamsController {
       eventId,
       programId,
       teamId,
-      dto.categoryId,
+      dto.categoryIds,
     );
   }
 
