@@ -6,6 +6,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import type { Category, Team } from "@/api/client";
 
+function stripLevelSuffix(name: string): string {
+  return name.replace(/\s*Nível\s+[\d.]+\s*$/, "");
+}
+
 interface AddTeamCategoryPopoverProps {
   team: Team;
   categories: Category[];
@@ -26,7 +30,14 @@ export function AddTeamCategoryPopover({
   const unlinkedCategories = categories.filter((c) => !linkedIds.has(c.id));
   const availableCategories = unlinkedCategories
     .filter((c) => c.name.toLowerCase().includes(search.trim().toLowerCase()))
-    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, "pt-BR"));
+    .sort(
+      (a, b) =>
+        // `name` já inclui "Nível X" no final (ver buildCategoryName) — removido
+        // antes de comparar, senão duas categorias do mesmo formato/divisão em
+        // níveis diferentes não ficariam uma ao lado da outra.
+        stripLevelSuffix(a.name).localeCompare(stripLevelSuffix(b.name), "pt-BR") ||
+        a.level - b.level,
+    );
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
