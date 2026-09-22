@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, UserCog } from "lucide-react";
@@ -240,6 +241,7 @@ export function EventSetupPage() {
     let unscheduledCount = 0;
     let hasScheduledComponent = false;
     let latestUpdatedAt: string | null = null;
+    const byDay: { label: string; count: number }[] = [];
     for (const day of scheduleDays) {
       if (!latestUpdatedAt || day.updatedAt > latestUpdatedAt) latestUpdatedAt = day.updatedAt;
       for (const resource of day.resources) {
@@ -257,7 +259,9 @@ export function EventSetupPage() {
         }
       }
       if (!day.ignoreUnscheduledPresentations) {
-        unscheduledCount += unscheduledByDay.get(day.id)?.length ?? 0;
+        const dayCount = unscheduledByDay.get(day.id)?.length ?? 0;
+        unscheduledCount += dayCount;
+        byDay.push({ label: format(parseISO(day.date), "dd/MM"), count: dayCount });
       }
     }
     return {
@@ -266,6 +270,7 @@ export function EventSetupPage() {
       hasScheduledPresentation: scheduledPresentationsTotal > 0,
       hasScheduledComponent,
       updatedAt: latestUpdatedAt,
+      byDay,
     };
   }, [scheduleDays, unscheduledByDay]);
 

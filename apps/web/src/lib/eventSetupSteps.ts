@@ -56,6 +56,11 @@ export interface ScheduleSummary {
   hasScheduledPresentation: boolean;
   hasScheduledComponent: boolean;
   updatedAt: string | null;
+  // Pendência por dia (rótulo já formatado, ex. "26/09") — só dias sem
+  // `ignoreUnscheduledPresentations`, mesmo filtro usado pra somar
+  // `unscheduledCount`. Vazio quando o evento tem um único dia (o
+  // detalhe genérico já é suficiente nesse caso).
+  byDay: { label: string; count: number }[];
 }
 
 // Montado em EventSetupPage a partir de programsApi.list(id) +
@@ -124,6 +129,17 @@ function scheduleDetail(
 ): string {
   if (completed) return "Todas as apresentações já foram agendadas";
   if (inProgress) {
+    // Evento de vários dias: detalha a pendência de cada um (pedido do
+    // usuário, 2026-09-22) — um único dia não ganha nada com o
+    // detalhamento, mantém a frase genérica de sempre.
+    if (summary.byDay.length > 1) {
+      return summary.byDay
+        .map(
+          (d) =>
+            `Dia ${d.label}: ${d.count} ${d.count === 1 ? "apresentação pendente" : "apresentações pendentes"}`,
+        )
+        .join(", ");
+    }
     return `${summary.unscheduledCount} de ${summary.totalPairs} apresentações ainda não agendadas`;
   }
   return "Monte a timeline de apresentações do evento";
