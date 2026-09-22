@@ -1,5 +1,5 @@
 import { EventDocumentsButton } from "@/components/EventDocumentsButton";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, FlaskConical, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
 import { ScoringCriteriaGroups } from "@/components/scoring/ScoringCriteriaGroups";
 import { LegalityDeductionsPanel } from "@/components/scoring/LegalityDeductionsPanel";
 import { RascunhoEditor } from "@/components/scoring/RascunhoEditor";
@@ -50,6 +50,8 @@ interface EventLiveScoringDesktopViewProps {
   onSubmit: () => void;
   onOpenSupervision: () => void;
   canWrite: boolean;
+  practiceMode: boolean;
+  onTogglePracticeMode: () => void;
 }
 
 export function EventLiveScoringDesktopView({
@@ -86,7 +88,10 @@ export function EventLiveScoringDesktopView({
   onSubmit,
   onOpenSupervision,
   canWrite,
+  practiceMode,
+  onTogglePracticeMode,
 }: EventLiveScoringDesktopViewProps) {
+  const interactionUnlocked = canWrite || practiceMode;
   const progress = sheet.presentation.presentationTimeSeconds
     ? Math.min(1, elapsedMs / 1000 / sheet.presentation.presentationTimeSeconds)
     : 0;
@@ -193,7 +198,7 @@ export function EventLiveScoringDesktopView({
           </div>
 
           {sheet.isLegalityJudge && (
-            <div className={cn("flex shrink-0 items-center gap-4", !canWrite && "pointer-events-none opacity-50")}>
+            <div className={cn("flex shrink-0 items-center gap-4", !interactionUnlocked && "pointer-events-none opacity-50")}>
               <div className="text-right">
                 <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">TEMPO DE APRESENTAÇÃO</p>
                 <span className="text-2xl font-bold tabular-nums text-foreground">{formatTimer(elapsedMs)}</span>
@@ -318,14 +323,40 @@ export function EventLiveScoringDesktopView({
           </div>
         )}
 
-        {!canWrite && (
-          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="size-4 shrink-0" />
-            O evento ainda não foi iniciado — aguarde o produtor pra lançar notas.
+        {!canWrite && !practiceMode && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+            <span className="flex items-center gap-2">
+              <AlertTriangle className="size-4 shrink-0" />
+              O evento ainda não foi iniciado — aguarde o produtor pra lançar notas.
+            </span>
+            <button
+              type="button"
+              onClick={onTogglePracticeMode}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/60 bg-white/60 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-white dark:bg-transparent dark:text-amber-400"
+            >
+              <FlaskConical className="size-3.5" />
+              Praticar
+            </button>
           </div>
         )}
 
-        <div className={cn("flex flex-1 flex-col", !canWrite && "pointer-events-none opacity-50")}>
+        {!canWrite && practiceMode && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-sky-300/50 bg-sky-500/10 p-3 text-sm font-medium text-sky-700 dark:text-sky-400">
+            <span className="flex items-center gap-2">
+              <FlaskConical className="size-4 shrink-0" />
+              Modo teste — nada do que você fizer aqui será salvo.
+            </span>
+            <button
+              type="button"
+              onClick={onTogglePracticeMode}
+              className="shrink-0 rounded-lg border border-sky-400/60 bg-white/60 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-white dark:bg-transparent dark:text-sky-400"
+            >
+              Sair
+            </button>
+          </div>
+        )}
+
+        <div className={cn("flex flex-1 flex-col", !interactionUnlocked && "pointer-events-none opacity-50")}>
         {/* Linha 1, sempre: Rascunho ao lado de Ilegalidade — ou,
             quando esta pista não tem jurado de legalidade, Comentários
             sobe pra ocupar o lugar que seria dela (pedido do usuário,
@@ -392,15 +423,15 @@ export function EventLiveScoringDesktopView({
         )}
 
         <div className="flex items-center gap-3">
-          {!sheetComplete && canWrite && (
+          {!sheetComplete && interactionUnlocked && (
             <p className="text-xs font-medium text-amber-600">Faltam {missingParts.join(" e ")} pra lançar as notas.</p>
           )}
           <button
             type="button"
             onClick={onSubmit}
-            disabled={submitting || !sheetComplete || !canWrite}
+            disabled={submitting || !sheetComplete || !interactionUnlocked}
             title={
-              !canWrite
+              !interactionUnlocked
                 ? "O evento ainda não foi iniciado."
                 : sheetComplete
                   ? undefined
@@ -409,7 +440,7 @@ export function EventLiveScoringDesktopView({
             className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
           >
             <Send className="size-4" />
-            {submitting ? "Enviando..." : "Lançar notas"}
+            {submitting ? "Enviando..." : !canWrite && practiceMode ? "Simular envio" : "Lançar notas"}
           </button>
         </div>
       </footer>

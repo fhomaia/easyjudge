@@ -3,7 +3,7 @@ import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { EventDocumentsButton } from "@/components/EventDocumentsButton";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, FlaskConical, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
 import { EventLiveScoringDesktopView } from "@/components/EventLiveScoringDesktopView";
 import { HeadJudgePanel } from "@/components/HeadJudgePanel";
 import { HeadJudgeMobileSheet } from "@/components/HeadJudgeMobileSheet";
@@ -83,6 +83,37 @@ export function EventLiveScoringPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resolvingContestation, setResolvingContestation] = useState(false);
 
+  // Modo teste — só disponível antes do evento começar (some assim que
+  // `canWrite` vira true), deixa o jurado clicar em tudo (nota, dedução,
+  // cronômetro, comentário, rascunho, "lançar") sem gravar nada de
+  // verdade: emitEvent/emitScoreEvent já não gravam nada quando
+  // `event.status !== "started"` (ver mais abaixo) — o único ajuste
+  // necessário aqui é destravar a interface (que hoje fica
+  // pointer-events-none inteira antes do evento começar) e blindar o
+  // polling pra não sobrescrever as notas/deduções SIMULADAS com o
+  // estado real (vazio) a cada 6s.
+  const [practiceMode, setPracticeMode] = useState(false);
+  const practiceModeRef = useRef(false);
+  useEffect(() => {
+    practiceModeRef.current = practiceMode;
+  }, [practiceMode]);
+  const realScoresRef = useRef<Record<string, number>>({});
+  const realDeductionsRef = useRef<DeductionLogEntry[]>([]);
+
+  function togglePracticeMode() {
+    setPracticeMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        // Saindo do modo teste — descarta qualquer nota/dedução
+        // simulada e volta pro estado real (o próximo poll também
+        // resincronizaria isso em até 6s, mas aqui é imediato).
+        setScores(realScoresRef.current);
+        setDeductions(realDeductionsRef.current);
+      }
+      return next;
+    });
+  }
+
   const [timerRunning, setTimerRunning] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const timerStartRef = useRef<number | null>(null);
@@ -117,8 +148,17 @@ export function EventLiveScoringPage() {
       const pending = await getPendingEvents(id, entryId);
       if (cancelled) return;
       const reduced = reduceScoreEvents([...data.events, ...pending]);
-      setScores(reduced.scores);
-      setDeductions(reduced.deductions);
+      realScoresRef.current = reduced.scores;
+      realDeductionsRef.current = reduced.deductions;
+      // Enquanto o modo teste está ligado, o jurado pode ter notas/
+      // deduções SIMULADAS em tela (nunca gravadas, então nunca voltam
+      // nesses `data.events`/`pending`) — sem essa guarda, o poll de 6s
+      // sobrescreveria tudo de volta pro estado real (vazio) no meio da
+      // prática.
+      if (!practiceModeRef.current) {
+        setScores(reduced.scores);
+        setDeductions(reduced.deductions);
+      }
       if (!hydratedRef.current) {
         setComment(reduced.comment);
         setSketchDataUrl(reduced.sketchDataUrl);
@@ -429,7 +469,7 @@ export function EventLiveScoringPage() {
   // atualiza o estado local direto (sem esperar o próximo poll) pra
   // trocar o aviso vermelho por um de "resolvida" na hora.
   async function handleResolveContestation() {
-    if (!id || !entryId) return;
+    if (!id || !entryId || practiceMode) return;
     setResolvingContestation(true);
     await scoringApi.resolveContestation(id, entryId);
     setSheet((prev) => (prev ? { ...prev, contestationResolved: true } : prev));
@@ -446,6 +486,11 @@ export function EventLiveScoringPage() {
   // iniciar o evento — a tela em si continua aberta pra consulta (ver
   // decisão do usuário), só os controles de escrita ficam desabilitados.
   const canWrite = event.status === "started";
+  // Interface destravada tanto pelo evento ter começado de verdade
+  // quanto pelo modo teste — emitEvent/emitScoreEvent continuam só
+  // gravando quando `canWrite` for true de verdade, então modo teste
+  // nunca grava nada mesmo com a interface liberada.
+  const interactionUnlocked = canWrite || practiceMode;
 
   const progress = sheet.presentation.presentationTimeSeconds
     ? Math.min(1, elapsedMs / 1000 / sheet.presentation.presentationTimeSeconds)
@@ -528,14 +573,40 @@ export function EventLiveScoringPage() {
           </div>
         )}
 
-        {!canWrite && (
-          <div className="m-4 flex items-center gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="size-4 shrink-0" />
-            O evento ainda não foi iniciado — aguarde o produtor pra lançar notas.
+        {!canWrite && !practiceMode && (
+          <div className="m-4 flex flex-col gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="size-4 shrink-0" />
+              O evento ainda não foi iniciado — aguarde o produtor pra lançar notas.
+            </div>
+            <button
+              type="button"
+              onClick={togglePracticeMode}
+              className="flex w-fit items-center gap-1.5 rounded-lg border border-amber-400/60 bg-white/60 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-white dark:bg-transparent dark:text-amber-400"
+            >
+              <FlaskConical className="size-3.5" />
+              Praticar
+            </button>
           </div>
         )}
 
-        <div className={cn(!canWrite && "pointer-events-none opacity-50")}>
+        {!canWrite && practiceMode && (
+          <div className="m-4 flex items-center justify-between gap-2 rounded-2xl border border-sky-300/50 bg-sky-500/10 p-3 text-sm font-medium text-sky-700 dark:text-sky-400">
+            <span className="flex items-center gap-2">
+              <FlaskConical className="size-4 shrink-0" />
+              Modo teste — nada do que você fizer aqui será salvo.
+            </span>
+            <button
+              type="button"
+              onClick={togglePracticeMode}
+              className="shrink-0 rounded-lg border border-sky-400/60 bg-white/60 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-white dark:bg-transparent dark:text-sky-400"
+            >
+              Sair
+            </button>
+          </div>
+        )}
+
+        <div className={cn(!interactionUnlocked && "pointer-events-none opacity-50")}>
         {sheet.isLegalityJudge && (
           <div className="m-4 rounded-2xl border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
@@ -700,7 +771,7 @@ export function EventLiveScoringPage() {
       </main>
 
       <div className="border-t border-border bg-card p-4">
-        {!sheetComplete && canWrite && (
+        {!sheetComplete && interactionUnlocked && (
           <p className="mb-2 text-center text-xs font-medium text-amber-600">
             Faltam {missingParts.join(" e ")} pra lançar as notas.
           </p>
@@ -708,9 +779,9 @@ export function EventLiveScoringPage() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={submitting || !sheetComplete || !canWrite}
+          disabled={submitting || !sheetComplete || !interactionUnlocked}
           title={
-            !canWrite
+            !interactionUnlocked
               ? "O evento ainda não foi iniciado."
               : sheetComplete
                 ? undefined
@@ -719,7 +790,7 @@ export function EventLiveScoringPage() {
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
           <Send className="size-4" />
-          {submitting ? "Enviando..." : "Lançar notas"}
+          {submitting ? "Enviando..." : !canWrite && practiceMode ? "Simular envio" : "Lançar notas"}
         </button>
       </div>
     </div>
@@ -771,6 +842,8 @@ export function EventLiveScoringPage() {
         onSubmit={handleSubmit}
         onOpenSupervision={() => setSupervisionOpen(true)}
         canWrite={canWrite}
+        practiceMode={practiceMode}
+        onTogglePracticeMode={togglePracticeMode}
       />
       <AnimatePresence>
         {supervisionOpen && id && entryId && (
