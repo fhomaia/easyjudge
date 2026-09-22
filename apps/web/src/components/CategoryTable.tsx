@@ -1,12 +1,16 @@
-import { Pencil, Trash2, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Trash2, Users } from "lucide-react";
 import { CategoryStatusBadge } from "@/components/CategoryStatusBadge";
 import { DIVISION_LABELS, MODALITY_LABELS, formatLabelFor } from "@/lib/categoryLabels";
 import { formatMinutesSeconds } from "@/lib/presentationTime";
 import type { Category } from "@/api/client";
 
+type TeamSortDirection = "asc" | "desc" | null;
+
 interface CategoryTableProps {
   categories: Category[];
   teamCounts: Map<string, number>;
+  teamSort: TeamSortDirection;
+  onTeamSortChange: (value: TeamSortDirection) => void;
   onEdit: (category: Category) => void;
   onDelete: (category: Category) => void;
   onViewTeams: (category: Category) => void;
@@ -15,10 +19,18 @@ interface CategoryTableProps {
 export function CategoryTable({
   categories,
   teamCounts,
+  teamSort,
+  onTeamSortChange,
   onEdit,
   onDelete,
   onViewTeams,
 }: CategoryTableProps) {
+  function handleToggleTeamSort() {
+    onTeamSortChange(teamSort === null ? "desc" : teamSort === "desc" ? "asc" : null);
+  }
+
+  const TeamSortIcon = teamSort === "asc" ? ArrowUp : teamSort === "desc" ? ArrowDown : ArrowUpDown;
+
   return (
     <div className="overflow-x-auto rounded-lg border border-border/60 bg-card">
       <table className="w-full text-left text-sm">
@@ -31,7 +43,18 @@ export function CategoryTable({
             <th className="px-4 py-3 font-medium">Nível</th>
             <th className="px-4 py-3 font-medium">Tempo</th>
             <th className="px-4 py-3 font-medium">Sistema de pontuação</th>
-            <th className="px-4 py-3 font-medium">Equipes</th>
+            <th className="px-4 py-3 font-medium">
+              <button
+                type="button"
+                onClick={handleToggleTeamSort}
+                className={`flex items-center gap-1 transition-colors hover:text-foreground ${
+                  teamSort ? "text-foreground" : ""
+                }`}
+              >
+                Equipes
+                <TeamSortIcon className="size-3.5" />
+              </button>
+            </th>
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 text-right font-medium">Ações</th>
           </tr>

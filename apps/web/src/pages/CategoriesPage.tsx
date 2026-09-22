@@ -78,6 +78,7 @@ export function CategoriesPage() {
   const [statusFilter, setStatusFilter] = useState<CategoryStatusFilter>("all");
   const [modalityFilter, setModalityFilter] = useState<CategoryModalityFilter>("all");
   const [sort, setSort] = useState<CategorySortOption>("recent");
+  const [teamSort, setTeamSort] = useState<"asc" | "desc" | null>(null);
   const [view, setView] = useState<CategoryViewMode>("list");
   const [page, setPage] = useState(1);
 
@@ -147,19 +148,7 @@ export function CategoriesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, modalityFilter, sort]);
-
-  const filteredCategories = useMemo(() => {
-    const list = categories ?? [];
-    const query = search.trim().toLowerCase();
-    const filtered = list.filter((category) => {
-      if (statusFilter !== "all" && category.status !== statusFilter) return false;
-      if (modalityFilter !== "all" && category.modality !== modalityFilter) return false;
-      if (query && !category.name.toLowerCase().includes(query)) return false;
-      return true;
-    });
-    return sortCategories(filtered, sort);
-  }, [categories, search, statusFilter, modalityFilter, sort]);
+  }, [search, statusFilter, modalityFilter, sort, teamSort]);
 
   const teamsByCategory = useMemo(() => {
     const map = new Map<string, TeamWithProgram[]>();
@@ -178,6 +167,27 @@ export function CategoriesPage() {
     }
     return counts;
   }, [teamsByCategory]);
+
+  const filteredCategories = useMemo(() => {
+    const list = categories ?? [];
+    const query = search.trim().toLowerCase();
+    const filtered = list.filter((category) => {
+      if (statusFilter !== "all" && category.status !== statusFilter) return false;
+      if (modalityFilter !== "all" && category.modality !== modalityFilter) return false;
+      if (query && !category.name.toLowerCase().includes(query)) return false;
+      return true;
+    });
+    if (teamSort) {
+      const sorted = [...filtered];
+      sorted.sort((a, b) => {
+        const diff = (teamCounts.get(a.id) ?? 0) - (teamCounts.get(b.id) ?? 0);
+        const ordered = teamSort === "asc" ? diff : -diff;
+        return ordered || a.name.localeCompare(b.name, "pt-BR");
+      });
+      return sorted;
+    }
+    return sortCategories(filtered, sort);
+  }, [categories, search, statusFilter, modalityFilter, sort, teamSort, teamCounts]);
 
   const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -294,6 +304,8 @@ export function CategoriesPage() {
                     <CategoryTable
                       categories={paginatedCategories}
                       teamCounts={teamCounts}
+                      teamSort={teamSort}
+                      onTeamSortChange={setTeamSort}
                       onEdit={setEditTarget}
                       onDelete={setDeleteTarget}
                       onViewTeams={setTeamsTarget}
