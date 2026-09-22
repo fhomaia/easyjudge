@@ -30,6 +30,7 @@ import { UpdateScheduleResourceDto } from '../dto/update-schedule-resource.dto';
 import { MoveScheduleResourceDto } from '../dto/move-schedule-resource.dto';
 import { CreateScheduleEntryDto } from '../dto/create-schedule-entry.dto';
 import { MoveScheduleEntryDto } from '../dto/move-schedule-entry.dto';
+import { UpdateScheduleEntryDto } from '../dto/update-schedule-entry.dto';
 import { AutoGenerateScheduleDto } from '../dto/auto-generate-schedule.dto';
 import { Team } from '../../teams/entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
@@ -711,6 +712,50 @@ export class ScheduleService {
     // folga, sobrepondo aquecimento e apresentação.
     await this.reconcileWarmupDelays(dayId);
     await this.reconcileMatGaps(dayId);
+    const updated = await this.entriesRepo.findOneBy({ id: entryId });
+    const [view] = await this.attachNames([updated!]);
+    return view;
+  }
+
+  // Edita nome/duração de um evento especial já lançado (Almoço,
+  // Premiação, intervalo personalizado etc.) sem precisar remover e
+  // recriar. Igual ao guard de removeEntry: apresentação, aquecimento e
+  // os intervalos "Aguardando..." gerados automaticamente não têm nome
+  // próprio editável nem duração independente da reconciliação que os
+  // criou — só "Intervalo entre apresentações" (que também tem
+  // linkedEntryId, mas é removível/editável como qualquer break normal)
+  // e os eventos especiais soltos ficam de fora do bloqueio.
+  async updateEntry(
+    eventId: string,
+    dayId: string,
+    entryId: string,
+    dto: UpdateScheduleEntryDto,
+  ): Promise<ScheduleEntryView> {
+    await this.findDayOrThrow(eventId, dayId);
+    const entry = await this.findEntryInDayOrThrow(dayId, entryId);
+
+    if (
+      entry.type === ScheduleEntryType.PRESENTATION ||
+      entry.type === ScheduleEntryType.WARMUP
+    ) {
+      throw new BadRequestException(
+        'Apresentação e aquecimento não podem ser editados diretamente — use "Mover" para ajustar pista/posição.',
+      );
+    }
+    if (entry.linkedEntryId && entry.label !== INTERVAL_BREAK_LABEL) {
+      throw new BadRequestException(
+        'Este intervalo é gerado automaticamente para evitar conflito de agenda da equipe e não pode ser editado diretamente.',
+      );
+    }
+
+    Object.assign(entry, stripUndefined(dto));
+    await this.entriesRepo.save(entry);
+
+    // Duração mudando desloca o que vem depois na mesma fila/pista —
+    // mesmo raciocínio de createEntry/moveEntry/removeEntry acima.
+    await this.reconcileWarmupDelays(dayId);
+    await this.reconcileMatGaps(dayId);
+
     const updated = await this.entriesRepo.findOneBy({ id: entryId });
     const [view] = await this.attachNames([updated!]);
     return view;

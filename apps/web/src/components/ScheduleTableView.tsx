@@ -36,6 +36,12 @@ interface ScheduleTableViewProps {
   day: ScheduleDay;
   conflicts: Map<string, string[]>;
   onRemoveEntry: (entryId: string) => void;
+  // Mesmo painel de detalhes aberto pela linha do tempo (ver
+  // ScheduleEntryCard) — antes a tabela não tinha clique nenhum pra
+  // isso, só a timeline (pedido do usuário 2026-09-22: também valer
+  // aqui).
+  onOpenDetails: (entryId: string) => void;
+  onOpenSpecialEventDetails: (entryId: string) => void;
   // Enquanto o usuário arrasta uma apresentação, o aquecimento
   // vinculado a ela recebe o mesmo deslocamento (ver SchedulePage) —
   // dá a impressão de arrastar os dois juntos, embora o
@@ -49,6 +55,8 @@ export function ScheduleTableView({
   day,
   conflicts,
   onRemoveEntry,
+  onOpenDetails,
+  onOpenSpecialEventDetails,
   peerDrag = null,
   dragInfo = null,
   dropPreview = null,
@@ -239,6 +247,8 @@ export function ScheduleTableView({
                         cell.entry.id
                       }
                       onRemove={() => onRemoveEntry(cell.entry.id)}
+                      onOpenDetails={onOpenDetails}
+                      onOpenSpecialEventDetails={onOpenSpecialEventDetails}
                       peerDrag={
                         peerDrag && peerDrag.entryId === cell.entry.id
                           ? peerDrag
@@ -296,6 +306,8 @@ interface TableEntryCellProps {
   // Destaque na borda de BAIXO (ponto logo depois desta célula).
   dropMarkBottomActive: boolean;
   onRemove: () => void;
+  onOpenDetails: (entryId: string) => void;
+  onOpenSpecialEventDetails: (entryId: string) => void;
   // Setado quando ESTA célula não é a que o usuário está arrastando,
   // mas sim o aquecimento vinculado à apresentação sendo arrastada —
   // espelha o deslocamento do drag ativo (ver SchedulePage), pra dar a
@@ -314,6 +326,8 @@ function TableEntryCell({
   dropMark,
   dropMarkBottomActive,
   onRemove,
+  onOpenDetails,
+  onOpenSpecialEventDetails,
   peerDrag,
 }: TableEntryCellProps) {
   const {
@@ -357,6 +371,13 @@ function TableEntryCell({
       ref={setRefs}
       {...listeners}
       {...attributes}
+      onClick={() => {
+        // Mesmo raciocínio do card da timeline: dnd-kit só ativa o
+        // drag de verdade depois de 5px de deslocamento, um clique sem
+        // arrastar chega aqui normalmente.
+        if (entry.type === "presentation") onOpenDetails(entry.id);
+        else if (entry.type !== "warmup") onOpenSpecialEventDetails(entry.id);
+      }}
       rowSpan={rowSpan}
       title={tooltip}
       style={{

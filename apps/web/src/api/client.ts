@@ -1265,6 +1265,11 @@ export interface MoveScheduleEntryPayload {
   order: number;
 }
 
+export interface UpdateScheduleEntryPayload {
+  label?: string;
+  durationMinutes?: number;
+}
+
 export interface AutoGenerateSchedulePayload {
   startMinutes: number;
   warmupMinutes: number;
@@ -1372,6 +1377,17 @@ export const scheduleApi = {
   ) =>
     authRequest<ScheduleEntry>(
       `/events/${eventId}/schedule/days/${dayId}/entries/${entryId}/move`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
+  updateEntry: (
+    eventId: string,
+    dayId: string,
+    entryId: string,
+    payload: UpdateScheduleEntryPayload,
+  ) =>
+    authRequest<ScheduleEntry>(
+      `/events/${eventId}/schedule/days/${dayId}/entries/${entryId}`,
       { method: "PATCH", body: JSON.stringify(payload) },
     ),
 

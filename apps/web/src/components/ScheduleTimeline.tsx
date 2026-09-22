@@ -78,6 +78,7 @@ interface ResourceRowProps {
   conflicts: Map<string, string[]>;
   onRemoveEntry: (entryId: string) => void;
   onOpenDetails: (entryId: string) => void;
+  onOpenSpecialEventDetails: (entryId: string) => void;
   onEditResource: (resourceId: string) => void;
   peerDrag: { entryId: string; x: number; y: number } | null;
   dragInfo: DragInfo | null;
@@ -92,6 +93,7 @@ function ResourceRow({
   conflicts,
   onRemoveEntry,
   onOpenDetails,
+  onOpenSpecialEventDetails,
   onEditResource,
   peerDrag,
   dragInfo,
@@ -263,6 +265,7 @@ function ResourceRow({
                 conflictReasons={conflicts.get(entry.id) ?? []}
                 onRemove={() => onRemoveEntry(entry.id)}
                 onOpenDetails={onOpenDetails}
+                onOpenSpecialEventDetails={onOpenSpecialEventDetails}
                 peerDrag={
                   peerDrag && peerDrag.entryId === entry.id ? peerDrag : null
                 }
@@ -309,6 +312,7 @@ interface ScheduleTimelineProps {
   conflicts: Map<string, string[]>;
   onRemoveEntry: (entryId: string) => void;
   onOpenDetails: (entryId: string) => void;
+  onOpenSpecialEventDetails: (entryId: string) => void;
   onAddResource: () => void;
   onEditResource: (resourceId: string) => void;
   // Enquanto o usuário arrasta uma apresentação, o aquecimento
@@ -325,6 +329,7 @@ export function ScheduleTimeline({
   conflicts,
   onRemoveEntry,
   onOpenDetails,
+  onOpenSpecialEventDetails,
   onAddResource,
   onEditResource,
   peerDrag = null,
@@ -395,6 +400,7 @@ export function ScheduleTimeline({
             conflicts={conflicts}
             onRemoveEntry={onRemoveEntry}
             onOpenDetails={onOpenDetails}
+            onOpenSpecialEventDetails={onOpenSpecialEventDetails}
             onEditResource={onEditResource}
             peerDrag={peerDrag}
             dragInfo={dragInfo}

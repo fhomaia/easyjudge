@@ -24,10 +24,14 @@ interface ScheduleEntryCardProps {
   onRemove: () => void;
   // Só chamado pra entries type==="presentation" (ver uso abaixo) —
   // abre o PresentationDetailsDialog com dados completos + ações de
-  // mover/remover. Aquecimento/intervalo/etc. continuam só
-  // arrastáveis+removíveis, sem painel de detalhes (pedido do usuário
-  // era especificamente sobre "apresentação").
+  // mover/remover.
   onOpenDetails: (entryId: string) => void;
+  // Chamado pros eventos especiais editáveis (break/ceremony/award que
+  // não sejam aquecimento nem os "Aguardando..." automáticos, ver
+  // isWaitBreak abaixo) — abre o SpecialEventDetailsDialog pra editar
+  // nome/duração (pedido do usuário 2026-09-22: antes só apresentação
+  // tinha painel de detalhes ao clicar).
+  onOpenSpecialEventDetails: (entryId: string) => void;
   // Setado quando ESTE card não é o que o usuário está arrastando,
   // mas sim o aquecimento vinculado à apresentação que está sendo
   // arrastada — espelha o deslocamento do drag ativo (ver
@@ -48,6 +52,7 @@ export function ScheduleEntryCard({
   conflictReasons,
   onRemove,
   onOpenDetails,
+  onOpenSpecialEventDetails,
   peerDrag,
 }: ScheduleEntryCardProps) {
   const style = SCHEDULE_TYPE_STYLES[entry.type];
@@ -90,6 +95,7 @@ export function ScheduleEntryCard({
         // deslocamento (activationConstraint, ver SchedulePage) — um
         // clique sem arrastar chega aqui normalmente.
         if (entry.type === "presentation") onOpenDetails(entry.id);
+        else if (!isWaitBreak) onOpenSpecialEventDetails(entry.id);
       }}
       style={{
         position: "absolute",

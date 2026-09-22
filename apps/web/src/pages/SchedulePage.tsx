@@ -53,6 +53,7 @@ import { EditResourceDialog } from "@/components/EditResourceDialog";
 import { CreateResourceDialog } from "@/components/CreateResourceDialog";
 import { ScheduleSummaryFooter } from "@/components/ScheduleSummaryFooter";
 import { PresentationDetailsDialog } from "@/components/PresentationDetailsDialog";
+import { SpecialEventDetailsDialog } from "@/components/SpecialEventDetailsDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ScheduleOverflowDialog } from "@/components/ScheduleOverflowDialog";
 import { findScheduleConflicts } from "@/lib/scheduleConflicts";
@@ -103,6 +104,9 @@ export function SchedulePage() {
   const [autoGenerateOpen, setAutoGenerateOpen] = useState(false);
   const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [detailsEntryId, setDetailsEntryId] = useState<string | null>(null);
+  const [specialEventDetailsEntryId, setSpecialEventDetailsEntryId] = useState<string | null>(
+    null,
+  );
   const [addingPair, setAddingPair] = useState<UnscheduledPair | null>(null);
   const [createResourceOpen, setCreateResourceOpen] = useState(false);
   const [replicateOpen, setReplicateOpen] = useState(false);
@@ -711,6 +715,7 @@ export function SchedulePage() {
                           conflicts={conflicts}
                           onRemoveEntry={handleRemoveEntry}
                           onOpenDetails={setDetailsEntryId}
+                          onOpenSpecialEventDetails={setSpecialEventDetailsEntryId}
                           onAddResource={() => setCreateResourceOpen(true)}
                           onEditResource={setEditingResourceId}
                           peerDrag={peerDrag}
@@ -722,6 +727,8 @@ export function SchedulePage() {
                           dropPreview={dropPreview}
                           conflicts={conflicts}
                           onRemoveEntry={handleRemoveEntry}
+                          onOpenDetails={setDetailsEntryId}
+                          onOpenSpecialEventDetails={setSpecialEventDetailsEntryId}
                           peerDrag={peerDrag}
                         />
                       )}
@@ -874,6 +881,16 @@ export function SchedulePage() {
             refetchDays();
             refetchUnscheduled();
           }}
+        />
+      )}
+
+      {id && selectedDay && (
+        <SpecialEventDetailsDialog
+          eventId={id}
+          day={selectedDay}
+          entryId={specialEventDetailsEntryId}
+          onOpenChange={(open) => !open && setSpecialEventDetailsEntryId(null)}
+          onChanged={refetchDays}
         />
       )}
 

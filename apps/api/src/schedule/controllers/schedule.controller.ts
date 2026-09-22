@@ -20,6 +20,7 @@ import { UpdateScheduleResourceDto } from '../dto/update-schedule-resource.dto';
 import { MoveScheduleResourceDto } from '../dto/move-schedule-resource.dto';
 import { CreateScheduleEntryDto } from '../dto/create-schedule-entry.dto';
 import { MoveScheduleEntryDto } from '../dto/move-schedule-entry.dto';
+import { UpdateScheduleEntryDto } from '../dto/update-schedule-entry.dto';
 import { AutoGenerateScheduleDto } from '../dto/auto-generate-schedule.dto';
 import { UpdateAutoGenerateSettingsDto } from '../dto/update-auto-generate-settings.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -169,6 +170,16 @@ export class ScheduleController {
       dto,
       req.user.userId,
     );
+  }
+
+  @Patch('days/:dayId/entries/:entryId')
+  updateEntry(
+    @Param('eventId') eventId: string,
+    @Param('dayId') dayId: string,
+    @Param('entryId') entryId: string,
+    @Body() dto: UpdateScheduleEntryDto,
+  ) {
+    return this.scheduleService.updateEntry(eventId, dayId, entryId, dto);
   }
 
   @Delete('days/:dayId/entries/:entryId')
