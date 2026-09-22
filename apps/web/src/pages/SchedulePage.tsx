@@ -116,7 +116,7 @@ export function SchedulePage() {
     newEndMinutes: number;
     undo: () => Promise<void>;
   } | null>(null);
-  const [viewMode, setViewMode] = useState<"timeline" | "table">("timeline");
+  const [viewMode, setViewMode] = useState<"timeline" | "table">("table");
   const [error, setError] = useState<string | null>(null);
   const [activeDragEntryId, setActiveDragEntryId] = useState<string | null>(null);
   const [activeDragDelta, setActiveDragDelta] = useState({ x: 0, y: 0 });
@@ -689,20 +689,20 @@ export function SchedulePage() {
                         <Button
                           type="button"
                           size="sm"
-                          variant={viewMode === "timeline" ? "default" : "ghost"}
-                          onClick={() => setViewMode("timeline")}
-                        >
-                          <GanttChartSquare className="size-4" />
-                          Linha do tempo
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
                           variant={viewMode === "table" ? "default" : "ghost"}
                           onClick={() => setViewMode("table")}
                         >
                           <Table2 className="size-4" />
                           Tabela
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={viewMode === "timeline" ? "default" : "ghost"}
+                          onClick={() => setViewMode("timeline")}
+                        >
+                          <GanttChartSquare className="size-4" />
+                          Linha do tempo
                         </Button>
                       </div>
                     </div>
