@@ -609,12 +609,14 @@ confirmando cada ação em conta externa (criação de conta/pagamento não
      `.com.br`); redigitar o domínio (sem colar) numa segunda tentativa
      resolveu. Vale tentar de novo antes de assumir que travou, se
      outro domínio dessa zona der o mesmo erro.
-4. **Backend (Render, plano Free)**, publicado em
-   `https://cheercup-api.onrender.com` — decisão consciente do usuário
-   de aceitar o cold-start do plano grátis (~50s depois de 15min
-   parado) por enquanto. **Precisa migrar pro plano pago (Starter,
-   ~$7/mês) ou outro host sempre-ligado antes de qualquer competição
-   real rodar em cima disso** — não deixar escapar.
+4. **Backend (Render)**, publicado em
+   `https://cheercup-api.onrender.com` — subiu no plano Free (cold-start
+   de ~50s depois de 15min parado), decisão consciente do usuário pra
+   evitar custo de POC até ter competição real. **Migrado pro plano
+   Starter (~$7/mês) em algum momento até 2026-09-21** — sem cold-start
+   desde então (confirmado pelo usuário nessa data; a mudança em si não
+   ficou registrada aqui, não há data exata nem se foi feita pelo
+   dashboard do Render ou outra forma).
    - **Bug real achado e corrigido**: `apps/api/package.json` tinha
      `"start:prod": "node dist/main"`, mas o build (`nest build`) na
      verdade gera `dist/src/main.js`, não `dist/main.js` — o
@@ -677,8 +679,9 @@ credencial errada disparou `POST https://api.cheercup.com.br/auth/login`
 cross-origin sem erro de CORS, mensagem de erro certa na tela —
 confirma a cadeia inteira (Workers → Render → Neon) funcionando junta.
 
-**Pontas soltas conscientes**: Render Free em cold-start (ver item 4
-acima). As outras duas foram resolvidas em 2026-09-20: `www.cheercup.com.br`
+**Pontas soltas conscientes** (na época do deploy inicial): Render Free
+em cold-start (ver item 4 acima — já resolvido, plano Starter desde
+antes de 2026-09-21). As outras duas foram resolvidas em 2026-09-20: `www.cheercup.com.br`
 já estava configurado (confere por `dig`/`curl`: resolve pro Cloudflare,
 cert válido, serve o app e as rotas SPA; **serve direto, não redireciona
 pro domínio raiz**, então existem duas URLs válidas — redirect é
@@ -1666,9 +1669,8 @@ Neon pelo usuário ANTES do push: `DeductionTypeToVarchar` e
 - O auto mode bloqueia ler o segredo do `.env` para gerar token de
   login: teste autenticado de ponta a ponta precisa de conta de teste
   fornecida pelo usuário.
-- Plano do Render NÃO confirmado (as notas dizem Free; usuário lembrou
-  de "trocar pra Starter" mas não há registro). Conferir em Settings ->
-  Instance Type antes de qualquer competição real.
+- Plano do Render confirmado pelo usuário em 2026-09-21: **Starter**
+  (não Free) — ver seção "Deploy de produção" acima, item 4.
 - Pendências de teste em produção: 409 de excluir tipo de dedução já
   usado (a consulta SQL nunca rodou), vínculo por email jurado/programa
   ponta a ponta, e o raio nas telas de Atletas/sistemas de pontuação.
