@@ -1769,7 +1769,25 @@ export class ScheduleService {
     const allEntries = resourceIds.length
       ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
       : [];
+    return this.computeTeamBusyWindows(resources, allEntries, day, teamId, excludeEntryIds);
+  }
 
+  // Mesmo cálculo de getTeamBusyWindows, mas a partir de dados JÁ
+  // CARREGADOS (recursos + entries do dia inteiro), sem consulta nova
+  // ao banco — usada pelos laços de reconciliação abaixo, que chamavam
+  // getTeamBusyWindows uma vez POR AQUECIMENTO revisado a cada
+  // iteração do próprio while (achado 2026-09-22: causa raiz da
+  // lentidão relatada pelo usuário ao mover/criar apresentações — cada
+  // chamada refazia 2 consultas cobrindo o dia inteiro). O chamador
+  // busca resources+entries uma vez por iteração e reaproveita pra
+  // todos os itens dela.
+  private computeTeamBusyWindows(
+    resources: ScheduleResource[],
+    allEntries: ScheduleEntry[],
+    day: ScheduleDay,
+    teamId: string,
+    excludeEntryIds?: ReadonlySet<string>,
+  ): { start: number; end: number }[] {
     const windows: { start: number; end: number }[] = [];
     for (const resource of resources) {
       const entries = allEntries
@@ -1813,6 +1831,7 @@ export class ScheduleService {
       where: { scheduleDayId: dayId },
     });
     const warmupResources = resources.filter((r) => !r.supportsPresentations);
+    const resourceIds = resources.map((r) => r.id);
 
     for (const resource of warmupResources) {
       let safety = 0;
@@ -1821,10 +1840,15 @@ export class ScheduleService {
       // sobrar mais nenhuma pra corrigir — `safety` só evita loop
       // infinito se algo inesperado deixar de convergir.
       while (safety++ < 50) {
-        const entries = await this.entriesRepo.find({
-          where: { resourceId: resource.id },
-          order: { order: 'ASC' },
-        });
+        // Uma única leitura do dia inteiro por iteração — usada tanto
+        // pras entries deste recurso quanto por computeTeamBusyWindows
+        // logo abaixo (ver comentário lá pra motivo/data do fix).
+        const allEntries = resourceIds.length
+          ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
+          : [];
+        const entries = allEntries
+          .filter((e) => e.resourceId === resource.id)
+          .sort((a, b) => a.order - b.order);
 
         // Espelho da limpeza de reconcileMatGaps — remove "Aguardando
         // disponibilidade da equipe" que ficaram perdidos (não estão
@@ -1881,7 +1905,9 @@ export class ScheduleService {
             (prevIsDelay ? elapsed - prev.durationMinutes : elapsed);
           const excludeIds = new Set([entry.id]);
           if (prevIsDelay) excludeIds.add(prev.id);
-          const busyWindows = await this.getTeamBusyWindows(
+          const busyWindows = this.computeTeamBusyWindows(
+            resources,
+            allEntries,
             day,
             entry.teamId,
             excludeIds,
@@ -1946,9 +1972,24 @@ export class ScheduleService {
       where: { resourceId },
       order: { order: 'ASC' },
     });
+    return this.computeResourceEntryTimes(entries, resourceId, dayStartMinutes);
+  }
+
+  // Mesmo cálculo de getResourceEntryTimes, mas a partir de uma lista
+  // de entries JÁ CARREGADA (pode ser do dia inteiro — filtra por
+  // `resourceId` internamente), sem consulta nova ao banco. Mesmo
+  // motivo/data do fix de computeTeamBusyWindows acima (2026-09-22).
+  private computeResourceEntryTimes(
+    entries: ScheduleEntry[],
+    resourceId: string,
+    dayStartMinutes: number,
+  ): Map<string, { start: number; end: number }> {
     const times = new Map<string, { start: number; end: number }>();
+    const sorted = entries
+      .filter((e) => e.resourceId === resourceId)
+      .sort((a, b) => a.order - b.order);
     let cursor = dayStartMinutes;
-    for (const entry of entries) {
+    for (const entry of sorted) {
       times.set(entry.id, {
         start: cursor,
         end: cursor + entry.durationMinutes,
@@ -1972,14 +2013,21 @@ export class ScheduleService {
       where: { scheduleDayId: dayId },
     });
     const matResources = resources.filter((r) => r.supportsPresentations);
+    const resourceIds = resources.map((r) => r.id);
 
     for (const resource of matResources) {
       let safety = 0;
       while (safety++ < 50) {
-        const entries = await this.entriesRepo.find({
-          where: { resourceId: resource.id },
-          order: { order: 'ASC' },
-        });
+        // Leitura única do dia inteiro por iteração — cobre tanto as
+        // entries deste recurso quanto a busca do aquecimento vinculado
+        // (antes era uma query por apresentação, ver comentário no
+        // trecho abaixo que a substituiu).
+        const allEntries = resourceIds.length
+          ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
+          : [];
+        const entries = allEntries
+          .filter((e) => e.resourceId === resource.id)
+          .sort((a, b) => a.order - b.order);
 
         // Limpa intervalos "Aguardando aquecimento" perdidos — não
         // estão mais IMEDIATAMENTE antes da própria apresentação
@@ -2021,10 +2069,11 @@ export class ScheduleService {
             continue;
           }
 
-          const warmup = await this.entriesRepo.findOneBy({
-            linkedEntryId: entry.id,
-            type: ScheduleEntryType.WARMUP,
-          });
+          const warmup = allEntries.find(
+            (e) =>
+              e.linkedEntryId === entry.id &&
+              e.type === ScheduleEntryType.WARMUP,
+          );
           if (!warmup) {
             elapsed += entry.durationMinutes;
             continue;
@@ -2037,7 +2086,8 @@ export class ScheduleService {
             prev.label === 'Aguardando aquecimento' &&
             prev.linkedEntryId === entry.id;
 
-          const warmupTimes = await this.getResourceEntryTimes(
+          const warmupTimes = this.computeResourceEntryTimes(
+            allEntries,
             warmup.resourceId,
             day.startMinutes,
           );
@@ -2118,7 +2168,11 @@ export class ScheduleService {
       for (const resource of resources) {
         timesByResource.set(
           resource.id,
-          await this.getResourceEntryTimes(resource.id, day.startMinutes),
+          this.computeResourceEntryTimes(
+            allEntries,
+            resource.id,
+            day.startMinutes,
+          ),
         );
       }
 
