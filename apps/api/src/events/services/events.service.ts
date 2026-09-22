@@ -507,8 +507,18 @@ export class EventsService {
   // ScheduleResource/ScheduleEntry/Team/CriterionJudgeAssignment saem
   // de graça via cascata das próprias FKs deles (scheduleDayId/
   // programId/judgeParticipationId), sem precisar de mais nada aqui.
+  //
+  // Mais restrito que getOwnEventOrThrow (que aceitaria qualquer
+  // membro ADMIN do evento): só QUEM CRIOU pode apagar pra sempre —
+  // nem um admin adicionado depois pelo dono (ver event-staff) pode.
+  // Pedido do usuário, 2026-09-22.
   async deleteEvent(aliasId: string, userId: string): Promise<void> {
-    const event = await this.getOwnEventOrThrow(aliasId, userId);
+    const event = await this.findEventOrThrow(aliasId);
+    if (event.createdById !== userId) {
+      throw new ForbiddenException(
+        'Só quem criou o evento pode excluí-lo.',
+      );
+    }
 
     await this.dataSource.transaction(async (manager) => {
       for (const entity of EVENT_SCOPED_ENTITIES) {

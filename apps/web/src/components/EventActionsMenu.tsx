@@ -6,6 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuthStore } from "@/store/auth";
 import type { Event } from "@/api/client";
 
 interface EventActionsMenuProps {
@@ -26,7 +27,8 @@ interface EventActionsMenuProps {
 // opção, é o único item do menu que não é admin-only) e publicar/
 // reverter publicação (mesma dinâmica já usada no dropdown "Mais
 // opções" da tela Início, ver EventLiveDesktopView). Lixeira continua
-// separada, fora do menu, admin-only.
+// separada, fora do menu — restrita a quem CRIOU o evento (mais
+// estrito que admin-only, ver `isOwner` abaixo).
 export function EventActionsMenu({
   event,
   isAdmin,
@@ -38,6 +40,13 @@ export function EventActionsMenu({
   onShare,
 }: EventActionsMenuProps) {
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.userId);
+  // Excluir é mais restrito que os outros itens deste menu (admin-only):
+  // qualquer admin pode editar/publicar/gerenciar o evento, mas só QUEM
+  // CRIOU pode apagá-lo pra sempre — mesmo um admin adicionado depois
+  // pelo dono (ver event-staff) não vê essa opção. Pedido do usuário,
+  // 2026-09-22.
+  const isOwner = event.createdById === userId;
 
   if (!isAdmin && !isAssessor) return null;
 
@@ -101,7 +110,7 @@ export function EventActionsMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      {isAdmin && (
+      {isOwner && (
         <button
           type="button"
           onClick={() => onDelete(event)}
