@@ -78,6 +78,7 @@ export interface UnscheduledPairView {
   customFormatLabel: string | null;
   level: number;
   durationMinutes: number;
+  warmupMinutes: number;
 }
 
 const DEFAULT_COMPONENT_DURATION_MINUTES = 15;
@@ -260,28 +261,16 @@ export class ScheduleService {
     dto: UpdateScheduleDayDto,
   ): Promise<ScheduleDayView> {
     const day = await this.findDayOrThrow(eventId, dayId);
-    // defaultWarmupMinutes só vale pra aquecimentos criados DAQUI pra
-    // frente por padrão — mas o usuário espera que mudar esse número
-    // no cabeçalho também atualize os aquecimentos que já estão
-    // agendados (não é só um valor-sugestão pra próxima apresentação).
-    const warmupMinutesChanged =
-      dto.defaultWarmupMinutes !== undefined &&
-      dto.defaultWarmupMinutes !== day.defaultWarmupMinutes;
-    // Mesmo raciocínio do warmup logo acima: o número no cabeçalho
-    // também deve redimensionar (ou remover) os intervalos já
-    // agendados, não só valer pra apresentações futuras.
+    // O número no cabeçalho também deve redimensionar (ou remover) os
+    // intervalos já agendados, não só valer pra apresentações futuras
+    // (mesmo raciocínio já valia pro warmup antes dele virar campo por
+    // categoria — ver Category.warmupMinutes).
     const gapMinutesChanged =
       dto.defaultGapMinutes !== undefined &&
       dto.defaultGapMinutes !== day.defaultGapMinutes;
     Object.assign(day, stripUndefined(dto));
     const saved = await this.daysRepo.save(day);
 
-    if (warmupMinutesChanged) {
-      await this.applyWarmupDurationToScheduledEntries(
-        dayId,
-        saved.defaultWarmupMinutes,
-      );
-    }
     if (gapMinutesChanged) {
       await this.applyGapDurationToScheduledEntries(
         dayId,
@@ -291,42 +280,6 @@ export class ScheduleService {
 
     const [hydrated] = await this.hydrateDays([saved]);
     return hydrated;
-  }
-
-  // Muda a duração de todo aquecimento já agendado neste dia pro novo
-  // padrão e reconcilia os dois lados afetados pela mudança: o próprio
-  // aquecimento pode passar a invadir (ou deixar de invadir) o
-  // compromisso de outra equipe ("Aguardando disponibilidade da
-  // equipe"), e o fim dele pode passar a cair antes/depois de quando a
-  // apresentação correspondente começa ("Aguardando aquecimento", do
-  // lado da pista). Repete o par de reconciliações algumas vezes
-  // porque uma pode reabrir a necessidade da outra (mesmo raciocínio
-  // de `safety` já usado nelas) — não persegue um ponto fixo exato,
-  // só o suficiente pro caso comum (poucas equipes/recursos).
-  private async applyWarmupDurationToScheduledEntries(
-    dayId: string,
-    warmupMinutes: number,
-  ): Promise<void> {
-    const resources = await this.resourcesRepo.find({
-      where: { scheduleDayId: dayId },
-    });
-    const resourceIds = resources.map((r) => r.id);
-    if (resourceIds.length === 0) return;
-
-    const warmups = await this.entriesRepo.find({
-      where: { resourceId: In(resourceIds), type: ScheduleEntryType.WARMUP },
-    });
-    if (warmups.length === 0) return;
-
-    for (const warmup of warmups) {
-      warmup.durationMinutes = warmupMinutes;
-    }
-    await this.entriesRepo.save(warmups);
-
-    for (let pass = 0; pass < 3; pass++) {
-      await this.reconcileWarmupDelays(dayId);
-      await this.reconcileMatGaps(dayId);
-    }
   }
 
   // Redimensiona (ou remove, se o novo valor for 0) os intervalos
@@ -580,6 +533,7 @@ export class ScheduleService {
           customFormatLabel: category.customFormatLabel,
           level: category.level,
           durationMinutes: this.presentationDurationMinutes(category),
+          warmupMinutes: category.warmupMinutes,
         });
       }
     }
@@ -1189,7 +1143,7 @@ export class ScheduleService {
         const naturalWarmupStart = day.startMinutes + chosenElapsed;
         const resolvedWarmupStart = this.resolveNonOverlappingStart(
           naturalWarmupStart,
-          dto.warmupMinutes,
+          pair.warmupMinutes,
           teamBusyWindows,
         );
         const warmupDelayMinutes = resolvedWarmupStart - naturalWarmupStart;
@@ -1206,7 +1160,7 @@ export class ScheduleService {
         const gapMinutes = matHasPresentation ? day.defaultGapMinutes : 0;
         if (gapMinutes > 0) matElapsed += gapMinutes;
 
-        const warmupEndAfterThisPair = chosenElapsed + dto.warmupMinutes;
+        const warmupEndAfterThisPair = chosenElapsed + pair.warmupMinutes;
         const needsMatGap = warmupEndAfterThisPair > matElapsed;
         const matGapMinutes = needsMatGap
           ? warmupEndAfterThisPair - matElapsed
@@ -1276,7 +1230,7 @@ export class ScheduleService {
 
         await this.insertIntoResource(chosenWarmupId, Number.MAX_SAFE_INTEGER, {
           type: ScheduleEntryType.WARMUP,
-          durationMinutes: dto.warmupMinutes,
+          durationMinutes: pair.warmupMinutes,
           teamId: pair.teamId,
           categoryId: pair.categoryId,
           linkedEntryId: presentation.id,
@@ -1285,7 +1239,7 @@ export class ScheduleService {
         matElapsed += pair.durationMinutes;
         warmupElapsedByResource.set(
           chosenWarmupId,
-          chosenElapsed + dto.warmupMinutes,
+          chosenElapsed + pair.warmupMinutes,
         );
       };
 
@@ -1321,12 +1275,12 @@ export class ScheduleService {
         const teamBusyWindows = await this.getTeamBusyWindows(day, pair.teamId);
         const warmupStart = this.resolveNonOverlappingStart(
           day.startMinutes + Math.min(...warmupElapsed.values()),
-          dto.warmupMinutes,
+          pair.warmupMinutes,
           teamBusyWindows,
         );
         return Math.max(
           day.startMinutes + elapsed + gap,
-          warmupStart + dto.warmupMinutes,
+          warmupStart + pair.warmupMinutes,
         );
       };
 
@@ -1498,7 +1452,6 @@ export class ScheduleService {
       // mesmo com o banco já correto.
       targetDay.startMinutes = sourceDay.startMinutes;
       targetDay.endMinutes = sourceDay.endMinutes;
-      targetDay.defaultWarmupMinutes = sourceDay.defaultWarmupMinutes;
       targetDay.defaultGapMinutes = sourceDay.defaultGapMinutes;
       await this.daysRepo.save(targetDay);
 
@@ -1601,7 +1554,7 @@ export class ScheduleService {
     const teamId = dto.teamId;
     const durationMinutes =
       dto.durationMinutes ?? this.presentationDurationMinutes(category);
-    const warmupDurationMinutes = day.defaultWarmupMinutes;
+    const warmupDurationMinutes = category.warmupMinutes;
 
     const matSiblings = await this.entriesRepo.find({
       where: { resourceId: resource.id },
@@ -2450,7 +2403,6 @@ export class ScheduleService {
       date,
       startMinutes: 480,
       endMinutes: 1200,
-      defaultWarmupMinutes: 10,
       // 5 min (era 0) — pedido do usuário 2026-08-05: dia novo sem
       // nenhum intervalo entre apresentações raramente é o que se
       // quer de verdade, e o organizador sempre pode zerar depois pela

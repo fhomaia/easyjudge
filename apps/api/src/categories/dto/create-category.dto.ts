@@ -57,4 +57,8 @@ export class CreateCategoryDto {
   @IsInt()
   @Min(1)
   presentationTimeSeconds: number;
+
+  @IsInt()
+  @Min(1)
+  warmupMinutes: number;
 }

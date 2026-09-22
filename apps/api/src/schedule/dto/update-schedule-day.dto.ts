@@ -14,11 +14,6 @@ export class UpdateScheduleDayDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  defaultWarmupMinutes?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
   defaultGapMinutes?: number;
 
   @IsOptional()

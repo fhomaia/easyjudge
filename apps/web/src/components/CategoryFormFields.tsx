@@ -33,6 +33,7 @@ export interface CategorySharedFormValues {
   scoringTemplateId: string;
   presentationMinutes: string;
   presentationSeconds: string;
+  warmupMinutes: string;
 }
 
 interface CategoryFormFieldsProps {
@@ -209,6 +210,25 @@ export function CategoryFormFields({
           />
           <span className="text-sm text-muted-foreground">seg</span>
         </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="category-warmup-minutes">Tempo de aquecimento</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="category-warmup-minutes"
+            type="number"
+            min={1}
+            className="w-20"
+            value={form.warmupMinutes}
+            onChange={(e) => onChange("warmupMinutes", e.target.value)}
+            aria-label="Minutos de aquecimento"
+          />
+          <span className="text-sm text-muted-foreground">min</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Quanto tempo a equipe precisa se preparar antes de entrar na pista.
+        </p>
       </div>
     </>
   );

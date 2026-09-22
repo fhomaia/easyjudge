@@ -14,6 +14,14 @@ export function getDefaultPresentationTimeSeconds(
   return 60;
 }
 
+// Mesmo raciocínio de getDefaultPresentationTimeSeconds acima: só
+// pré-preenche o campo (usuário ajusta antes de salvar). Diferente da
+// duração de apresentação, só varia por formato — Team Cheer pede um
+// preparo bem maior que uma passagem de stunt de 1min.
+export function getDefaultWarmupMinutes(categoryFormat: CategoryFormat): number {
+  return categoryFormat === "team_cheer" ? 10 : 5;
+}
+
 export function secondsToMinutesAndSeconds(totalSeconds: number): {
   minutes: number;
   seconds: number;

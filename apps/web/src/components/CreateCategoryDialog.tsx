@@ -15,6 +15,7 @@ import { CategoryLevelSelector } from "@/components/CategoryLevelSelector";
 import { buildCategoryName, isAlwaysNonTumbling } from "@/lib/categoryLabels";
 import {
   getDefaultPresentationTimeSeconds,
+  getDefaultWarmupMinutes,
   secondsToMinutesAndSeconds,
 } from "@/lib/presentationTime";
 import {
@@ -47,6 +48,7 @@ const initialForm: CategorySharedFormValues = {
   scoringTemplateId: "",
   presentationMinutes: String(defaultPresentationTime.minutes),
   presentationSeconds: String(defaultPresentationTime.seconds),
+  warmupMinutes: String(getDefaultWarmupMinutes("team_cheer")),
 };
 
 function collectLevels(selectedLevels: Set<number>, customLevels: string[]): number[] {
@@ -84,6 +86,9 @@ export function CreateCategoryDialog({
         );
         next.presentationMinutes = String(defaultTime.minutes);
         next.presentationSeconds = String(defaultTime.seconds);
+      }
+      if (key === "categoryFormat") {
+        next.warmupMinutes = String(getDefaultWarmupMinutes(value as CategoryFormat));
       }
       return next;
     });
@@ -141,6 +146,12 @@ export function CreateCategoryDialog({
       return;
     }
 
+    const warmupMinutes = Number(form.warmupMinutes || 0);
+    if (!warmupMinutes || warmupMinutes <= 0) {
+      setError("Informe o tempo de aquecimento.");
+      return;
+    }
+
     const nonTumbling = isAlwaysNonTumbling(form.categoryFormat) || form.nonTumbling;
     const customFormatLabel = form.categoryFormat === "custom" ? form.customFormatLabel : null;
 
@@ -163,6 +174,7 @@ export function CreateCategoryDialog({
           nonTumbling,
           scoringTemplateId: form.scoringTemplateId,
           presentationTimeSeconds,
+          warmupMinutes,
         });
         onCreated(category);
       }

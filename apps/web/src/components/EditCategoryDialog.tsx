@@ -24,6 +24,7 @@ import { STATUS_LABELS, buildCategoryName, isAlwaysNonTumbling } from "@/lib/cat
 import { normalizeDecimalInput } from "@/lib/normalizeDecimalInput";
 import {
   getDefaultPresentationTimeSeconds,
+  getDefaultWarmupMinutes,
   secondsToMinutesAndSeconds,
 } from "@/lib/presentationTime";
 import {
@@ -65,6 +66,9 @@ function toFormValues(category: Category): EditFormValues {
     scoringTemplateId: category.scoringTemplateId ?? "",
     presentationMinutes: String(presentationTime.minutes),
     presentationSeconds: String(presentationTime.seconds),
+    warmupMinutes: String(
+      category.warmupMinutes ?? getDefaultWarmupMinutes(category.categoryFormat),
+    ),
   };
 }
 
@@ -121,6 +125,9 @@ export function EditCategoryDialog({
         next.presentationMinutes = String(defaultTime.minutes);
         next.presentationSeconds = String(defaultTime.seconds);
       }
+      if (key === "categoryFormat") {
+        next.warmupMinutes = String(getDefaultWarmupMinutes(value as CategoryFormat));
+      }
       return next;
     });
   }
@@ -156,6 +163,12 @@ export function EditCategoryDialog({
       return;
     }
 
+    const warmupMinutes = Number(form.warmupMinutes || 0);
+    if (!warmupMinutes || warmupMinutes <= 0) {
+      setError("Informe o tempo de aquecimento.");
+      return;
+    }
+
     setLoading(true);
     try {
       const updated = await categoriesApi.update(eventId, category.id, {
@@ -168,6 +181,7 @@ export function EditCategoryDialog({
         nonTumbling: isAlwaysNonTumbling(form.categoryFormat) || form.nonTumbling,
         scoringTemplateId: form.scoringTemplateId,
         presentationTimeSeconds,
+        warmupMinutes,
         status,
       });
       onUpdated(updated);

@@ -503,6 +503,7 @@ export interface Category {
   scoringTemplateId: string | null;
   scoringTemplate: { id: string; name: string } | null;
   presentationTimeSeconds: number | null;
+  warmupMinutes: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -517,6 +518,7 @@ export interface CategoryPayload {
   nonTumbling: boolean;
   scoringTemplateId: string;
   presentationTimeSeconds: number;
+  warmupMinutes: number;
 }
 
 export type UpdateCategoryPayload = Partial<CategoryPayload> & {
@@ -1208,7 +1210,6 @@ export interface ScheduleDay {
   date: string;
   startMinutes: number;
   endMinutes: number;
-  defaultWarmupMinutes: number;
   defaultGapMinutes: number;
   ignoreUnscheduledPresentations: boolean;
   resources: ScheduleResource[];
@@ -1219,7 +1220,6 @@ export interface ScheduleDay {
 export interface UpdateScheduleDayPayload {
   startMinutes?: number;
   endMinutes?: number;
-  defaultWarmupMinutes?: number;
   defaultGapMinutes?: number;
   ignoreUnscheduledPresentations?: boolean;
 }
@@ -1248,6 +1248,7 @@ export interface UnscheduledPair {
   categoryId: string;
   categoryName: string;
   durationMinutes: number;
+  warmupMinutes: number;
 }
 
 export interface CreateScheduleEntryPayload {
@@ -1272,7 +1273,6 @@ export interface UpdateScheduleEntryPayload {
 
 export interface AutoGenerateSchedulePayload {
   startMinutes: number;
-  warmupMinutes: number;
 }
 
 export const scheduleApi = {

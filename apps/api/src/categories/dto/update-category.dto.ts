@@ -64,4 +64,9 @@ export class UpdateCategoryDto {
   @IsInt()
   @Min(1)
   presentationTimeSeconds?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  warmupMinutes?: number;
 }

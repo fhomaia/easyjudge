@@ -63,6 +63,16 @@ export class Category {
   @Column({ name: 'presentation_time_seconds', type: 'int', nullable: true })
   presentationTimeSeconds: number | null;
 
+  // Diferente de presentationTimeSeconds, este é obrigatório de verdade
+  // (banco NOT NULL, com backfill na migration — categorias diferentes
+  // pedem preparo bem diferente: 1min de stunt não exige o mesmo
+  // aquecimento que uma rotina de Team Cheer de 2:30). Front-end
+  // pré-preenche 10min pra Team Cheer, 5min pros demais formatos —
+  // usuário pode ajustar antes de salvar. Substitui o antigo
+  // ScheduleDay.defaultWarmupMinutes (config única por dia, removida).
+  @Column({ name: 'warmup_minutes', type: 'int' })
+  warmupMinutes: number;
+
   // Nullable no banco (categorias criadas antes dessa feature não têm),
   // mas obrigatório na criação via CreateCategoryDto — só um template
   // "completo" (soma dos critérios-raiz == targetScore) pode ser

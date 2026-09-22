@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeftRight, Clock, Flame, LayoutGrid } from "lucide-react";
+import { ArrowLeftRight, Clock, LayoutGrid } from "lucide-react";
 import { ScheduleDayTabs } from "@/components/ScheduleDayTabs";
 import { getResourceColor } from "@/lib/resourceColor";
 import { formatMinutes, parseTimeToMinutes } from "@/lib/scheduleTime";
@@ -87,7 +87,7 @@ export function ScheduleDaySettingsBar({
       <div className="hidden h-10 w-px bg-border sm:block" />
 
       <div
-        key={`${day.id}:${day.startMinutes}:${day.endMinutes}:${day.defaultWarmupMinutes}:${day.defaultGapMinutes}`}
+        key={`${day.id}:${day.startMinutes}:${day.endMinutes}:${day.defaultGapMinutes}`}
         className="contents"
       >
         <HeaderStat icon={Clock} label="Horário do dia">
@@ -105,21 +105,6 @@ export function ScheduleDaySettingsBar({
               onBlur={(e) => onUpdate({ endMinutes: parseTimeToMinutes(e.target.value) })}
               className={timeInputClass}
             />
-          </div>
-        </HeaderStat>
-
-        <div className="hidden h-10 w-px bg-border sm:block" />
-
-        <HeaderStat icon={Flame} label="Tempo de aquecimento">
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              min={1}
-              defaultValue={day.defaultWarmupMinutes}
-              onBlur={(e) => onUpdate({ defaultWarmupMinutes: Number(e.target.value) })}
-              className={`w-10 ${editableFieldClass}`}
-            />
-            <span>min</span>
           </div>
         </HeaderStat>
 
