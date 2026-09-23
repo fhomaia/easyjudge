@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, QueryFailedError, Repository } from 'typeorm';
 import { ScheduleDay } from '../entities/schedule-day.entity';
 import { ScheduleResource } from '../entities/schedule-resource.entity';
 import { ScheduleEntry } from '../entities/schedule-entry.entity';
@@ -159,7 +159,24 @@ export class ScheduleService {
       order: { dayIndex: 'ASC' },
     });
     if (days.length === 0) {
-      days = await this.seedDays(event);
+      try {
+        days = await this.seedDays(event);
+      } catch (err) {
+        // Corrida real, achada com teste de carga (packages/load-test,
+        // 2026-09-24, 200 espectadores abrindo o evento ao mesmo
+        // tempo): mais de uma requisição pode ver `days.length === 0`
+        // antes de qualquer uma terminar de semear — a perdedora bate
+        // na constraint única (alias_id, day_index) e virava 500. Se
+        // foi exatamente essa corrida (outra requisição já semeou com
+        // sucesso), só relê do banco em vez de propagar o erro.
+        if (!(err instanceof QueryFailedError) || (err.driverError as { code?: string })?.code !== '23505') {
+          throw err;
+        }
+        days = await this.daysRepo.find({
+          where: { aliasId: event.aliasId },
+          order: { dayIndex: 'ASC' },
+        });
+      }
     }
     return this.hydrateDays(days);
   }
