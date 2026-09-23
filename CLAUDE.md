@@ -318,7 +318,9 @@ chegou lá.
   `started` com `ScoreEvent` já lançado não é bloqueado (decisão
   deliberada do usuário, notas continuam no banco).
 - **Código + QR de evento pra espectador**: `Event.eventCode` (8
-  caracteres, gerado na 1ª publicação, estável entre republicações) +
+  caracteres, estável entre republicações — gerado na **criação** do
+  evento desde 2026-09-23, era só na 1ª publicação antes disso, ver
+  seção "Evento em rascunho visível..." mais abaixo) +
   `POST /events/join-by-code` (sem guard de membership, concede
   `SPECTATOR` via `upsertMemberRole`, idempotente). QR renderizado no
   cliente (`qrcode.react`) codificando `${origin}/join/${eventCode}`.
@@ -1674,6 +1676,92 @@ Neon pelo usuário ANTES do push: `DeductionTypeToVarchar` e
 - Pendências de teste em produção: 409 de excluir tipo de dedução já
   usado (a consulta SQL nunca rodou), vínculo por email jurado/programa
   ponta a ponta, e o raio nas telas de Atletas/sistemas de pontuação.
+
+## Evento em rascunho visível pra todo mundo ("Em breve") + código na criação + ranking por modalidade nos Resultados (2026-09-23)
+
+Dois pedidos independentes do usuário, mesma sessão.
+
+- **Evento `created` (rascunho) agora aparece na Home pra QUALQUER
+  vínculo** (`EventMember` de qualquer papel), não só admin/assessor/
+  judge — decisão do usuário: espectador/programa/atleta que já têm
+  algum vínculo devem ver o card, só que como "Em breve"
+  (`EventStatusIndicator`), sem conseguir abrir. `EventsService.
+  findAllForUser` não filtra mais por status nem papel (só membership
+  via `innerJoin`, decisão de apresentação vira 100% do frontend);
+  `findOneForUser`/`canSee` (`GET /events/:id`) ficaram como estavam.
+  `EventListItem`/`EventGridItem` ganharam `isStaffViewer` (deriva de
+  `currentUserRoles`) pra só deixar o card clicável quando `created` E
+  staff.
+- **Achado um gap de segurança real durante a investigação prévia**:
+  `EventMemberGuard` (rotas filhas `/events/:eventId/...` — cronograma,
+  member-counts, notificações etc.) nunca checava `Event.status`, só o
+  papel. Como programa/atleta já ganham `EventMember` antes da
+  publicação (roster montado durante o Setup), já era tecnicamente
+  possível chamar essas rotas direto num evento ainda `created` e
+  pegar dado real — só a Home não linkava pra lá. Corrigido: o guard
+  agora barra com 403 ("Este evento ainda não foi publicado.") quando
+  `member.roles` não é staff e `event.status === created`. Sem esse
+  fix, soltar a lista pra todo mundo teria virado regressão de
+  segurança de verdade, não só estética.
+- **`EVENT_STAFF_ROLES` unificado**: existiam 3 definições locais
+  divergentes de "quem é staff" (`events.service.ts` só tinha
+  `[ADMIN, JUDGE]`; `event-staff.service.ts`/`notifications.service.ts`
+  já tinham `[ADMIN, ASSESSOR, JUDGE]`) — unificadas numa constante só,
+  `apps/api/src/events/constants/event-staff-roles.ts`, incluindo
+  `ASSESSOR` nas 3 (ele já edita configuração do evento, fazia sentido
+  já enxergar rascunho antes dessa correção também). Espelhado no
+  frontend em `hasEventStaffRole`/`EVENT_STAFF_ROLES`
+  (`lib/eventMemberRoles.ts`).
+- **`Event.eventCode` gerado na criação** (`createEvent`, dentro da
+  mesma transação), não mais só na 1ª publicação — permite entrar por
+  QR/código num evento ainda em rascunho (`joinByCode` não rejeita mais
+  `status === created`), ganhando `SPECTATOR` e aparecendo na Home
+  dele como "Em breve". `publishEvent` mantém o fallback antigo
+  (gera se `eventCode` ainda for nulo) só pra evento criado antes desta
+  mudança. `JoinEventPage` manda pra Home em vez de `/live/results`
+  quando o evento entrado ainda está `created` (senão bateria no guard
+  e voltaria sozinho, um "pulo" sem necessidade).
+- Testado ponta a ponta com conta/evento descartáveis (apagados ao
+  final): criar evento confirma `eventCode` já preenchido; espectador
+  entra por código num evento `created`, aparece na lista dele com
+  `status: created`; `GET /events/:id` e uma rota filha
+  (`schedule/days`) direto como esse spectator dão 403; publicar libera
+  os dois (200) pro mesmo spectator sem precisar relogar.
+
+- **Nova aba "Por modalidade" na tela de Resultados**: ranking cruzado
+  entre TODAS as categorias/níveis da MESMA modalidade (Team Cheer,
+  Group Stunt, Elite Stunt/Coed, Partner Stunt, Custom — o
+  `CategoryFormat` da categoria), ordenado por percentual —
+  generalização do que já existia só pro card "Melhor Team Cheer"
+  (`topTeamCheer`, um top-1 só), agora um ranking completo e pra
+  qualquer modalidade. `ResultsPresentationView`/`ResultsPresentation`
+  ganharam `categoryCustomFormatLabel` (faltava — só tinha o enum de
+  formato, sem o rótulo quando `format === custom`); nova
+  `ResultsModalityView`/`ResultsModality` (mesmo padrão de
+  `ResultsCategoryView`, só que agrupada por `formatKey` — o próprio
+  `categoryFormat`, exceto `custom` que vira `` `custom:<label>` ``,
+  uma entrada por rótulo distinto). Ordem de exibição das modalidades:
+  constante local `MODALITY_DISPLAY_ORDER` em `scoring.service.ts`
+  (Team Cheer → Group Stunt → Coed → Partner → customs em ordem
+  alfabética) — cópia local da mesma prioridade já usada em
+  `AUTO_GENERATE_FORMAT_PRIORITY`/`DEFAULT_FORMAT_ORDER` (schedule/
+  frontend), não importada de lá pra não acoplar `scoring` a
+  `schedule` só por 4 itens.
+  - Testado: `tsc` limpo nos dois lados; smoke test real contra o
+    evento sandbox "Easy Judge Cup" (`GET .../scoring/results` com uma
+    conta de teste promovida a admin só naquele evento via SQL, depois
+    revertida — evento em si não foi tocado) confirmou o campo
+    `modalities` presente e correto pro caso real disponível (Group
+    Stunt, 1 categoria já pontuada). Cross-categoria (mesma modalidade,
+    times de 2+ categorias diferentes juntos) e rótulo de modalidade
+    `custom` distinta **não tinham cenário real pronto no sandbox**
+    pra testar sem montar uma jornada grande (categoria + time +
+    programa + cronograma + jurados + notas) — validado em vez disso
+    isoladamente, reproduzindo a mesma função de agrupamento/ordenação
+    com dados sintéticos num script Node descartável (não uma decisão
+    de "pular teste", e sim de ajustar o esforço ao risco real da
+    mudança, puramente lógica/determinística sobre dado já testado em
+    produção).
 
 ## Próximos passos (não iniciados ainda)
 
