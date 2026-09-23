@@ -41,6 +41,20 @@ import { NotificationsService } from '../../notifications/services/notifications
 import { NotificationType } from '../../notifications/enums/notification-type.enum';
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 
+// Ordem de exibição da aba "Por modalidade" dos Resultados — mesma
+// prioridade já usada em AUTO_GENERATE_FORMAT_PRIORITY (schedule) e
+// DEFAULT_FORMAT_ORDER (web/src/lib/autoFormatKey.ts), copiada aqui em
+// vez de importada pra não acoplar `scoring` a `schedule` só por uma
+// constante de 4 itens (mesmo racional de outros módulos deste
+// projeto). CUSTOM fica de fora de propósito: entra sempre por último,
+// ordenado por customFormatLabel (ver getEventResults).
+const MODALITY_DISPLAY_ORDER = [
+  CategoryFormat.TEAM_CHEER,
+  CategoryFormat.GROUP_STUNT,
+  CategoryFormat.COED,
+  CategoryFormat.PARTNER,
+];
+
 // Regra de dedução resolvida pra exibição/cálculo — `type` é o id
 // armazenado em ScoringTemplate.deductions[].id (mesma chave usada em
 // ScoreEvent.deductionType). Fonte: ScoringTemplate.deductions da
@@ -264,6 +278,7 @@ export interface ResultsPresentationView {
   categoryId: string;
   categoryName: string;
   categoryFormat: CategoryFormat;
+  categoryCustomFormatLabel: string | null;
   totalScore: number;
   deductionsTotal: number;
   finalResult: number;
@@ -282,6 +297,25 @@ export interface ResultsCategoryView {
   averagePercentage: number;
 }
 
+// Ranking cruzado entre categorias da MESMA modalidade (formato) —
+// diferente de ResultsCategoryView, que rankeia só dentro de uma
+// categoria. `formatKey` é `categoryFormat`, exceto pra CUSTOM
+// (`custom:<customFormatLabel>`, uma entrada por rótulo customizado
+// distinto — mesma ideia de agrupamento do `autoFormatKey` do
+// frontend, resolvida aqui no backend porque a lista de
+// `presentations` já sai pronta, ordenada por percentage).
+export interface ResultsModalityView {
+  formatKey: string;
+  categoryFormat: CategoryFormat;
+  customFormatLabel: string | null;
+  categoryCount: number;
+  teamCount: number;
+  presentations: ResultsPresentationView[];
+  topByPercentage: ResultsPresentationView | null;
+  topByScore: ResultsPresentationView | null;
+  averagePercentage: number;
+}
+
 export interface ResultsProgramView {
   programId: string;
   programName: string;
@@ -291,6 +325,7 @@ export interface ResultsProgramView {
 
 export interface EventResultsView {
   categories: ResultsCategoryView[];
+  modalities: ResultsModalityView[];
   presentations: ResultsPresentationView[];
   programs: ResultsProgramView[];
   topOverall: ResultsPresentationView | null;
@@ -1113,6 +1148,7 @@ export class ScoringService {
             categoryId: category.id,
             categoryName: category.name,
             categoryFormat: category.categoryFormat,
+            categoryCustomFormatLabel: category.customFormatLabel ?? null,
             totalScore,
             deductionsTotal,
             finalResult,
@@ -1159,6 +1195,53 @@ export class ScoringService {
       (a, b) => b.percentage - a.percentage,
     );
 
+    const modalityOrderIndex = (p: ResultsPresentationView) => {
+      const i = MODALITY_DISPLAY_ORDER.indexOf(p.categoryFormat);
+      return i === -1 ? MODALITY_DISPLAY_ORDER.length : i;
+    };
+    const modalityFormatKey = (p: ResultsPresentationView) =>
+      p.categoryFormat === CategoryFormat.CUSTOM
+        ? `custom:${p.categoryCustomFormatLabel ?? ''}`
+        : p.categoryFormat;
+    const presentationsByModality = new Map<
+      string,
+      ResultsPresentationView[]
+    >();
+    for (const p of byPercentageOverall) {
+      const key = modalityFormatKey(p);
+      const list = presentationsByModality.get(key) ?? [];
+      list.push(p);
+      presentationsByModality.set(key, list);
+    }
+    const modalities: ResultsModalityView[] = Array.from(
+      presentationsByModality.entries(),
+    )
+      .map(([formatKey, list]) => {
+        const byScore = [...list].sort((a, b) => b.finalResult - a.finalResult);
+        const averagePercentage =
+          list.reduce((sum, p) => sum + p.percentage, 0) / list.length;
+        return {
+          formatKey,
+          categoryFormat: list[0].categoryFormat,
+          customFormatLabel: list[0].categoryCustomFormatLabel,
+          categoryCount: new Set(list.map((p) => p.categoryId)).size,
+          teamCount: list.length,
+          presentations: list,
+          topByPercentage: list[0] ?? null,
+          topByScore: byScore[0] ?? null,
+          averagePercentage,
+        };
+      })
+      .sort((a, b) => {
+        const orderDiff =
+          modalityOrderIndex(a.presentations[0]) -
+          modalityOrderIndex(b.presentations[0]);
+        if (orderDiff !== 0) return orderDiff;
+        return (a.customFormatLabel ?? '').localeCompare(
+          b.customFormatLabel ?? '',
+        );
+      });
+
     const programTotals = new Map<string, ResultsProgramView>();
     for (const p of presentations) {
       const current = programTotals.get(p.programId) ?? {
@@ -1177,6 +1260,7 @@ export class ScoringService {
 
     return {
       categories,
+      modalities,
       presentations: byPercentageOverall,
       programs: byProgram,
       topOverall: byPercentageOverall[0] ?? null,

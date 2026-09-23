@@ -10,7 +10,7 @@ import { useEventLiveSocket } from "@/lib/useEventLiveSocket";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatPercent, formatPoints } from "@/lib/formatNumber";
-import { FORMAT_LABELS } from "@/lib/categoryLabels";
+import { FORMAT_LABELS, formatLabelFor } from "@/lib/categoryLabels";
 import { cn } from "@/lib/utils";
 import {
   eventsApi,
@@ -24,7 +24,7 @@ import {
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 
-type ResultsTab = "ranking" | "categoria" | "equipe" | "programa";
+type ResultsTab = "ranking" | "categoria" | "modalidade" | "equipe" | "programa";
 
 const CATEGORY_COLORS = [
   { bg: "bg-violet-500/10", text: "text-violet-600" },
@@ -267,6 +267,7 @@ export function EventLiveResultsPage() {
                   [
                     ["ranking", "Ranking geral"],
                     ["categoria", "Por categoria"],
+                    ["modalidade", "Por modalidade"],
                     ["equipe", "Por equipe"],
                     ["programa", "Por programa"],
                   ] as const
@@ -401,6 +402,122 @@ export function EventLiveResultsPage() {
                     <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
                       Percentuais calculados com base na pontuação máxima da categoria. Toque numa categoria pra ver a
                       colocação de todas as equipes.
+                    </p>
+                  </div>
+                )}
+
+                {activeTab === "modalidade" && (
+                  <div>
+                    <p className="px-4 pt-4 text-sm font-bold text-foreground">Resultados por modalidade</p>
+                    {results.modalities.length === 0 ? (
+                      <p className="p-6 text-center text-sm text-muted-foreground">
+                        Nenhuma apresentação totalmente pontuada ainda.
+                      </p>
+                    ) : (
+                      <div className="mt-3 divide-y divide-border">
+                        {results.modalities.map((modality, index) => {
+                          const color = CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+                          const isExpanded = expandedCategories.has(modality.formatKey);
+                          const modalityLabel = formatLabelFor(
+                            modality.categoryFormat,
+                            modality.customFormatLabel,
+                          );
+                          return (
+                            <div key={modality.formatKey}>
+                              <button
+                                type="button"
+                                onClick={() => toggleCategory(modality.formatKey)}
+                                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40"
+                              >
+                                <div
+                                  className={cn(
+                                    "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                                    color.bg,
+                                    color.text,
+                                  )}
+                                >
+                                  <Medal className="size-4" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate font-medium text-foreground">{modalityLabel}</p>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {modality.categoryCount} categoria{modality.categoryCount === 1 ? "" : "s"} ·{" "}
+                                    {modality.teamCount} apresentaç{modality.teamCount === 1 ? "ão" : "ões"}
+                                  </p>
+                                </div>
+                                {modality.presentations.length > 0 && (
+                                  <div className="hidden w-36 shrink-0 flex-col gap-0.5 sm:flex">
+                                    {modality.presentations.slice(0, 3).map((p, rank) => (
+                                      <p
+                                        key={p.scheduleEntryId}
+                                        className="flex items-center justify-end gap-1 truncate text-xs font-semibold text-foreground"
+                                      >
+                                        <span className="truncate">{p.teamName}</span>
+                                        <Medal className={cn("size-3.5 shrink-0", MEDAL_COLORS[rank])} />
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
+                                {modality.topByScore && (
+                                  <div className="hidden shrink-0 text-right sm:block">
+                                    <p className={cn("font-bold", color.text)}>
+                                      {formatPoints(modality.topByScore.finalResult)}
+                                    </p>
+                                    <p className="truncate text-xs text-muted-foreground">pontuação</p>
+                                  </div>
+                                )}
+                                {modality.topByPercentage && (
+                                  <div className="shrink-0 text-right">
+                                    <p className={cn("font-bold", color.text)}>
+                                      {formatPercent(modality.topByPercentage.percentage)}
+                                    </p>
+                                    <p className="truncate text-xs text-muted-foreground">aproveitamento</p>
+                                  </div>
+                                )}
+                                <ChevronDown
+                                  className={cn(
+                                    "size-4 shrink-0 text-muted-foreground transition-transform",
+                                    isExpanded && "rotate-180",
+                                  )}
+                                />
+                              </button>
+
+                              {isExpanded && (
+                                <div className="divide-y divide-border border-t border-border bg-muted/20">
+                                  {modality.presentations.map((p, rank) => (
+                                    <div
+                                      key={p.scheduleEntryId}
+                                      className="flex items-center gap-3 py-2.5 pr-4 pl-14"
+                                    >
+                                      <span className="w-6 shrink-0 text-sm font-semibold text-muted-foreground">
+                                        {rank + 1}º
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium text-foreground">{p.teamName}</p>
+                                        <p className="truncate text-xs text-muted-foreground">
+                                          {p.categoryName} · {p.programName}
+                                        </p>
+                                      </div>
+                                      <div className="shrink-0 text-right">
+                                        <p className="text-sm font-semibold text-foreground">
+                                          {formatPoints(p.finalResult)} pts
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {formatPercent(p.percentage)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                      Ranking cruzado entre todas as categorias/níveis da mesma modalidade. Toque numa modalidade pra
+                      ver a colocação de todas as equipes.
                     </p>
                   </div>
                 )}

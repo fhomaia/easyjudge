@@ -1632,6 +1632,7 @@ export interface ResultsPresentation {
   categoryId: string;
   categoryName: string;
   categoryFormat: CategoryFormat;
+  categoryCustomFormatLabel: string | null;
   totalScore: number;
   deductionsTotal: number;
   finalResult: number;
@@ -1650,6 +1651,20 @@ export interface ResultsCategory {
   averagePercentage: number;
 }
 
+// Ranking cruzado entre categorias da mesma modalidade (ver
+// ScoringService.ResultsModalityView no backend).
+export interface ResultsModality {
+  formatKey: string;
+  categoryFormat: CategoryFormat;
+  customFormatLabel: string | null;
+  categoryCount: number;
+  teamCount: number;
+  presentations: ResultsPresentation[];
+  topByPercentage: ResultsPresentation | null;
+  topByScore: ResultsPresentation | null;
+  averagePercentage: number;
+}
+
 export interface ResultsProgram {
   programId: string;
   programName: string;
@@ -1659,6 +1674,7 @@ export interface ResultsProgram {
 
 export interface EventResults {
   categories: ResultsCategory[];
+  modalities: ResultsModality[];
   presentations: ResultsPresentation[];
   programs: ResultsProgram[];
   topOverall: ResultsPresentation | null;
