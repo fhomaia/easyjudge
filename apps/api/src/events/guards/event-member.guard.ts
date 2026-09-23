@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { EVENT_ROLES_KEY } from '../decorators/event-roles.decorator';
-import { EventsService } from '../services/events.service';
+import { EventsService, VISIBLE_TO_NON_STAFF } from '../services/events.service';
 import { EventMemberRole } from '../enums/event-member-role.enum';
+import { EVENT_STAFF_ROLES } from '../constants/event-staff-roles';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
 // Checa se o usuário logado tem, no EventMember do evento (:eventId da
@@ -36,7 +37,7 @@ export class EventMemberGuard implements CanActivate {
     const eventId = req.params.eventId;
     if (typeof eventId !== 'string') return true; // rota sem :eventId — @EventRoles não se aplica
 
-    const { member } = await this.eventsService.getMemberForEventId(
+    const { event, member } = await this.eventsService.getMemberForEventId(
       eventId,
       req.user.userId,
     );
@@ -44,6 +45,20 @@ export class EventMemberGuard implements CanActivate {
       throw new ForbiddenException(
         'Você não tem permissão para isso neste evento.',
       );
+    }
+
+    // Fecha o mesmo gap que EventsService.canSee/findOneForUser já
+    // cobre pra GET /events/:id — antes desta checagem, um
+    // program/athlete (que já ganham EventMember antes da publicação,
+    // durante o cadastro do roster) conseguia chamar rotas filhas
+    // deste guard (cronograma, member-counts etc.) direto e pegar dado
+    // real de um evento ainda "created", mesmo sem a Home linkar pra
+    // lá (2026-09-23, ver findAllForUser). Quem é EVENT_STAFF_ROLES
+    // continua sem essa restrição — precisa acessar essas mesmas rotas
+    // durante o Setup, antes de publicar.
+    const isStaff = member.roles.some((r) => EVENT_STAFF_ROLES.includes(r));
+    if (!isStaff && !VISIBLE_TO_NON_STAFF.includes(event.status)) {
+      throw new ForbiddenException('Este evento ainda não foi publicado.');
     }
     return true;
   }

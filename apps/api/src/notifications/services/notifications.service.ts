@@ -7,13 +7,7 @@ import { NotificationType } from '../enums/notification-type.enum';
 import { NotificationAudience } from '../enums/notification-audience.enum';
 import { Event } from '../../events/entities/event.entity';
 import { EventMember } from '../../events/entities/event-member.entity';
-import { EventMemberRole } from '../../events/enums/event-member-role.enum';
-
-const STAFF_ROLES = [
-  EventMemberRole.ADMIN,
-  EventMemberRole.ASSESSOR,
-  EventMemberRole.JUDGE,
-];
+import { EVENT_STAFF_ROLES } from '../../events/constants/event-staff-roles';
 
 export interface NotificationView {
   id: string;
@@ -136,7 +130,7 @@ export class NotificationsService {
   }
 
   private audiencesForMember(member: EventMember): NotificationAudience[] {
-    const isStaff = STAFF_ROLES.some((r) => member.roles.includes(r));
+    const isStaff = EVENT_STAFF_ROLES.some((r) => member.roles.includes(r));
     return isStaff
       ? [NotificationAudience.ALL, NotificationAudience.STAFF]
       : [NotificationAudience.ALL];

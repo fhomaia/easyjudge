@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'crypto';
 import { generateEventCode } from '../../common/utils/generate-event-code';
@@ -31,6 +31,7 @@ import { SpecialRoleAssignment } from '../../judging/entities/special-role-assig
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { NotificationType } from '../../notifications/enums/notification-type.enum';
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
+import { EVENT_STAFF_ROLES } from '../constants/event-staff-roles';
 
 // Entidades filhas endereçadas pelo `aliasId` do evento (estável entre
 // versões, não pelo `id` de uma versão específica — ver
@@ -56,10 +57,11 @@ const EVENT_SCOPED_ENTITIES = [
   SpecialRoleAssignment,
 ];
 
-// Assessores e espectadores só enxergam o evento nesses status;
-// admin e jurado enxergam em qualquer status (inclusive rascunho).
-const STAFF_ROLES = [EventMemberRole.ADMIN, EventMemberRole.JUDGE];
-const VISIBLE_TO_NON_STAFF = [
+// Status em que o evento fica ACESSÍVEL (não só visível na lista, ver
+// EventsService.findAllForUser) pra quem não é EVENT_STAFF_ROLES —
+// program/athlete/spectator só abrem o evento de verdade a partir de
+// published (ver findOneForUser/canSee e EventMemberGuard).
+export const VISIBLE_TO_NON_STAFF = [
   EventStatus.PUBLISHED,
   EventStatus.STARTED,
   EventStatus.COMPLETED,
@@ -136,6 +138,13 @@ export class EventsService {
     const id = randomUUID();
     const creator = await this.usersService.findById(createdById);
     const saved = await this.dataSource.transaction(async (manager) => {
+      // Código/QR gerado já na criação (2026-09-23, antes só nascia na
+      // primeira publicação) — é o que permite alguém entrar por
+      // código/QR e ganhar SPECTATOR num evento ainda "created" (ver
+      // joinByCode), aparecendo na Home dele como "Em breve".
+      // publishEvent mantém o fallback `event.eventCode ?? ...` pra
+      // evento criado antes desta mudança, que nasceu sem código.
+      const eventCode = await this.generateUniqueEventCode(manager);
       const event = manager.create(Event, {
         ...dto,
         competitionDays: dto.competitionDays ?? 1,
@@ -145,6 +154,7 @@ export class EventsService {
         active: true,
         status: EventStatus.CREATED,
         createdById,
+        eventCode,
       });
       const saved = await manager.save(event);
 
@@ -168,11 +178,18 @@ export class EventsService {
     return saved;
   }
 
-  // Lista só os eventos em que o usuário tem membership — admin/jurado
-  // veem em qualquer status, assessor/espectador só em
-  // published/started/completed. Cada evento vem com o(s) papel(is) do
-  // próprio usuário anexado (currentUserRole/currentUserRoles), pro
-  // frontend decidir quais ações (editar/iniciar/excluir) mostrar.
+  // Lista TODOS os eventos em que o usuário tem membership, em
+  // qualquer status (inclusive `created`/rascunho) — 2026-09-23, pedido
+  // do usuário: quem já tem algum vínculo com o evento (inclusive
+  // program/athlete/spectator) passa a ver o card na Home mesmo antes
+  // de publicado, só que o FRONTEND decide a apresentação (card "Em
+  // breve", não clicável, pra quem não é EVENT_STAFF_ROLES — ver
+  // EventListItem/EventGridItem). O acesso de verdade ao evento
+  // continua restrito a partir de published pra quem não é staff (ver
+  // findOneForUser/canSee, inalterado, e EventMemberGuard). Cada
+  // evento vem com o(s) papel(is) do próprio usuário anexado
+  // (currentUserRole/currentUserRoles), pro frontend decidir tanto as
+  // ações de gestão quanto essa apresentação.
   async findAllForUser(userId: string): Promise<EventWithRole[]> {
     const { entities, raw } = await this.eventsRepo
       .createQueryBuilder('event')
@@ -211,16 +228,6 @@ export class EventsService {
       )
       .addSelect('member.roles', 'member_roles')
       .where('event.active = true')
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where(
-            'member.roles && ARRAY[:...staffRoles]::event_members_role_enum[]',
-            { staffRoles: STAFF_ROLES },
-          ).orWhere('event.status IN (:...visibleStatuses)', {
-            visibleStatuses: VISIBLE_TO_NON_STAFF,
-          });
-        }),
-      )
       .orderBy('event.createdAt', 'DESC')
       .getRawAndEntities();
 
@@ -334,9 +341,10 @@ export class EventsService {
       event.active = false;
       await manager.save(event);
 
-      // Gera o código só na primeira publicação (event.eventCode ainda
-      // nulo); nas seguintes, só carrega o mesmo código adiante — ver
-      // comentário em Event.eventCode.
+      // Desde 2026-09-23 o código já nasce em createEvent — esse
+      // fallback só é exercitado por evento criado ANTES dessa
+      // mudança (eventCode ainda nulo). Toda publicação seguinte só
+      // carrega o mesmo código adiante — ver comentário em Event.eventCode.
       const eventCode =
         event.eventCode ?? (await this.generateUniqueEventCode(manager));
 
@@ -743,13 +751,19 @@ export class EventsService {
   // qualquer papel (inclusive admin/jurado), só acrescenta SPECTATOR
   // ao array — mesmo comportamento já aceito nos outros syncs
   // automáticos de papel (jurado/programa/atleta), inofensivo.
+  // Sem checagem de status de propósito (desde 2026-09-23) — código/QR
+  // já existe desde a criação (ver createEvent), então entrar por
+  // código num evento ainda "created" é esperado: a pessoa ganha
+  // SPECTATOR e o evento aparece na Home dela como "Em breve" (ver
+  // findAllForUser), mas continua sem conseguir abrir o evento de
+  // verdade até published (ver findOneForUser/canSee, inalterado).
   async joinByCode(code: string, userId: string): Promise<EventWithRole> {
     const normalized = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     const event = await this.eventsRepo.findOneBy({
       eventCode: normalized,
       active: true,
     });
-    if (!event || !VISIBLE_TO_NON_STAFF.includes(event.status)) {
+    if (!event) {
       throw new NotFoundException('Código de evento inválido.');
     }
     const user = await this.usersService.findById(userId);
@@ -885,7 +899,7 @@ export class EventsService {
 
   private canSee(roles: EventMemberRole[], status: EventStatus): boolean {
     return (
-      roles.some((r) => STAFF_ROLES.includes(r)) ||
+      roles.some((r) => EVENT_STAFF_ROLES.includes(r)) ||
       VISIBLE_TO_NON_STAFF.includes(status)
     );
   }
