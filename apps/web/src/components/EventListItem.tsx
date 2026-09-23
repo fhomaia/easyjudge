@@ -7,6 +7,7 @@ import { EventStatusIndicator } from "@/components/EventStatusArea";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { formatDate } from "@/lib/formatDate";
 import { listItemVariants } from "@/lib/motionVariants";
+import { hasEventStaffRole } from "@/lib/eventMemberRoles";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/api/client";
 
@@ -39,23 +40,27 @@ export function EventListItem({
   const isAdmin = event.currentUserRole === "admin";
   const isAssessor = event.currentUserRole === "assessor";
   const canManage = isAdmin || isAssessor;
+  const isStaffViewer = hasEventStaffRole(event.currentUserRoles);
   const navigate = useNavigate();
   const isConfigurable = event.status === "created";
   const isLive = event.status === "published" || event.status === "started";
-  const isClickable = isConfigurable || isLive;
+  // Evento "criado" agora aparece na Home pra QUALQUER vínculo (não só
+  // staff, ver EventsService.findAllForUser, 2026-09-23) — mas só
+  // admin/assessor/judge conseguem de fato abrir antes de publicar
+  // (EventMemberGuard bloqueia o resto). Pra quem não é staff, o card
+  // fica só informativo ("Em breve", ver EventStatusIndicator).
+  const isClickable = (isConfigurable && isStaffViewer) || isLive;
 
   return (
     <motion.div
       variants={listItemVariants}
       whileHover={{ y: -2 }}
       onClick={
-        isConfigurable
+        isConfigurable && isStaffViewer
           ? canManage
             ? () => navigate(`/events/${event.aliasId}/setup`)
-            // Jurado (único outro papel que enxerga um evento "criado",
-            // ver EventsService.findAllForUser/STAFF_ROLES) não edita
-            // configuração nenhuma — vai direto pro evento em si, não
-            // pro setup (pedido do usuário, 2026-09-22).
+            // Jurado não edita configuração nenhuma — vai direto pro
+            // evento em si, não pro setup (pedido do usuário, 2026-09-22).
             : () => onOpenLive(event)
           : isLive
             ? () => onOpenLive(event)

@@ -1,5 +1,16 @@
 import type { EventMemberRole } from "@/api/client";
 
+// Espelha EVENT_STAFF_ROLES do backend (apps/api/src/events/constants/
+// event-staff-roles.ts) — únicos papéis que enxergam e acessam um
+// evento ainda "created" (rascunho). Quem não tem nenhum desses papéis
+// vê o card na Home como "Em breve", sem conseguir abrir (ver
+// EventListItem/EventGridItem).
+export const EVENT_STAFF_ROLES: EventMemberRole[] = ["admin", "assessor", "judge"];
+
+export function hasEventStaffRole(roles: EventMemberRole[]): boolean {
+  return roles.some((r) => EVENT_STAFF_ROLES.includes(r));
+}
+
 // Rótulos/descrições ficam só no frontend (mesmo padrão de
 // ROLE_LABELS/specialJudgeRoles) — o backend manda só a chave do enum.
 export const EVENT_MEMBER_ROLE_LABELS: Record<EventMemberRole, string> = {
@@ -17,8 +28,9 @@ export const EVENT_MEMBER_ROLE_DESCRIPTIONS: Record<EventMemberRole, string> = {
   assessor:
     "Edita as configurações do evento, mas não mexe em papéis nem em quem faz parte dele (exceto jurados, pelo Painel de Jurados).",
   judge:
-    "Só enxerga o evento depois de publicado. Não edita configurações — visualiza os sistemas de pontuação.",
-  spectator: "Só enxerga o evento depois de publicado. Não edita nada.",
+    "Enxerga o evento mesmo antes de publicado. Não edita configurações — visualiza os sistemas de pontuação.",
+  spectator:
+    "Aparece na lista como \"Em breve\" antes de publicado; só acessa o evento de fato depois. Não edita nada.",
   program:
     "Concedido automaticamente a programas vinculados ao evento — vê só as notas das próprias equipes, quando liberadas.",
   athlete:

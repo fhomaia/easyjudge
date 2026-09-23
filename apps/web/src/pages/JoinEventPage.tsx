@@ -30,7 +30,16 @@ export function JoinEventPage() {
       .joinByCode(code)
       .then((event) => {
         if (cancelled) return;
-        navigate(`/events/${event.aliasId}/live/results`, { replace: true });
+        // Evento ainda "criado" (2026-09-23: código/QR já existe desde
+        // a criação, não só na publicação) — a pessoa já entrou
+        // (ganhou espectador), mas ainda não consegue abrir o painel
+        // ao vivo (EventMemberGuard bloqueia). Manda pra Home, onde o
+        // evento já aparece como "Em breve", em vez de passar pelo
+        // painel só pra ser barrada e voltar.
+        navigate(
+          event.status === "created" ? "/" : `/events/${event.aliasId}/live/results`,
+          { replace: true },
+        );
       })
       .catch((err) => {
         if (cancelled) return;
