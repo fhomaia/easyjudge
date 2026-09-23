@@ -17,6 +17,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { MetricBarList } from "@/components/MetricBarList";
 import { MetricColumnChart } from "@/components/MetricColumnChart";
+import { MetricDonutChart } from "@/components/MetricDonutChart";
 import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import { autoFormatKeyLabel } from "@/lib/autoFormatKey";
@@ -132,7 +133,6 @@ export function EventMetricsPage() {
           {metrics && (
             <div className="mt-6 flex flex-col gap-6">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                <StatTile icon={Layers} label="Categorias" value={metrics.categoriesCount} />
                 <StatTile icon={Users} label="Equipes" value={metrics.teamsCount} />
                 <StatTile icon={Building2} label="Programas" value={metrics.programsCount} />
                 <StatTile
@@ -140,6 +140,7 @@ export function EventMetricsPage() {
                   label="Apresentações"
                   value={metrics.presentationsCount}
                 />
+                <StatTile icon={Layers} label="Categorias" value={metrics.categoriesCount} />
                 <StatTile icon={Gavel} label="Jurados" value={metrics.judgesCount} />
                 <StatTile
                   icon={PersonStanding}
@@ -151,10 +152,11 @@ export function EventMetricsPage() {
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <ChartCard title="Categorias por programa">
-                  <MetricBarList items={metrics.categoriesByProgram} />
+                  <MetricColumnChart items={metrics.categoriesByProgram} color="var(--chart-6)" />
                 </ChartCard>
                 <ChartCard title="Apresentações por modalidade">
                   <MetricBarList
+                    color="var(--chart-1)"
                     items={metrics.presentationsByModality.map((f) => ({
                       label: autoFormatKeyLabel(f.formatKey),
                       count: f.count,
@@ -162,7 +164,8 @@ export function EventMetricsPage() {
                   />
                 </ChartCard>
                 <ChartCard title="Apresentações por nível">
-                  <MetricColumnChart
+                  <MetricDonutChart
+                    colorMode="vibrant"
                     items={metrics.presentationsByLevel.map((l) => ({
                       label: `Nível ${l.level}`,
                       count: l.count,
@@ -170,7 +173,7 @@ export function EventMetricsPage() {
                   />
                 </ChartCard>
                 <ChartCard title="Origem dos programas (UF)">
-                  <MetricBarList items={metrics.programsByState} />
+                  <MetricDonutChart colorMode="categorical" items={metrics.programsByState} />
                 </ChartCard>
               </div>
             </div>

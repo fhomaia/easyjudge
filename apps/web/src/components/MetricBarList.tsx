@@ -1,16 +1,22 @@
 interface MetricBarListProps {
   items: Array<{ label: string; count: number }>;
   emptyLabel?: string;
+  // Cor CSS (ex. "var(--chart-6)") da barra — cada card da tela de
+  // Métricas usa uma cor diferente entre si só pra ficar fácil
+  // diferenciar um gráfico do outro de relance; dentro de UM gráfico
+  // continua sendo cor única (série única, sem paleta categórica —
+  // a identidade de cada linha já vem do rótulo em texto).
+  color?: string;
 }
 
 // Lista de barras horizontais, ranqueada por magnitude — usada pelos
-// gráficos da tela de Métricas do evento (EventMetricsPage). Cor única
-// (--chart-1, a mesma tonalidade de brand-blue do resto do app): a
-// identidade de cada categoria já vem do rótulo em texto, não precisa de
-// paleta categórica (nem "por modalidade" nem "por estado" comparam
-// cores entre si, só magnitude entre linhas). Sem legenda: série única,
-// o título do card já diz o que é.
-export function MetricBarList({ items, emptyLabel = "Nenhum dado ainda." }: MetricBarListProps) {
+// gráficos da tela de Métricas do evento (EventMetricsPage). Sem
+// legenda: série única, o título do card já diz o que é.
+export function MetricBarList({
+  items,
+  emptyLabel = "Nenhum dado ainda.",
+  color = "var(--chart-1)",
+}: MetricBarListProps) {
   if (items.length === 0) {
     return <p className="py-6 text-center text-sm text-muted-foreground">{emptyLabel}</p>;
   }
@@ -30,8 +36,8 @@ export function MetricBarList({ items, emptyLabel = "Nenhum dado ainda." }: Metr
               não parecer que o valor "flutua" sem origem. */}
           <div className="h-3 flex-1 overflow-hidden rounded-sm bg-muted">
             <div
-              className="h-full rounded-r-sm bg-chart-1 transition-[filter] duration-150 group-hover:brightness-110"
-              style={{ width: `${Math.max((item.count / max) * 100, 4)}%` }}
+              className="h-full rounded-r-sm transition-[filter] duration-150 group-hover:brightness-110"
+              style={{ width: `${Math.max((item.count / max) * 100, 4)}%`, backgroundColor: color }}
             />
           </div>
           <span className="w-8 shrink-0 text-right text-sm font-medium tabular-nums text-foreground">
