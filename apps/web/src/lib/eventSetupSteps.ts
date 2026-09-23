@@ -13,9 +13,10 @@ export interface SetupStep {
   // "primeira etapa incompleta da sequência", que é o que
   // computeStepState calcula pro stepper do topo) mas ainda não está
   // concluída — usado pelo card individual (SetupStepCard) pra mostrar
-  // "Em andamento" em vez de "Não iniciado". Por enquanto só
-  // calculado pra `judgePanel`; as demais etapas não têm essa
-  // distinção ainda.
+  // "Em andamento" em vez de "Não iniciado". Calculado pra `regulation`,
+  // `programs`, `judgePanel` e `schedule`; `categories` não tem meio-termo
+  // (ou tem alguma categoria cadastrada, e já conta como "concluída", ou
+  // não tem nenhuma).
   inProgress?: boolean;
   detail: string;
   updatedAt?: string | null;
@@ -106,6 +107,26 @@ function judgePanelDetail(hasLegalityJudge: boolean, allTemplatesJudgingComplete
   return "Pendente: concluir todos os sistemas de pontuação";
 }
 
+// Detalha qual das 3 condições (documento oficial, regras de segurança,
+// sistema de pontuação completo VINCULADO ao evento) ainda falta — a
+// frase genérica antiga ("documentos obrigatórios e um template
+// completo") dava a entender que o template estava faltando mesmo
+// quando só um documento estava pendente (reportado pelo usuário,
+// 2026-09-23), já que ela aparecia igual pras 3 combinações possíveis
+// de pendência.
+function regulationDetail(summary: RegulationSummary | null, completed: boolean): string {
+  if (completed) return "Documentos e sistema de pontuação prontos";
+  const missing: string[] = [];
+  if (!summary?.hasOfficialRegulation) missing.push("o regulamento oficial");
+  if (!summary?.hasSafetyRules) missing.push("as regras de segurança");
+  if (!summary?.hasCompleteTemplate) missing.push("um sistema de pontuação completo vinculado");
+  const list =
+    missing.length <= 1
+      ? missing.join("")
+      : `${missing.slice(0, -1).join(", ")} e ${missing[missing.length - 1]}`;
+  return `Pendente: falta ${list}`;
+}
+
 function programsDetail(summary: ProgramsSummary, completed: boolean): string {
   if (summary.programsCount === 0) return "Nenhum programa cadastrado";
   if (completed) {
@@ -163,6 +184,15 @@ export function buildSetupSteps(
     regulation.hasOfficialRegulation &&
     regulation.hasSafetyRules &&
     regulation.hasCompleteTemplate;
+  // Mesma distinção que programs/schedule já tinham (ver SetupStep.inProgress) —
+  // faltava aqui: um documento enviado ou um template vinculado já é
+  // progresso real, não "não iniciado" (reportado pelo usuário, 2026-09-23).
+  const regulationInProgress =
+    !regulationCompleted &&
+    !!regulation &&
+    (regulation.hasOfficialRegulation ||
+      regulation.hasSafetyRules ||
+      regulation.hasCompleteTemplate);
   const scheduleCompleted = schedule.totalPairs > 0 && schedule.unscheduledCount === 0;
   const scheduleInProgress =
     !scheduleCompleted && (schedule.hasScheduledPresentation || schedule.hasScheduledComponent);
@@ -174,9 +204,8 @@ export function buildSetupSteps(
       shortTitle: "Regulamento",
       description: "Defina as regras de competição, segurança e pontuação do evento.",
       completed: regulationCompleted,
-      detail: regulationCompleted
-        ? "Documentos e template de pontuação prontos"
-        : "Pendente: documentos obrigatórios e um template completo",
+      inProgress: regulationInProgress,
+      detail: regulationDetail(regulation, regulationCompleted),
       updatedAt: regulation?.updatedAt ?? null,
       actionLabel: regulationCompleted ? "Editar regulamento" : "Iniciar cadastro",
       href: `/events/${event.aliasId}/regulation`,
