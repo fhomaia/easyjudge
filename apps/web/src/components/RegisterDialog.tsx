@@ -73,7 +73,7 @@ type StepKey = (typeof STEPS)[number];
 // pra esse grupo.
 function isStepApplicable(
   key: StepKey,
-  form: Pick<typeof INITIAL_STATE, "role" | "documentType">,
+  form: Pick<typeof INITIAL_STATE, "role" | "documentType" | "documentNumber">,
 ): boolean {
   const role = form.role;
   if (key === "programEmail") return role === "athlete";
@@ -82,7 +82,14 @@ function isStepApplicable(
   }
   if (key === "birthDate") {
     if (isOptionalCpfOnlyRole(role)) return true;
-    return form.documentType === "cpf";
+    // Programa também deixa o documento opcional (ver
+    // isDocumentOptionalRole), mas sem sinal nenhum de CPF/CNPJ o campo
+    // `documentType` do form fica no valor padrão ("cpf") mesmo tendo
+    // pulado — por isso confere `documentNumber` também, não só o tipo,
+    // senão um programa que pulou o documento ainda veria esta etapa.
+    return (
+      form.documentType === "cpf" && form.documentNumber.replace(/\D/g, "") !== ""
+    );
   }
   return true;
 }
@@ -92,6 +99,15 @@ function isStepApplicable(
 // diferente dos demais papéis, que continuam com CPF/CNPJ obrigatório.
 function isOptionalCpfOnlyRole(role: SignupRole): boolean {
   return role === "athlete" || role === "spectator";
+}
+
+// Programa/ginásio também deixa o documento em branco (2026-09-24,
+// pedido do usuário: reduzir atrito de quem não tem CNPJ à mão pra se
+// cadastrar rápido antes de um evento) — mas, diferente de
+// isOptionalCpfOnlyRole, continua podendo escolher CPF OU CNPJ quando
+// decide preencher (ver RegisterDto.isDocumentOptional no backend).
+function isDocumentOptionalRole(role: SignupRole): boolean {
+  return isOptionalCpfOnlyRole(role) || role === "program";
 }
 
 // Backend guarda firstName/lastName separados. Separa no primeiro
@@ -256,7 +272,7 @@ export function RegisterDialog({
   function submitDocument(e: FormEvent) {
     e.preventDefault();
     const digits = form.documentNumber.replace(/\D/g, "");
-    if (isOptionalCpfOnlyRole(form.role) && digits === "") {
+    if (isDocumentOptionalRole(form.role) && digits === "") {
       goNext();
       return;
     }
@@ -556,6 +572,13 @@ export function RegisterDialog({
                             (opcional)
                           </span>
                         </>
+                      ) : form.role === "program" ? (
+                        <>
+                          Qual é o documento do seu programa?{" "}
+                          <span className="text-sm font-normal text-muted-foreground">
+                            (opcional)
+                          </span>
+                        </>
                       ) : (
                         "Qual é o seu documento?"
                       )}
@@ -596,11 +619,11 @@ export function RegisterDialog({
                             : formatCnpj(e.target.value),
                         )
                       }
-                      required={!isOptionalCpfOnlyRole(form.role)}
+                      required={!isDocumentOptionalRole(form.role)}
                     />
                     <FormError message={error} />
                     <Button type="submit" className="w-full">
-                      {isOptionalCpfOnlyRole(form.role) &&
+                      {isDocumentOptionalRole(form.role) &&
                       form.documentNumber === ""
                         ? "Pular"
                         : "Continuar"}

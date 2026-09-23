@@ -14,13 +14,17 @@ import { DocumentType } from '../../common/enums/document-type.enum';
 import { IsValidDocument } from '../../common/validators/document.validator';
 
 // Atleta (inclui "espectador" da tela de cadastro, que chega aqui como
-// role=athlete — ver RegisterDialog no frontend) é o único papel que
-// pode deixar o documento em branco; os demais continuam obrigatórios.
-// Regra de "só CPF" pra esse papel é reforçada em AuthService.register
-// (não dá pra restringir o enum do @IsEnum condicionalmente por valor
-// aqui sem duplicar toda a lógica de ValidateIf).
+// role=athlete — ver RegisterDialog no frontend) e programa/ginásio
+// podem deixar o documento em branco; os demais continuam obrigatórios.
+// Regra de "só CPF" pra atleta é reforçada em AuthService.register (não
+// dá pra restringir o enum do @IsEnum condicionalmente por valor aqui
+// sem duplicar toda a lógica de ValidateIf) — programa continua podendo
+// informar CPF OU CNPJ quando decide preencher (2026-09-24, pedido do
+// usuário: reduzir atrito de quem não tem CNPJ à mão pra se cadastrar
+// rápido antes de um evento; documentNumber não é usado em nenhuma
+// outra parte do sistema além de "Meu perfil", que já trata ausência).
 function isDocumentOptional(o: RegisterDto): boolean {
-  return o.role === UserRole.ATHLETE;
+  return o.role === UserRole.ATHLETE || o.role === UserRole.PROGRAM;
 }
 
 // Programa/ginásio é uma instituição, não uma pessoa — o cadastro só
