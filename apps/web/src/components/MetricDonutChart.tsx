@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getAvatarColor } from "@/lib/avatarColor";
+import { getSpreadColor } from "@/lib/avatarColor";
 
 interface MetricDonutChartProps {
   items: Array<{ label: string; count: number }>;
@@ -10,8 +10,10 @@ interface MetricDonutChartProps {
   // "vibrant": identidade sem ordem pedindo cores BEM diferentes entre
   // si mesmo com mais itens (ex. nível, quando o pedido é diferenciar
   // cada fatia à primeira vista) — reaproveita a mesma paleta de 13
-  // cores já usada nos ícones de súmula/evento (getAvatarColor, ver
-  // avatarColor.ts), hash pelo próprio rótulo. Excedente ao teto de
+  // cores já usada nos ícones de súmula/evento, atribuída pela POSIÇÃO
+  // do segmento (ver getSpreadColor) — não pelo hash do rótulo, que
+  // podia colocar rótulos parecidos ("Nível 1"/"Nível 2") em tons
+  // vizinhos do mesmo matiz por coincidência. Excedente ao teto de
   // segmentos sempre dobra em "Outros" (cinza), nos dois modos.
   colorMode?: "categorical" | "vibrant";
   maxSegments?: number;
@@ -79,7 +81,7 @@ export function MetricDonutChart({
       item.label === "Outros"
         ? "var(--muted-foreground)"
         : colorMode === "vibrant"
-          ? getAvatarColor(item.label)
+          ? getSpreadColor(i)
           : CATEGORICAL_SLOTS[i % CATEGORICAL_SLOTS.length];
     return { ...item, length, offset, fraction, color };
   });

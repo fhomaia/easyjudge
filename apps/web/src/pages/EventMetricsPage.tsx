@@ -152,7 +152,7 @@ export function EventMetricsPage() {
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <ChartCard title="Categorias por programa">
-                  <MetricColumnChart items={metrics.categoriesByProgram} color="var(--chart-6)" />
+                  <MetricColumnChart items={metrics.categoriesByProgram} />
                 </ChartCard>
                 <ChartCard title="Apresentações por modalidade">
                   <MetricBarList

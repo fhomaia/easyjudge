@@ -49,3 +49,18 @@ export function getAvatarColor(seed: string): string {
   }
   return VIBRANT_COLORS[Math.abs(hash) % VIBRANT_COLORS.length];
 }
+
+// Ordem "espalhada" dos 13 tons de VIBRANT_COLORS, andando sempre ~meia
+// roda de cor por passo (7 de 13, primo entre si — visita as 13 cores
+// uma vez cada antes de repetir). Usada quando a cor é atribuída pela
+// POSIÇÃO do item num gráfico (não pelo hash do rótulo) — hash por
+// rótulo pode colocar itens parecidos (ex. "Nível 1"/"Nível 2", que só
+// diferem no último caractere) em tons vizinhos do mesmo matiz por
+// coincidência (reportado pelo usuário como "tons e subtons da mesma
+// cor até mudar"); posição garante o contraste máximo entre vizinhos
+// de qualquer forma.
+const SPREAD_ORDER = [0, 7, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6];
+
+export function getSpreadColor(index: number): string {
+  return VIBRANT_COLORS[SPREAD_ORDER[index % SPREAD_ORDER.length]];
+}
