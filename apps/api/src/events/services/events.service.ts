@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'crypto';
 import { generateEventCode } from '../../common/utils/generate-event-code';
@@ -226,13 +226,33 @@ export class EventsService {
         'member.aliasId = event.aliasId AND member.userId = :userId',
         { userId },
       )
-      .addSelect('member.roles', 'member_roles')
       .where('event.active = true')
       .orderBy('event.createdAt', 'DESC')
       .getRawAndEntities();
 
+    // `member.roles` (coluna enum[]) NÃO pode vir de `addSelect`/`raw`
+    // (bug real, achado em produção 2026-09-23): o driver `pg` não tem
+    // parser registrado pra OID de array de enum customizado, então um
+    // select raw devolve o literal do Postgres como STRING
+    // (`"{admin,judge}"`), não um array JS — só quebrou visivelmente
+    // agora porque `hasEventStaffRole` (feature de rascunho visível pra
+    // todo mundo) chama `.some()` nesse valor. A conversão pra array só
+    // acontece na hidratação de ENTIDADE do TypeORM (ver
+    // PostgresDriver.prepareHydratedValue), por isso a query busca os
+    // `EventMember` de verdade numa segunda consulta, em vez de tentar
+    // ler `roles` do raw da query principal.
+    const aliasIds = entities.map((event) => event.aliasId);
+    const members = aliasIds.length
+      ? await this.membersRepo.find({
+          where: { aliasId: In(aliasIds), userId },
+        })
+      : [];
+    const rolesByAliasId = new Map(
+      members.map((member) => [member.aliasId, member.roles]),
+    );
+
     return entities.map((event, i) => {
-      const roles = raw[i].member_roles as EventMemberRole[];
+      const roles = rolesByAliasId.get(event.aliasId) ?? [];
       return {
         ...event,
         currentUserRole: highestRole(roles),
