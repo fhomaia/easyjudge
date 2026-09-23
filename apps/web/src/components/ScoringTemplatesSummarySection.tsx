@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Info, Plus } from "lucide-react";
+import { Check, Link2 } from "lucide-react";
 import { ScoringTemplateCard } from "@/components/ScoringTemplateCard";
+import { LinkScoringTemplatesDialog } from "@/components/LinkScoringTemplatesDialog";
 import { listVariants } from "@/lib/motionVariants";
 import { cn } from "@/lib/utils";
 import { eventScoringTemplatesApi, type ScoringTemplate } from "@/api/client";
@@ -49,8 +49,8 @@ export function ScoringTemplatesSummarySection({
   eventId,
   templates,
 }: ScoringTemplatesSummarySectionProps) {
-  const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     eventScoringTemplatesApi
@@ -85,8 +85,9 @@ export function ScoringTemplatesSummarySection({
     }
   }
 
-  const myTemplates = templates.filter((t) => !t.isSystemTemplate);
-  const systemTemplates = templates.filter((t) => t.isSystemTemplate);
+  const selectedTemplates = templates.filter((t) => selectedIds?.has(t.id));
+  const mySelected = selectedTemplates.filter((t) => !t.isSystemTemplate);
+  const systemSelected = selectedTemplates.filter((t) => t.isSystemTemplate);
 
   function renderRow(list: ScoringTemplate[]) {
     return (
@@ -109,62 +110,53 @@ export function ScoringTemplatesSummarySection({
     <div className="grid gap-4 rounded-lg border border-border/60 bg-card p-5">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">
-            3. Sistemas de pontuação
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">Sistemas de pontuação</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Marque quais sistemas de pontuação serão usados para avaliar as categorias do evento.
+            Sistemas de pontuação vinculados a este evento — disponíveis pra usar nas categorias.
           </p>
         </div>
         <button
           type="button"
-          onClick={() => navigate("/scoring-templates")}
+          onClick={() => setDialogOpen(true)}
           className="flex shrink-0 items-center gap-1.5 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
         >
-          <Plus className="size-4" />
-          Criar novo template
+          <Link2 className="size-4" />
+          Vincular sistema de pontuação
         </button>
       </div>
 
-      {templates.length === 0 ? (
+      {selectedTemplates.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
-          Nenhum sistema de pontuação criado ainda.
+          Atribua um sistema de pontuação ao evento.
         </p>
       ) : (
         <div className="grid gap-4">
-          {myTemplates.length > 0 && (
+          {mySelected.length > 0 && (
             <div className="grid gap-2">
               <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                 Meus sistemas de pontuação
               </h3>
-              {renderRow(myTemplates)}
+              {renderRow(mySelected)}
             </div>
           )}
-          {systemTemplates.length > 0 && (
+          {systemSelected.length > 0 && (
             <div className="grid gap-2">
               <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                 Pré-definidos
               </h3>
-              {renderRow(systemTemplates)}
+              {renderRow(systemSelected)}
             </div>
           )}
         </div>
       )}
 
-      <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2.5 text-sm text-muted-foreground">
-        <span className="flex items-center gap-2">
-          <Info className="size-4 shrink-0 text-primary" />
-          Só os sistemas marcados aqui aparecem no seletor ao criar/editar uma categoria.
-        </span>
-        <button
-          type="button"
-          onClick={() => navigate("/scoring-templates")}
-          className="flex items-center justify-end gap-1 self-end font-medium text-primary hover:underline"
-        >
-          Ir para Sistemas de Pontuação
-          <ArrowRight className="size-3.5" />
-        </button>
-      </div>
+      <LinkScoringTemplatesDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        templates={templates}
+        selectedIds={selectedIds ?? new Set()}
+        onToggle={toggle}
+      />
     </div>
   );
 }
