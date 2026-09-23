@@ -1719,6 +1719,35 @@ export const resultsApi = {
     authRequest<EventResultsResponse>(`/events/${eventId}/scoring/results`),
 };
 
+export interface EventMetricsBar {
+  label: string;
+  count: number;
+}
+
+export interface EventMetricsFormatBar {
+  formatKey: string;
+  count: number;
+}
+
+export interface EventMetricsResponse {
+  categoriesCount: number;
+  teamsCount: number;
+  programsCount: number;
+  presentationsCount: number;
+  judgesCount: number;
+  athletesCount: number;
+  spectatorsCount: number;
+  teamsByProgram: EventMetricsBar[];
+  presentationsByCategory: EventMetricsBar[];
+  categoriesByFormat: EventMetricsFormatBar[];
+  programsByState: EventMetricsBar[];
+}
+
+export const eventMetricsApi = {
+  get: (eventId: string) =>
+    authRequest<EventMetricsResponse>(`/events/${eventId}/metrics`),
+};
+
 export const teamScoringApi = {
   getOverview: (eventId: string) =>
     authRequest<AdminOverviewEntry[]>(

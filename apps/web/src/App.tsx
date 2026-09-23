@@ -55,6 +55,11 @@ const EventHistoryPage = lazy(() =>
     default: m.EventHistoryPage,
   })),
 );
+const EventMetricsPage = lazy(() =>
+  import("@/pages/EventMetricsPage").then((m) => ({
+    default: m.EventMetricsPage,
+  })),
+);
 const RegulationPage = lazy(() =>
   import("@/pages/RegulationPage").then((m) => ({ default: m.RegulationPage })),
 );
@@ -151,6 +156,7 @@ function App() {
           />
           <Route path="/events/:id/access" element={<EventStaffPage />} />
           <Route path="/events/:id/history" element={<EventHistoryPage />} />
+          <Route path="/events/:id/metrics" element={<EventMetricsPage />} />
           <Route path="/events/:id/regulation" element={<RegulationPage />} />
           <Route path="/events/:id/categories" element={<CategoriesPage />} />
           <Route path="/events/:id/programs" element={<ProgramsPage />} />

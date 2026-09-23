@@ -1,4 +1,14 @@
-import { History, Pencil, QrCode, Send, Settings, Trash2, Undo2, MoreVertical } from "lucide-react";
+import {
+  BarChart3,
+  History,
+  Pencil,
+  QrCode,
+  Send,
+  Settings,
+  Trash2,
+  Undo2,
+  MoreVertical,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
@@ -91,6 +101,12 @@ export function EventActionsMenu({
           <DropdownMenuItem onClick={() => onViewHistory(event)}>
             <History data-icon="inline-start" />
             Histórico
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => navigate(`/events/${event.aliasId}/metrics`)}
+          >
+            <BarChart3 data-icon="inline-start" />
+            Métricas do evento
           </DropdownMenuItem>
           {canTogglePublish && (
             <DropdownMenuItem onClick={() => onTogglePublish(event)}>
