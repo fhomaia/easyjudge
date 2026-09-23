@@ -33,6 +33,14 @@ import { EventMetricsModule } from './event-metrics/event-metrics.module';
       url: process.env.DATABASE_URL,
       autoLoadEntities: true,
       synchronize: false,
+      // Sem isso, o driver `pg` cai no padrão de só 10 conexões — achado
+      // real com teste de carga (packages/load-test, 2026-09-23):
+      // 200 espectadores lendo ao mesmo tempo botavam a leitura REST na
+      // casa de 4-7s (fila pro pool), enquanto socket/broadcast ficavam
+      // normais (~800ms, só rede) — sinal claro de fila de conexão, não
+      // CPU/rede. 20 é modesto o bastante pra não estourar limite de
+      // conexão do Neon mesmo sem usar o endpoint com pooler dele.
+      extra: { max: 20 },
     }),
     // Global (sem precisar importar em cada módulo) — desacopla quem
     // dispara um efeito (NotificationsService/EventsService) de quem
