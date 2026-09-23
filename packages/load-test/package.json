@@ -1,0 +1,22 @@
+{
+  "name": "load-test",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Teste de carga descartável — simula N espectadores conectados ao painel ao vivo (Socket.io + REST) pra medir latência de conexão, de leitura e de broadcast antes de um evento real.",
+  "scripts": {
+    "spectators": "ts-node --transpile-only src/spectator-load-test.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.22.0",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.0"
+  }
+}
