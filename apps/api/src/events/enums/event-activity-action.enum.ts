@@ -23,7 +23,10 @@ export enum EventActivityAction {
   TEAM_DELETED = 'team_deleted',
   REGULATION_DOCUMENT_UPLOADED = 'regulation_document_uploaded',
   REGULATION_DOCUMENT_REMOVED = 'regulation_document_removed',
-  REGULATION_DEDUCTIONS_UPDATED = 'regulation_deductions_updated',
+  // 'regulation_deductions_updated' foi removido (2026-09-23, deduções
+  // viraram edição de ScoringTemplate, que não gera log de atividade de
+  // evento) — o valor continua existindo no enum do Postgres (linhas
+  // antigas), só não é mais gravado por código nenhum.
   STAFF_MEMBER_ADDED = 'staff_member_added',
   STAFF_MEMBER_UPDATED = 'staff_member_updated',
   STAFF_MEMBER_REMOVED = 'staff_member_removed',

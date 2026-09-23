@@ -1,4 +1,6 @@
+import { randomUUID } from 'crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -6,12 +8,20 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ScoringTemplate } from '../entities/scoring-template.entity';
+import {
+  ScoringTemplate,
+  TemplateDeduction,
+} from '../entities/scoring-template.entity';
 import { ScoreBand, ScoringCriterion } from '../entities/scoring-criterion.entity';
 import { EventScoringTemplate } from '../entities/event-scoring-template.entity';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 import { CreateScoringTemplateDto } from '../dto/create-scoring-template.dto';
 import { UpdateScoringTemplateDto } from '../dto/update-scoring-template.dto';
+import { UpdateScoringTemplateDeductionsDto } from '../dto/update-scoring-template-deductions.dto';
+import {
+  CUSTOM_DEDUCTION_PREFIX,
+  IASF_DEFAULT_DEDUCTIONS,
+} from '../constants/iasf-deductions';
 import { stripUndefined } from '../../common/utils/strip-undefined';
 import { Category } from '../../categories/entities/category.entity';
 import { Event } from '../../events/entities/event.entity';
@@ -37,16 +47,26 @@ export class ScoringTemplatesService {
     createdById: string,
   ): Promise<ScoringTemplate> {
     const { cloneFromId, ...templateData } = dto;
+    let sourceTemplate: ScoringTemplate | null = null;
     if (cloneFromId) {
       // Clonar de um template de sistema (não só dos próprios) é o
       // caminho pretendido pra usar um modelo oficial — ver
       // findViewableTemplateOrThrow.
-      await this.findViewableTemplateOrThrow(cloneFromId, createdById);
+      sourceTemplate = await this.findViewableTemplateOrThrow(
+        cloneFromId,
+        createdById,
+      );
     }
 
     const template = this.templatesRepo.create({
       ...templateData,
       createdById,
+      // Todo template novo nasce com deduções: clonado herda as do
+      // template de origem, do zero nasce semeado com as 9 regras
+      // padrão da IASF (editável/removível livremente a partir daí).
+      deductions: sourceTemplate
+        ? sourceTemplate.deductions
+        : [...IASF_DEFAULT_DEDUCTIONS],
     });
     const saved = await this.templatesRepo.save(template);
 
@@ -223,6 +243,62 @@ export class ScoringTemplatesService {
     return this.templatesRepo.save(template);
   }
 
+  // Substitui a lista COMPLETA de deduções do template (o cliente sempre
+  // manda a lista inteira — uma linha ausente é uma exclusão, mesmo
+  // contrato que a árvore de critérios já segue em outros pontos).
+  // Trava junto com o resto do template (assertNotLockedForEditing) —
+  // não há mais checagem fina de "esse tipo já foi usado numa nota"
+  // (2026-09-23): uma vez que qualquer evento que usa o template vai ao
+  // ar, ele todo (estrutura + deduções) vira somente-leitura pra quem
+  // usa, mesmo tratamento que critérios já recebem.
+  async updateDeductions(
+    id: string,
+    dto: UpdateScoringTemplateDeductionsDto,
+    userId: string,
+  ): Promise<ScoringTemplate> {
+    const template = await this.findOwnTemplateOrThrow(id, userId);
+    await this.assertNotLockedForEditing(id);
+
+    const existingIds = new Set(template.deductions.map((d) => d.id));
+    const takenLabels = new Set<string>();
+    const next: TemplateDeduction[] = [];
+    for (const item of dto.deductions) {
+      const label = item.label.trim().replace(/\s+/g, ' ');
+      if (!label) {
+        throw new BadRequestException('O nome da dedução é obrigatório.');
+      }
+      if (!Number.isFinite(item.value)) {
+        throw new BadRequestException(`Valor inválido para "${label}".`);
+      }
+      const key = label.toLowerCase();
+      if (takenLabels.has(key)) {
+        throw new BadRequestException(
+          `Já existe um tipo de dedução chamado "${label}".`,
+        );
+      }
+      takenLabels.add(key);
+      next.push({
+        // Só reaproveita um id que já existe (o cliente não inventa ids).
+        id:
+          item.id && existingIds.has(item.id)
+            ? item.id
+            : `${CUSTOM_DEDUCTION_PREFIX}${randomUUID()}`,
+        label,
+        value: this.toDeductionValue(item.value),
+        requiresCode: item.requiresCode ?? false,
+      });
+    }
+
+    template.deductions = next;
+    return this.templatesRepo.save(template);
+  }
+
+  // Deduzir = SUBTRAIR. O usuário informa só a magnitude (sinal
+  // ignorado), então esquecer o "-" nunca soma pontos à apresentação.
+  private toDeductionValue(value: number): number {
+    return value === 0 ? 0 : -Math.abs(value);
+  }
+
   async remove(id: string, userId: string): Promise<void> {
     const template = await this.findOwnTemplateOrThrow(id, userId);
     const inUseCount = await this.categoriesRepo.count({
@@ -321,6 +397,11 @@ export class ScoringTemplatesService {
     if (this.hasStaleScoreBands(criteria)) {
       throw new ConflictException(
         'Este sistema de pontuação está incompleto — alguma faixa de pontuação não cobre mais a nota máxima do critério (a pontuação máxima mudou depois que as faixas foram salvas).',
+      );
+    }
+    if (template.deductions.length === 0) {
+      throw new ConflictException(
+        'Este sistema de pontuação está incompleto — defina ao menos uma regra de dedução antes de usá-lo em uma categoria.',
       );
     }
     return template;

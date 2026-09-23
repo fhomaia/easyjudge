@@ -803,6 +803,23 @@ export const judgesApi = {
 
 export type ScoringCriterionType = "group" | "score_item";
 
+// Chave de uma regra de dedução: ou um dos 9 ids padrão da IASF (usados
+// só pra semear um template novo) ou "custom_<uuid>" (regra criada pelo
+// usuário) — sem distinção de origem depois de criada.
+export type DeductionType = string;
+
+export interface TemplateDeduction {
+  id: string;
+  label: string;
+  // Sempre <= 0 (é somado ao total). Na tela de deduções mostrar o
+  // valor absoluto, sem sinal.
+  value: number;
+  // Exige especificação de texto livre na tela do jurado de legalidade
+  // (ex.: "Legality Infractions" padrão da IASF, mas qualquer regra
+  // pode ser marcada).
+  requiresCode: boolean;
+}
+
 export interface ScoringTemplate {
   id: string;
   name: string;
@@ -818,6 +835,13 @@ export interface ScoringTemplate {
   isSystemTemplate: boolean;
   source: string | null;
   year: number | null;
+  deductions: TemplateDeduction[];
+}
+
+export interface UpdateScoringTemplateDeductionsPayload {
+  // Lista COMPLETA das regras de dedução do template (substitui a
+  // anterior) — uma linha ausente é tratada como exclusão.
+  deductions: Array<{ id?: string; label: string; value: number; requiresCode?: boolean }>;
 }
 
 export interface ScoreBand {
@@ -893,6 +917,12 @@ export const scoringTemplatesApi = {
   update: (id: string, payload: UpdateScoringTemplatePayload) =>
     authRequest<ScoringTemplate>(`/scoring-templates/${id}`, {
       method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  updateDeductions: (id: string, payload: UpdateScoringTemplateDeductionsPayload) =>
+    authRequest<ScoringTemplate>(`/scoring-templates/${id}/deductions`, {
+      method: "PUT",
       body: JSON.stringify(payload),
     }),
 
@@ -1053,13 +1083,8 @@ export const judgingApi = {
     ),
 };
 
-export type RegulationDeductionMode = "iasf" | "custom";
 export type RegulationDocumentKind =
   "official_regulation" | "safety_rules" | "code_of_conduct" | "additional";
-// Chave do tipo: um dos 9 padrão IASF ("athlete_fall", "legality_infractions",
-// ...) OU "custom_<uuid>" (tipo criado pelo organizador no regulamento).
-// Por isso é string — o nome exibido vem sempre de `DeductionRuleView.label`.
-export type DeductionType = string;
 
 export interface RegulationDocument {
   id: string;
@@ -1071,53 +1096,27 @@ export interface RegulationDocument {
   createdAt: string;
 }
 
+// Regra de dedução resolvida pra exibição/cálculo (súmula do jurado,
+// súmula de detalhe) — fonte é sempre o sistema de pontuação da
+// categoria da apresentação (ScoringTemplate.deductions), não mais o
+// regulamento do evento (2026-09-23). `type` é o id armazenado
+// (TemplateDeduction.id).
 export interface DeductionRuleView {
   type: DeductionType;
   label: string;
-  isCustom: boolean;
-  // null nos tipos personalizados (não existe padrão IASF).
-  defaultValue: number | null;
-  // Sempre <= 0 (é somado ao total). Na tela do regulamento mostrar o
-  // valor absoluto, sem sinal.
   value: number;
-}
-
-export interface CustomDeductionInput {
-  // Ausente = tipo novo. Presente = mantém o tipo (mesmo renomeando).
-  id?: string;
-  label: string;
-  // Magnitude em pontos; o sinal é ignorado pelo servidor.
-  value: number;
+  requiresCode: boolean;
 }
 
 export interface Regulation {
   eventId: string;
-  deductionMode: RegulationDeductionMode;
-  deductions: DeductionRuleView[];
-  // Tipos padrão removidos neste evento (modo custom), pra restaurar.
-  hiddenDeductions: DeductionRuleView[];
   documents: RegulationDocument[];
   updatedAt: string | null;
-}
-
-export interface UpdateRegulationPayload {
-  deductionMode?: RegulationDeductionMode;
-  deductionValues?: Partial<Record<DeductionType, number>>;
-  // Lista COMPLETA dos tipos personalizados (só no modo "custom").
-  customDeductions?: CustomDeductionInput[];
-  // Lista COMPLETA dos tipos padrão removidos (só no modo "custom").
-  hiddenDeductions?: DeductionType[];
 }
 
 export const regulationApi = {
   get: (eventId: string) =>
     authRequest<Regulation>(`/events/${eventId}/regulation`),
-
-  updateDeductions: (eventId: string, payload: UpdateRegulationPayload) =>
-    authRequest<Regulation>(`/events/${eventId}/regulation`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
 
   uploadDocument: (
     eventId: string,

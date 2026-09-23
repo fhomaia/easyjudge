@@ -7,7 +7,6 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  Patch,
   Post,
   Req,
   UploadedFile,
@@ -16,7 +15,6 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RegulationsService } from '../services/regulations.service';
-import { UpdateRegulationDto } from '../dto/update-regulation.dto';
 import { RegulationDocumentKind } from '../enums/regulation-document-kind.enum';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -59,19 +57,6 @@ export class RegulationsController {
   )
   get(@Param('eventId') eventId: string) {
     return this.regulationsService.getForEvent(eventId);
-  }
-
-  @Patch()
-  update(
-    @Param('eventId') eventId: string,
-    @Body() dto: UpdateRegulationDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    return this.regulationsService.updateDeductions(
-      eventId,
-      dto,
-      req.user.userId,
-    );
   }
 
   @Post('documents')

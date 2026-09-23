@@ -5,10 +5,11 @@ export interface DeductionLogEntry {
   deductionType: DeductionType;
   presentationElapsedMs: number | null;
   clientCreatedAt: string;
-  // Código da infração — só preenchido/relevante pra
-  // deductionType === "legality_infractions" (ver
-  // ScoreEventKind.DEDUCTION_CODE_SET). Editável a qualquer momento,
-  // sem travar a tela no instante do registro da dedução.
+  // Código/especificação extra — só preenchido/relevante pros tipos de
+  // dedução com `requiresCode: true` no sistema de pontuação (ver
+  // TemplateDeduction, ScoringRuleView; ScoreEventKind.DEDUCTION_CODE_SET
+  // grava o texto). Editável a qualquer momento, sem travar a tela no
+  // instante do registro da dedução.
   code: string | null;
 }
 

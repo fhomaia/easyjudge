@@ -8,12 +8,14 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { ScoringTemplatesService } from '../services/scoring-templates.service';
 import { CreateScoringTemplateDto } from '../dto/create-scoring-template.dto';
 import { UpdateScoringTemplateDto } from '../dto/update-scoring-template.dto';
+import { UpdateScoringTemplateDeductionsDto } from '../dto/update-scoring-template-deductions.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -54,6 +56,19 @@ export class ScoringTemplatesController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.scoringTemplatesService.update(id, dto, req.user.userId);
+  }
+
+  @Put(':id/deductions')
+  updateDeductions(
+    @Param('id') id: string,
+    @Body() dto: UpdateScoringTemplateDeductionsDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.scoringTemplatesService.updateDeductions(
+      id,
+      dto,
+      req.user.userId,
+    );
   }
 
   @Delete(':id')

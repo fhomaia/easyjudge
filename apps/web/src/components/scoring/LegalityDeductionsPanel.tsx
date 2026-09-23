@@ -160,12 +160,12 @@ export function LegalityDeductionsPanel({
                     Remover
                   </button>
                 </div>
-                {d.deductionType === "legality_infractions" && (
+                {rules.find((r) => r.type === d.deductionType)?.requiresCode && (
                   <input
                     key={d.id}
                     defaultValue={d.code ?? ""}
                     onBlur={(e) => onSetDeductionCode(d.id, e.target.value)}
-                    placeholder="Código da ilegalidade"
+                    placeholder="Especificação"
                     className={cn(
                       "mt-1.5 w-full rounded-lg border bg-background px-2 py-1 text-xs text-foreground outline-none focus-visible:border-primary",
                       d.code ? "border-border" : "border-amber-400",

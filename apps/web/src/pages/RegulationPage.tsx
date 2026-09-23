@@ -7,18 +7,14 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { RegulationDocumentsSection } from "@/components/RegulationDocumentsSection";
-import { DeductionRulesSection } from "@/components/DeductionRulesSection";
 import { ScoringTemplatesSummarySection } from "@/components/ScoringTemplatesSummarySection";
 import {
   ApiError,
   regulationApi,
   scoringTemplatesApi,
   usersApi,
-  type CustomDeductionInput,
-  type DeductionType,
   type Regulation,
   type RegulationDocument,
-  type RegulationDeductionMode,
   type RegulationDocumentKind,
   type ScoringTemplate,
   type UserProfile,
@@ -80,32 +76,6 @@ export function RegulationPage() {
     );
   }
 
-  async function handleModeChange(mode: RegulationDeductionMode) {
-    if (!id) return;
-    const updated = await regulationApi.updateDeductions(id, { deductionMode: mode });
-    setRegulation(updated);
-  }
-
-  async function handleCustomDeductionsChange(list: CustomDeductionInput[]) {
-    if (!id) return;
-    const updated = await regulationApi.updateDeductions(id, { customDeductions: list });
-    setRegulation(updated);
-  }
-
-  async function handleHiddenDeductionsChange(list: DeductionType[]) {
-    if (!id) return;
-    const updated = await regulationApi.updateDeductions(id, { hiddenDeductions: list });
-    setRegulation(updated);
-  }
-
-  async function handleValueChange(type: DeductionType, value: number) {
-    if (!id) return;
-    const updated = await regulationApi.updateDeductions(id, {
-      deductionValues: { [type]: value },
-    });
-    setRegulation(updated);
-  }
-
   return (
     <div className="flex h-svh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
@@ -134,7 +104,8 @@ export function RegulationPage() {
                   <h1 className="text-2xl font-semibold text-foreground">Regulamento</h1>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Configure os documentos e regras que serão utilizados no evento.
+                  Configure os documentos do evento e selecione os sistemas de pontuação
+                  disponíveis para as categorias.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Alterações salvas automaticamente
@@ -147,22 +118,10 @@ export function RegulationPage() {
                 onDelete={handleDeleteDocument}
               />
 
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <DeductionRulesSection
-                  deductionMode={regulation.deductionMode}
-                  deductions={regulation.deductions}
-                  hiddenDeductions={regulation.hiddenDeductions}
-                  onModeChange={handleModeChange}
-                  onValueChange={handleValueChange}
-                  onCustomDeductionsChange={handleCustomDeductionsChange}
-                  onHiddenDeductionsChange={handleHiddenDeductionsChange}
-                />
-
-                <ScoringTemplatesSummarySection
-                  eventId={id!}
-                  templates={templates}
-                />
-              </div>
+              <ScoringTemplatesSummarySection
+                eventId={id!}
+                templates={templates}
+              />
 
               <div className="flex flex-col gap-4 rounded-xl border border-amber-300/60 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-400/20 dark:bg-amber-500/10">
                 <div className="flex items-start gap-3">

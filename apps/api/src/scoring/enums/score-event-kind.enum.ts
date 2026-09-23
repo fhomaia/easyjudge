@@ -31,9 +31,10 @@ export enum ScoreEventKind {
   // de reiniciar do zero (ver ScoringService.getSheet/reduceScoreEvents
   // no frontend).
   TIMER_STOPPED = 'timer_stopped',
-  // Anota/edita o código da infração num evento DEDUCTION_ADD do tipo
-  // "legality_infractions" já existente — `undoesEventId` reaponta pro
-  // id daquele evento (reuso do campo, não é um "desfazer" de verdade
+  // Anota/edita o código/especificação de um evento DEDUCTION_ADD já
+  // existente, de um tipo marcado `requiresCode: true` no sistema de
+  // pontuação (ver TemplateDeduction) — `undoesEventId` reaponta pro id
+  // daquele evento (reuso do campo, não é um "desfazer" de verdade
   // aqui) e `text` carrega o código. Não trava a tela no momento do
   // registro — o jurado preenche depois, quando tiver tempo.
   DEDUCTION_CODE_SET = 'deduction_code_set',

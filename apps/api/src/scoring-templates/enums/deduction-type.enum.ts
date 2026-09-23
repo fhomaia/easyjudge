@@ -1,3 +1,7 @@
+// Ids das 9 regras de dedução padrão da IASF, usadas só pra semear a
+// lista de deduções (ScoringTemplate.deductions) de um template novo —
+// ver constants/iasf-deductions.ts. Não é mais usado como validação (o
+// campo já é string livre desde a migration DeductionTypeToVarchar).
 export enum DeductionType {
   ATHLETE_FALL = 'athlete_fall',
   MAJOR_ATHLETE_FALL = 'major_athlete_fall',

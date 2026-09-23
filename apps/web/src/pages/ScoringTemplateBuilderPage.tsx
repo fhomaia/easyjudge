@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Award, CheckCircle2, Download, FileSpreadsheet, FileText, Lock, Pencil } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Award, CheckCircle2, Download, FileSpreadsheet, FileText, Lock, Pencil } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ScoringStatCards } from "@/components/ScoringStatCards";
 import { ScoringTreePanel } from "@/components/ScoringTreePanel";
 import { EditCriterionPanel } from "@/components/EditCriterionPanel";
 import { ScoringValidationBar } from "@/components/ScoringValidationBar";
+import { TemplateDeductionsSection } from "@/components/TemplateDeductionsSection";
+import { ScoringTemplateStepTrail, type ScoringTemplateStep } from "@/components/ScoringTemplateStepTrail";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,12 @@ import { useAuthStore } from "@/store/auth";
 
 const NAME_DEBOUNCE_MS = 600;
 
+const STEPS: ScoringTemplateStep[] = [
+  { key: "structure", label: "Estrutura" },
+  { key: "deductions", label: "Deduções" },
+  { key: "review", label: "Revisão" },
+];
+
 export function ScoringTemplateBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -45,6 +53,7 @@ export function ScoringTemplateBuilderPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [step, setStep] = useState<string>("structure");
   const nameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -162,6 +171,14 @@ export function ScoringTemplateBuilderPage() {
     }
   }
 
+  async function handleDeductionsChange(
+    list: { id?: string; label: string; value: number; requiresCode?: boolean }[],
+  ) {
+    if (!id) return;
+    const updated = await scoringTemplatesApi.updateDeductions(id, { deductions: list });
+    setTemplate(updated);
+  }
+
   function countDescendants(criterionId: string): number {
     if (!criteria) return 0;
     const toCount = new Set<string>();
@@ -248,6 +265,12 @@ export function ScoringTemplateBuilderPage() {
           </div>
         </div>
 
+        {template && criteria !== null && (
+          <div className="px-10 pt-6">
+            <ScoringTemplateStepTrail steps={STEPS} current={step} onSelect={setStep} />
+          </div>
+        )}
+
         <div className="px-10 pb-10">
           {error && <p className="mt-6 text-sm text-destructive">{error}</p>}
 
@@ -302,7 +325,7 @@ export function ScoringTemplateBuilderPage() {
                 </div>
               )}
 
-              {!readOnly && staleScoreBands && (
+              {step === "structure" && !readOnly && staleScoreBands && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <p>
@@ -314,42 +337,112 @@ export function ScoringTemplateBuilderPage() {
                 </div>
               )}
 
-              <ScoringStatCards criteria={criteria} targetScore={template.targetScore} />
+              {step === "structure" && (
+                <>
+                  <ScoringStatCards criteria={criteria} targetScore={template.targetScore} />
 
-              <div className="rounded-lg border border-border/60 bg-primary/[0.03] p-4 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Como funciona?</p>
-                <p className="mt-1">
-                  Crie critérios (grupos ou itens de avaliação) e defina a pontuação máxima para
-                  cada um. Os itens podem ser organizados em níveis hierárquicos para refletir a
-                  estrutura do seu sistema de avaliação.
-                </p>
-              </div>
+                  <div className="rounded-lg border border-border/60 bg-primary/[0.03] p-4 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">Como funciona?</p>
+                    <p className="mt-1">
+                      Crie critérios (grupos ou itens de avaliação) e defina a pontuação máxima
+                      para cada um. Os itens podem ser organizados em níveis hierárquicos para
+                      refletir a estrutura do seu sistema de avaliação.
+                    </p>
+                  </div>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div className="lg:col-span-2">
-                  <ScoringTreePanel
-                    criteria={criteria}
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                    onAddRoot={handleAddRoot}
-                    onAddChild={handleAddChild}
-                    onDelete={setDeleteTarget}
-                    onMove={handleMove}
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className="lg:col-span-2">
+                      <ScoringTreePanel
+                        criteria={criteria}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onAddRoot={handleAddRoot}
+                        onAddChild={handleAddChild}
+                        onDelete={setDeleteTarget}
+                        onMove={handleMove}
+                        readOnly={readOnly}
+                      />
+                    </div>
+                    <EditCriterionPanel
+                      className="min-w-0"
+                      templateId={id!}
+                      criterion={selectedCriterion}
+                      hasChildren={selectedHasChildren}
+                      onUpdated={handleCriterionUpdated}
+                      onRequestDelete={setDeleteTarget}
+                      readOnly={readOnly}
+                    />
+                  </div>
+
+                  <ScoringValidationBar criteria={criteria} targetScore={template.targetScore} />
+
+                  <div className="flex justify-end">
+                    <Button type="button" onClick={() => setStep("deductions")}>
+                      Continuar
+                      <ArrowRight data-icon="inline-end" />
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {step === "deductions" && (
+                <>
+                  <TemplateDeductionsSection
+                    deductions={template.deductions}
+                    onChange={handleDeductionsChange}
                     readOnly={readOnly}
                   />
-                </div>
-                <EditCriterionPanel
-                  className="min-w-0"
-                  templateId={id!}
-                  criterion={selectedCriterion}
-                  hasChildren={selectedHasChildren}
-                  onUpdated={handleCriterionUpdated}
-                  onRequestDelete={setDeleteTarget}
-                  readOnly={readOnly}
-                />
-              </div>
 
-              <ScoringValidationBar criteria={criteria} targetScore={template.targetScore} />
+                  <div className="flex justify-between gap-3">
+                    <Button type="button" variant="outline" onClick={() => setStep("structure")}>
+                      <ArrowLeft data-icon="inline-start" />
+                      Voltar
+                    </Button>
+                    <Button type="button" onClick={() => setStep("review")}>
+                      Continuar
+                      <ArrowRight data-icon="inline-end" />
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {step === "review" && (
+                <>
+                  <ScoringStatCards criteria={criteria} targetScore={template.targetScore} />
+                  <div className="rounded-lg border border-border/60 bg-card p-5">
+                    <p className="text-sm font-medium text-foreground">
+                      Regras de dedução ({template.deductions.length})
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {template.deductions.map((d) => (
+                        <span
+                          key={d.id}
+                          className="rounded-full border border-border px-3 py-1 text-xs text-foreground"
+                        >
+                          {d.label} ({Math.abs(d.value)} pts)
+                          {d.requiresCode && " · exige especificação"}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <ScoringValidationBar
+                    criteria={criteria}
+                    targetScore={template.targetScore}
+                    deductionsCount={template.deductions.length}
+                  />
+
+                  <div className="flex justify-between gap-3">
+                    <Button type="button" variant="outline" onClick={() => setStep("deductions")}>
+                      <ArrowLeft data-icon="inline-start" />
+                      Voltar
+                    </Button>
+                    <Button type="button" onClick={() => navigate("/scoring-templates")}>
+                      Concluir
+                      <ArrowRight data-icon="inline-end" />
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

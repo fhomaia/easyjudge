@@ -391,7 +391,8 @@ export function EventLiveScoringPage() {
     });
   }
 
-  // Código da infração (só "legality_infractions") — não substitui o
+  // Código extra de uma dedução (só nos tipos com `requiresCode: true`
+  // no sistema de pontuação, ver TemplateDeduction) — não substitui o
   // evento da dedução, só anota o código nele (`undoesEventId` reaponta
   // pro id do DEDUCTION_ADD, ver ScoreEventKind.DEDUCTION_CODE_SET).
   // Sem trava na hora do registro da dedução: o jurado preenche isso
@@ -430,12 +431,17 @@ export function EventLiveScoringPage() {
   const missingCriteria = sheet
     ? sheet.groups.flatMap((g) => g.criteria).filter((c) => !(c.id in scores))
     : [];
-  const missingIllegalityCodes = deductions.filter((d) => d.deductionType === "legality_infractions" && !d.code);
+  const codeRequiredTypes = new Set(
+    (sheet?.deductions ?? []).filter((r) => r.requiresCode).map((r) => r.type),
+  );
+  const missingIllegalityCodes = deductions.filter(
+    (d) => codeRequiredTypes.has(d.deductionType) && !d.code,
+  );
   const sheetComplete = missingCriteria.length === 0 && missingIllegalityCodes.length === 0;
   const missingParts = [
     missingCriteria.length > 0 ? `${missingCriteria.length} critério${missingCriteria.length > 1 ? "s" : ""}` : null,
     missingIllegalityCodes.length > 0
-      ? `${missingIllegalityCodes.length} código${missingIllegalityCodes.length > 1 ? "s" : ""} de ilegalidade`
+      ? `${missingIllegalityCodes.length} especificaç${missingIllegalityCodes.length > 1 ? "ões" : "ão"} de dedução`
       : null,
   ].filter((p): p is string => p !== null);
 

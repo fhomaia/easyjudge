@@ -4,6 +4,7 @@ import { ScoreEvent } from './entities/score-event.entity';
 import { Category } from '../categories/entities/category.entity';
 import { Team } from '../teams/entities/team.entity';
 import { ScheduleEntry } from '../schedule/entities/schedule-entry.entity';
+import { ScoringTemplate } from '../scoring-templates/entities/scoring-template.entity';
 import { ScoringController } from './controllers/scoring.controller';
 import { AdminScoringController } from './controllers/admin-scoring.controller';
 import { TeamScoringController } from './controllers/team-scoring.controller';
@@ -16,20 +17,29 @@ import { JudgesModule } from '../judges/judges.module';
 import { JudgingModule } from '../judging/judging.module';
 import { ScheduleModule } from '../schedule/schedule.module';
 import { ScoringTemplatesModule } from '../scoring-templates/scoring-templates.module';
-import { RegulationsModule } from '../regulations/regulations.module';
 import { ProgramsModule } from '../programs/programs.module';
 import { AthletesModule } from '../athletes/athletes.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ScoreEvent, Category, Team, ScheduleEntry]),
+    // ScoringTemplate aqui (repo direto, não o módulo) só pra
+    // ScoringService resolver as regras de dedução de uma categoria via
+    // category.scoringTemplateId — mesmo raciocínio já usado acima pra
+    // Category/Team/ScheduleEntry (evita acoplar a um método novo em
+    // ScoringTemplatesService).
+    TypeOrmModule.forFeature([
+      ScoreEvent,
+      Category,
+      Team,
+      ScheduleEntry,
+      ScoringTemplate,
+    ]),
     EventsModule,
     JudgesModule,
     JudgingModule,
     ScheduleModule,
     ScoringTemplatesModule,
-    RegulationsModule,
     ProgramsModule,
     AthletesModule,
     NotificationsModule,

@@ -31,18 +31,30 @@ import { EventStatus } from '../../events/enums/event-status.enum';
 import { ProgramsService } from '../../programs/services/programs.service';
 import { AthletesService } from '../../athletes/services/athletes.service';
 import { ScoringCriteriaService } from '../../scoring-templates/services/scoring-criteria.service';
-import { DeductionType } from '../../regulations/enums/deduction-type.enum';
+import { ScoringTemplate } from '../../scoring-templates/entities/scoring-template.entity';
+import { DeductionType } from '../../scoring-templates/enums/deduction-type.enum';
 import {
   DEDUCTION_LABELS,
   UNKNOWN_DEDUCTION_LABEL,
-} from '../../regulations/constants/iasf-deductions';
-import {
-  RegulationsService,
-  type DeductionRuleView,
-} from '../../regulations/services/regulations.service';
+} from '../../scoring-templates/constants/iasf-deductions';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { NotificationType } from '../../notifications/enums/notification-type.enum';
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
+
+// Regra de dedução resolvida pra exibição/cálculo — `type` é o id
+// armazenado em ScoringTemplate.deductions[].id (mesma chave usada em
+// ScoreEvent.deductionType). Fonte: ScoringTemplate.deductions da
+// categoria da apresentação (ver ScoringService.getDeductionRulesForTemplate) —
+// desde 2026-09-23 não vem mais do Regulamento do evento.
+export interface DeductionRuleView {
+  type: string;
+  label: string;
+  value: number;
+  // Exige especificação de texto livre na tela do jurado de legalidade
+  // (ver TemplateDeduction.requiresCode) — não é mais fixo no id
+  // "legality_infractions", qualquer regra pode exigir.
+  requiresCode: boolean;
+}
 
 export interface ScoringCriterionView {
   id: string;
@@ -309,12 +321,13 @@ export class ScoringService {
     private readonly teamsRepo: Repository<Team>,
     @InjectRepository(ScheduleEntry)
     private readonly scheduleEntriesRepo: Repository<ScheduleEntry>,
+    @InjectRepository(ScoringTemplate)
+    private readonly scoringTemplatesRepo: Repository<ScoringTemplate>,
     private readonly judgesService: JudgesService,
     private readonly judgingService: JudgingService,
     private readonly scheduleService: ScheduleService,
     private readonly eventsService: EventsService,
     private readonly scoringCriteriaService: ScoringCriteriaService,
-    private readonly regulationsService: RegulationsService,
     private readonly programsService: ProgramsService,
     private readonly athletesService: AthletesService,
     private readonly notificationsService: NotificationsService,
@@ -364,7 +377,7 @@ export class ScoringService {
     }
 
     const deductions = isLegalityJudge
-      ? (await this.regulationsService.getForEvent(eventId)).deductions
+      ? await this.getDeductionRulesForTemplate(category.scoringTemplateId!)
       : [];
 
     const events = await this.scoreEventsRepo.find({
@@ -510,7 +523,7 @@ export class ScoringService {
 
     const groups = this.buildGroups(allCriteria, assignedLeafIds);
     const deductions = isLegalityJudge
-      ? (await this.regulationsService.getForEvent(eventId)).deductions
+      ? await this.getDeductionRulesForTemplate(category.scoringTemplateId!)
       : [];
     // Comentário e rascunho são privados do jurado dono da folha — nem
     // o Head Judge enxerga (só notas/deduções, que ele pode inclusive
@@ -562,13 +575,13 @@ export class ScoringService {
     userId: string,
     scheduleEntryId: string,
   ): Promise<HeadJudgeLogEntryView[]> {
-    const { entry, allCriteria } = await this.loadPresentationContext(
+    const { entry, category, allCriteria } = await this.loadPresentationContext(
       eventId,
       scheduleEntryId,
     );
     await this.assertHeadJudgeParticipation(eventId, userId, entry.resourceId);
 
-    const [events, allJudges, regulation] = await Promise.all([
+    const [events, allJudges, deductionRules] = await Promise.all([
       this.scoreEventsRepo.find({
         where: {
           scheduleEntryId: entry.id,
@@ -581,10 +594,10 @@ export class ScoringService {
         order: { clientCreatedAt: 'DESC' },
       }),
       this.judgesService.findAllForEvent(eventId),
-      this.regulationsService.getForEvent(eventId),
+      this.getDeductionRulesForTemplate(category.scoringTemplateId!),
     ]);
     const deductionLabelByType = new Map(
-      regulation.deductions.map((r) => [r.type, r.label]),
+      deductionRules.map((r) => [r.type, r.label]),
     );
 
     const judgeNameById = new Map(allJudges.map((j) => [j.id, j.name]));
@@ -745,10 +758,7 @@ export class ScoringService {
 
   async getAdminOverview(eventId: string): Promise<AdminOverviewEntryView[]> {
     const days = await this.scheduleService.getDays(eventId);
-    const regulation = await this.regulationsService.getForEvent(eventId);
-    const deductionValueByType = new Map(
-      regulation.deductions.map((r) => [r.type, r.value]),
-    );
+    const deductionsCache = new Map<string, DeductionRuleView[]>();
 
     const results: AdminOverviewEntryView[] = [];
     for (const {
@@ -762,7 +772,7 @@ export class ScoringService {
         : await this.computePresentationResult(
             entry.id,
             category,
-            deductionValueByType,
+            deductionsCache,
           );
 
       results.push({
@@ -955,7 +965,7 @@ export class ScoringService {
   private async computePresentationResult(
     scheduleEntryId: string,
     category: Category,
-    deductionValueByType: Map<string, number>,
+    deductionsCache: Map<string, DeductionRuleView[]>,
   ): Promise<{
     totalScore: number;
     deductionsTotal: number;
@@ -963,6 +973,13 @@ export class ScoringService {
     maxScore: number;
     percentage: number;
   }> {
+    const deductionRules = await this.getDeductionRulesForTemplate(
+      category.scoringTemplateId!,
+      deductionsCache,
+    );
+    const deductionValueByType = new Map(
+      deductionRules.map((r) => [r.type, r.value]),
+    );
     const scoreEvents = await this.scoreEventsRepo.find({
       where: { scheduleEntryId },
       order: { clientCreatedAt: 'ASC' },
@@ -1001,10 +1018,7 @@ export class ScoringService {
   async getEventResults(eventId: string): Promise<EventResultsView> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const days = await this.scheduleService.getDays(eventId);
-    const regulation = await this.regulationsService.getForEvent(eventId);
-    const deductionValueByType = new Map(
-      regulation.deductions.map((r) => [r.type, r.value]),
-    );
+    const deductionsCache = new Map<string, DeductionRuleView[]>();
 
     const teams = await this.teamsRepo
       .createQueryBuilder('team')
@@ -1087,7 +1101,7 @@ export class ScoringService {
           } = await this.computePresentationResult(
             entry.id,
             category,
-            deductionValueByType,
+            deductionsCache,
           );
 
           presentations.push({
@@ -1306,10 +1320,7 @@ export class ScoringService {
     teamIds: Set<string>,
   ): Promise<AdminOverviewEntryView[]> {
     const days = await this.scheduleService.getDays(eventId);
-    const regulation = await this.regulationsService.getForEvent(eventId);
-    const deductionValueByType = new Map(
-      regulation.deductions.map((r) => [r.type, r.value]),
-    );
+    const deductionsCache = new Map<string, DeductionRuleView[]>();
     const templateCache = new Map<string, CriterionAssignmentsState>();
     const categoryCache = new Map<string, Category | null>();
     const specialRolesCache = new Map<
@@ -1371,7 +1382,7 @@ export class ScoringService {
             : await this.computePresentationResult(
                 entry.id,
                 category,
-                deductionValueByType,
+                deductionsCache,
               );
 
           results.push({
@@ -1719,15 +1730,42 @@ export class ScoringService {
     return { savedIds: rows.map((r) => r.id) };
   }
 
-  // Nome de um tipo de dedução. Tipo que não está mais na lista do
-  // regulamento (ex. personalizado apagado) cai no nome padrão, se for
-  // padrão, ou num rótulo genérico — nunca quebra a súmula.
+  // Nome de um tipo de dedução. Tipo que não está mais na lista de
+  // deduções do template (ex. regra apagada depois da nota lançada) cai
+  // no nome padrão, se for um dos 9 ids da IASF, ou num rótulo
+  // genérico — nunca quebra a súmula.
   private deductionLabel(byType: Map<string, string>, type: string): string {
     return (
       byType.get(type) ??
       DEDUCTION_LABELS[type as DeductionType] ??
       UNKNOWN_DEDUCTION_LABEL
     );
+  }
+
+  // Deduções de UM template, já no formato de exibição (`type` = id
+  // armazenado). `cache` é opcional — passado pelos métodos que
+  // processam o evento inteiro (várias categorias/templates possíveis),
+  // omitido pelos que processam uma única apresentação (getSheet e
+  // afins, onde só se resolve um template por chamada mesmo).
+  private async getDeductionRulesForTemplate(
+    templateId: string,
+    cache?: Map<string, DeductionRuleView[]>,
+  ): Promise<DeductionRuleView[]> {
+    const cached = cache?.get(templateId);
+    if (cached) return cached;
+    const template = await this.scoringTemplatesRepo.findOneBy({
+      id: templateId,
+    });
+    const rules: DeductionRuleView[] = (template?.deductions ?? []).map(
+      (d) => ({
+        type: d.id,
+        label: d.label,
+        value: d.value,
+        requiresCode: d.requiresCode ?? false,
+      }),
+    );
+    cache?.set(templateId, rules);
+    return rules;
   }
 
   // Valida cada evento do lote contra as atribuições do DONO da nota
@@ -2121,7 +2159,7 @@ export class ScoringService {
       specialRoles,
       allJudges,
       events,
-      regulation,
+      deductionRules,
     ] = await Promise.all([
       this.eventsService.findEventOrThrow(eventId),
       this.judgingService.getAssignments(eventId, category.scoringTemplateId!),
@@ -2131,7 +2169,7 @@ export class ScoringService {
         where: { scheduleEntryId: entry.id },
         order: { clientCreatedAt: 'ASC' },
       }),
-      this.regulationsService.getForEvent(eventId),
+      this.getDeductionRulesForTemplate(category.scoringTemplateId!),
     ]);
 
     const judgeNameById = new Map(allJudges.map((j) => [j.id, j.name]));
@@ -2220,10 +2258,10 @@ export class ScoringService {
     }
 
     const deductionValueByType = new Map(
-      regulation.deductions.map((r) => [r.type, r.value]),
+      deductionRules.map((r) => [r.type, r.value]),
     );
     const deductionLabelByType = new Map(
-      regulation.deductions.map((r) => [r.type, r.label]),
+      deductionRules.map((r) => [r.type, r.label]),
     );
 
     const legalityRole = specialRoles.find(

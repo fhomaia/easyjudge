@@ -12,6 +12,26 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { ScoringCriterion } from './scoring-criterion.entity';
 
+// Uma regra de dedução do template — `id` é a chave usada nas notas
+// (score_events.deduction_type): ou um dos 9 ids padrão da IASF (ver
+// enums/deduction-type.enum.ts, só usados pra semear um template novo)
+// ou `custom_<uuid>` (linha adicionada pelo usuário). Sem distinção de
+// origem depois de criada — o usuário edita/apaga/adiciona livremente,
+// não existe mais conceito de "modo IASF vs Personalizado" (2026-09-23,
+// ver CLAUDE.md). `value` fica sempre <= 0 (soma ao total = subtrai).
+export interface TemplateDeduction {
+  id: string;
+  label: string;
+  value: number;
+  // Quando true, a tela do jurado de legalidade exige uma especificação
+  // de texto livre ao aplicar esta dedução (ex.: qual regra de
+  // legalidade foi infringida) — ver ScoreEventKind.DEDUCTION_CODE_SET.
+  // Pedido do usuário (2026-09-23): antes disso era travado no id fixo
+  // "legality_infractions"; agora qualquer regra (padrão ou
+  // personalizada) pode exigir.
+  requiresCode: boolean;
+}
+
 // Template de pontuação reutilizável entre eventos (não pertence a um
 // evento específico — é uma biblioteca pessoal do usuário, atribuída a
 // categorias depois, em uma etapa futura). Ver CLAUDE.md.
@@ -65,6 +85,16 @@ export class ScoringTemplate {
   // migration.
   @Column({ type: 'int', nullable: true })
   year: number | null;
+
+  // Regras de dedução deste template — todo template novo (do zero ou
+  // clonado) nasce semeado com as 9 regras padrão da IASF (ver
+  // ScoringTemplatesService.create/constants/iasf-deductions.ts) e o
+  // usuário edita/apaga/adiciona a partir daí. Compartilhada por todo
+  // evento que usa este template (mesmo espírito de critérios/
+  // targetScore, que já são compartilhados) — travada pra edição junto
+  // com o resto do template (ver assertNotLockedForEditing).
+  @Column({ type: 'jsonb', default: () => `'[]'` })
+  deductions: TemplateDeduction[];
 
   @OneToMany(() => ScoringCriterion, (criterion) => criterion.template)
   criteria: ScoringCriterion[];

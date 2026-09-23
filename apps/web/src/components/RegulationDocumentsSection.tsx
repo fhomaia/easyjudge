@@ -27,7 +27,7 @@ export function RegulationDocumentsSection({
   return (
     <div className="grid gap-4 rounded-lg border border-border/60 bg-card p-5">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">1. Documentos do evento</h2>
+        <h2 className="text-lg font-semibold text-foreground">Documentos do evento</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Faça upload dos documentos oficiais que compõem o regulamento do evento.
         </p>

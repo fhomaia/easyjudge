@@ -96,12 +96,17 @@ export function EventLiveScoringDesktopView({
     ? Math.min(1, elapsedMs / 1000 / sheet.presentation.presentationTimeSeconds)
     : 0;
   const missingCriteria = sheet.groups.flatMap((g) => g.criteria).filter((c) => !(c.id in scores));
-  const missingIllegalityCodes = deductions.filter((d) => d.deductionType === "legality_infractions" && !d.code);
+  const codeRequiredTypes = new Set(
+    sheet.deductions.filter((r) => r.requiresCode).map((r) => r.type),
+  );
+  const missingIllegalityCodes = deductions.filter(
+    (d) => codeRequiredTypes.has(d.deductionType) && !d.code,
+  );
   const sheetComplete = missingCriteria.length === 0 && missingIllegalityCodes.length === 0;
   const missingParts = [
     missingCriteria.length > 0 ? `${missingCriteria.length} critério${missingCriteria.length > 1 ? "s" : ""}` : null,
     missingIllegalityCodes.length > 0
-      ? `${missingIllegalityCodes.length} código${missingIllegalityCodes.length > 1 ? "s" : ""} de ilegalidade`
+      ? `${missingIllegalityCodes.length} especificaç${missingIllegalityCodes.length > 1 ? "ões" : "ão"} de dedução`
       : null,
   ].filter((p): p is string => p !== null);
 

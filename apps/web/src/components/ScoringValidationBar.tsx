@@ -6,20 +6,33 @@ import type { ScoringCriterion } from "@/api/client";
 interface ScoringValidationBarProps {
   criteria: ScoringCriterion[];
   targetScore: number;
+  // Quando informado, também exige ao menos 1 regra de dedução pra
+  // considerar o template pronto (passo "Revisão" do builder) — omitido
+  // nas outras telas que reusam esta barra só pra estrutura.
+  deductionsCount?: number;
 }
 
-export function ScoringValidationBar({ criteria, targetScore }: ScoringValidationBarProps) {
+export function ScoringValidationBar({
+  criteria,
+  targetScore,
+  deductionsCount,
+}: ScoringValidationBarProps) {
   const rootCriteria = getDirectChildren(criteria, null);
   const distributed = sumMaxScore(rootCriteria);
   const sumValid = Math.abs(distributed - targetScore) < 0.001;
   const emptyGroup = hasEmptyGroup(criteria);
-  const valid = sumValid && !emptyGroup;
+  const noDeductions = deductionsCount !== undefined && deductionsCount === 0;
+  const valid = sumValid && !emptyGroup && !noDeductions;
 
   const message = !sumValid
     ? "A soma dos pontos não bate com a meta do template."
     : emptyGroup
       ? "Todo grupo precisa ter ao menos um item de avaliação vinculado."
-      : "A soma dos pontos está correta!";
+      : noDeductions
+        ? "Defina ao menos uma regra de dedução."
+        : deductionsCount !== undefined
+          ? "O template está pronto!"
+          : "A soma dos pontos está correta!";
 
   return (
     <div
