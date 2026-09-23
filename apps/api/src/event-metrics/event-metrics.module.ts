@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Category } from '../categories/entities/category.entity';
+import { Team } from '../teams/entities/team.entity';
 import { ScheduleEntry } from '../schedule/entities/schedule-entry.entity';
 import { EventMetricsController } from './controllers/event-metrics.controller';
 import { EventMetricsService } from './services/event-metrics.service';
@@ -9,14 +10,14 @@ import { ProgramsModule } from '../programs/programs.module';
 
 @Module({
   imports: [
-    // Category/ScheduleEntry aqui só pro repositório (contagem/
+    // Category/Team/ScheduleEntry aqui só pro repositório (contagem/
     // agrupamento) — mesmo padrão já usado em events.module.ts/
-    // scoring.module.ts pra evitar importar CategoriesModule/
-    // ScheduleModule inteiros só por isso. Equipes/programas reaproveitam
+    // scoring.module.ts pra evitar importar CategoriesModule/TeamsModule/
+    // ScheduleModule inteiros só por isso. Programas reaproveitam
     // ProgramsService.findAllForEvent (já resolve ProgramProfile/
     // teamsCount) em vez de duplicar essa lógica com um repositório
-    // próprio de Team/ProgramParticipation.
-    TypeOrmModule.forFeature([Category, ScheduleEntry]),
+    // próprio de ProgramParticipation.
+    TypeOrmModule.forFeature([Category, Team, ScheduleEntry]),
     EventsModule,
     ProgramsModule,
   ],

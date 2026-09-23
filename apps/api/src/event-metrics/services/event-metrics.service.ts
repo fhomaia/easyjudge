@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Team } from '../../teams/entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
-import { CategoryFormat } from '../../categories/enums/category-format.enum';
 import { ScheduleEntry } from '../../schedule/entities/schedule-entry.entity';
 import { ScheduleEntryType } from '../../schedule/enums/schedule-entry-type.enum';
+import { CategoryFormat } from '../../categories/enums/category-format.enum';
 import { EventsService } from '../../events/services/events.service';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { ProgramsService } from '../../programs/services/programs.service';
@@ -19,6 +20,11 @@ export interface EventMetricsFormatBar {
   count: number;
 }
 
+export interface EventMetricsLevelBar {
+  level: number;
+  count: number;
+}
+
 export interface EventMetricsResponse {
   categoriesCount: number;
   teamsCount: number;
@@ -27,9 +33,9 @@ export interface EventMetricsResponse {
   judgesCount: number;
   athletesCount: number;
   spectatorsCount: number;
-  teamsByProgram: EventMetricsBar[];
-  presentationsByCategory: EventMetricsBar[];
-  categoriesByFormat: EventMetricsFormatBar[];
+  categoriesByProgram: EventMetricsBar[];
+  presentationsByModality: EventMetricsFormatBar[];
+  presentationsByLevel: EventMetricsLevelBar[];
   programsByState: EventMetricsBar[];
 }
 
@@ -45,31 +51,43 @@ const FORMAT_DISPLAY_ORDER: CategoryFormat[] = [
   CategoryFormat.PARTNER,
 ];
 
-function formatKeyFor(category: Category): string {
-  return category.categoryFormat === CategoryFormat.CUSTOM
-    ? `custom:${category.customFormatLabel ?? ''}`
-    : category.categoryFormat;
+function formatKeyFor(
+  categoryFormat: CategoryFormat,
+  customFormatLabel: string | null,
+): string {
+  return categoryFormat === CategoryFormat.CUSTOM
+    ? `custom:${customFormatLabel ?? ''}`
+    : categoryFormat;
 }
 
-function formatOrderIndex(category: Category): number {
-  const idx = FORMAT_DISPLAY_ORDER.indexOf(category.categoryFormat);
+function formatOrderIndex(categoryFormat: CategoryFormat): number {
+  const idx = FORMAT_DISPLAY_ORDER.indexOf(categoryFormat);
   return idx === -1 ? FORMAT_DISPLAY_ORDER.length : idx;
+}
+
+interface PresentationRow {
+  categoryId: string;
+  categoryFormat: CategoryFormat;
+  customFormatLabel: string | null;
+  level: number;
+  count: number;
 }
 
 // Tela "Métricas do evento" (menu "⋯" da listagem, ver
 // EventActionsMenu/EventMetricsPage no frontend) — puramente leitura
 // agregada pra admin/assessor. Reaproveita ProgramsService.
-// findAllForEvent (já resolve ProgramProfile/teamsCount, ver
-// ProgramsService.toProgramView) e EventsService.getMemberRoleCounts em
-// vez de duplicar essa lógica com repositórios próprios; só
-// Category/ScheduleEntry precisam de acesso direto, sem método pronto
-// pra reusar (mesmo padrão de acesso direto a repositório já usado por
-// EventsModule/ScoringModule pra evitar importar o domínio inteiro).
+// findAllForEvent (já resolve ProgramProfile/teamsCount) e
+// EventsService.getMemberRoleCounts em vez de duplicar essa lógica; só
+// Team/ScheduleEntry precisam de acesso direto a repositório (mesmo
+// padrão já usado em events.module.ts/scoring.module.ts pra evitar
+// importar TeamsModule/ScheduleModule inteiros só por isso).
 @Injectable()
 export class EventMetricsService {
   constructor(
     @InjectRepository(Category)
     private readonly categoriesRepo: Repository<Category>,
+    @InjectRepository(Team)
+    private readonly teamsRepo: Repository<Team>,
     @InjectRepository(ScheduleEntry)
     private readonly entriesRepo: Repository<ScheduleEntry>,
     private readonly eventsService: EventsService,
@@ -80,10 +98,21 @@ export class EventMetricsService {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const aliasId = event.aliasId;
 
-    const [categories, programs, presentationRows, roleCounts] =
+    const [categoriesCount, programs, categoryProgramRows, presentationRows, roleCounts] =
       await Promise.all([
-        this.categoriesRepo.find({ where: { aliasId } }),
-        this.programsService.findAllForEvent(aliasId),
+        this.categoriesRepo.count({ where: { aliasId } }),
+        this.programsService.findAllForEvent(eventId),
+        this.teamsRepo
+          .createQueryBuilder('team')
+          .innerJoin('team.program', 'program')
+          .innerJoin('team.categories', 'category')
+          .where('program.aliasId = :aliasId', { aliasId })
+          .select('program.id', 'programId')
+          .addSelect('program.name', 'programName')
+          .addSelect('COUNT(DISTINCT category.id)::int', 'count')
+          .groupBy('program.id')
+          .addGroupBy('program.name')
+          .getRawMany<{ programId: string; programName: string; count: number }>(),
         this.entriesRepo
           .createQueryBuilder('entry')
           .innerJoin('entry.category', 'category')
@@ -93,23 +122,24 @@ export class EventMetricsService {
           })
           .andWhere('entry.withdrawnAt IS NULL')
           .select('entry.categoryId', 'categoryId')
-          .addSelect('category.name', 'categoryName')
+          .addSelect('category.categoryFormat', 'categoryFormat')
+          .addSelect('category.customFormatLabel', 'customFormatLabel')
+          .addSelect('category.level', 'level')
           .addSelect('COUNT(*)::int', 'count')
           .groupBy('entry.categoryId')
-          .addGroupBy('category.name')
-          .getRawMany<{
-            categoryId: string;
-            categoryName: string;
-            count: number;
-          }>(),
+          .addGroupBy('category.categoryFormat')
+          .addGroupBy('category.customFormatLabel')
+          .addGroupBy('category.level')
+          .getRawMany<PresentationRow>(),
         this.eventsService.getMemberRoleCounts(aliasId),
       ]);
 
-    const teamsByProgram = programs
-      .map((p) => ({ label: p.name, count: p.teamsCount ?? 0 }))
-      .filter((p) => p.count > 0)
+    const teamsCount = programs.reduce((sum, p) => sum + (p.teamsCount ?? 0), 0);
+
+    const categoriesByProgram = categoryProgramRows
+      .map((row) => ({ label: row.programName, count: row.count }))
+      .filter((row) => row.count > 0)
       .sort((a, b) => b.count - a.count);
-    const teamsCount = teamsByProgram.reduce((sum, p) => sum + p.count, 0);
 
     const stateCounts = new Map<string, number>();
     for (const p of programs) {
@@ -120,39 +150,53 @@ export class EventMetricsService {
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count);
 
-    const presentationsByCategory = presentationRows
-      .map((row) => ({ label: row.categoryName, count: row.count }))
-      .sort((a, b) => b.count - a.count);
     const presentationsCount = presentationRows.reduce(
       (sum, row) => sum + row.count,
       0,
     );
 
-    const formatGroups = new Map<string, { count: number; order: number }>();
-    for (const category of categories) {
-      const key = formatKeyFor(category);
-      const existing = formatGroups.get(key);
-      if (existing) existing.count += 1;
-      else formatGroups.set(key, { count: 1, order: formatOrderIndex(category) });
+    const modalityGroups = new Map<string, { count: number; order: number }>();
+    for (const row of presentationRows) {
+      const key = formatKeyFor(row.categoryFormat, row.customFormatLabel);
+      const existing = modalityGroups.get(key);
+      if (existing) existing.count += row.count;
+      else
+        modalityGroups.set(key, {
+          count: row.count,
+          order: formatOrderIndex(row.categoryFormat),
+        });
     }
-    const categoriesByFormat = [...formatGroups.entries()]
+    const presentationsByModality = [...modalityGroups.entries()]
       .map(([formatKey, v]) => ({ formatKey, count: v.count, order: v.order }))
       .sort(
         (a, b) => a.order - b.order || a.formatKey.localeCompare(b.formatKey, 'pt-BR'),
       )
       .map(({ formatKey, count }) => ({ formatKey, count }));
 
+    // Nível é ordinal (1 a 7, aceita meio-nível) — ordenado de forma
+    // crescente pelo próprio nível, não por magnitude (diferente dos
+    // outros gráficos de ranking desta tela), já que trocar a ordem
+    // aqui mudaria o sentido dos dados.
+    const levelGroups = new Map<number, number>();
+    for (const row of presentationRows) {
+      const level = Number(row.level);
+      levelGroups.set(level, (levelGroups.get(level) ?? 0) + row.count);
+    }
+    const presentationsByLevel = [...levelGroups.entries()]
+      .map(([level, count]) => ({ level, count }))
+      .sort((a, b) => a.level - b.level);
+
     return {
-      categoriesCount: categories.length,
+      categoriesCount,
       teamsCount,
       programsCount: programs.length,
       presentationsCount,
       judgesCount: roleCounts[EventMemberRole.JUDGE] ?? 0,
       athletesCount: roleCounts[EventMemberRole.ATHLETE] ?? 0,
       spectatorsCount: roleCounts[EventMemberRole.SPECTATOR] ?? 0,
-      teamsByProgram,
-      presentationsByCategory,
-      categoriesByFormat,
+      categoriesByProgram,
+      presentationsByModality,
+      presentationsByLevel,
       programsByState,
     };
   }

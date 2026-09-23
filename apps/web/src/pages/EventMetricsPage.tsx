@@ -16,6 +16,7 @@ import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { MetricBarList } from "@/components/MetricBarList";
+import { MetricColumnChart } from "@/components/MetricColumnChart";
 import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import { autoFormatKeyLabel } from "@/lib/autoFormatKey";
@@ -149,17 +150,22 @@ export function EventMetricsPage() {
               </div>
 
               <div className="grid gap-6 lg:grid-cols-2">
-                <ChartCard title="Equipes por programa">
-                  <MetricBarList items={metrics.teamsByProgram} />
+                <ChartCard title="Categorias por programa">
+                  <MetricBarList items={metrics.categoriesByProgram} />
                 </ChartCard>
-                <ChartCard title="Apresentações por categoria">
-                  <MetricBarList items={metrics.presentationsByCategory} />
-                </ChartCard>
-                <ChartCard title="Categorias por modalidade">
+                <ChartCard title="Apresentações por modalidade">
                   <MetricBarList
-                    items={metrics.categoriesByFormat.map((f) => ({
+                    items={metrics.presentationsByModality.map((f) => ({
                       label: autoFormatKeyLabel(f.formatKey),
                       count: f.count,
+                    }))}
+                  />
+                </ChartCard>
+                <ChartCard title="Apresentações por nível">
+                  <MetricColumnChart
+                    items={metrics.presentationsByLevel.map((l) => ({
+                      label: `Nível ${l.level}`,
+                      count: l.count,
                     }))}
                   />
                 </ChartCard>

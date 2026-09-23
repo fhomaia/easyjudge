@@ -1729,6 +1729,11 @@ export interface EventMetricsFormatBar {
   count: number;
 }
 
+export interface EventMetricsLevelBar {
+  level: number;
+  count: number;
+}
+
 export interface EventMetricsResponse {
   categoriesCount: number;
   teamsCount: number;
@@ -1737,9 +1742,9 @@ export interface EventMetricsResponse {
   judgesCount: number;
   athletesCount: number;
   spectatorsCount: number;
-  teamsByProgram: EventMetricsBar[];
-  presentationsByCategory: EventMetricsBar[];
-  categoriesByFormat: EventMetricsFormatBar[];
+  categoriesByProgram: EventMetricsBar[];
+  presentationsByModality: EventMetricsFormatBar[];
+  presentationsByLevel: EventMetricsLevelBar[];
   programsByState: EventMetricsBar[];
 }
 
