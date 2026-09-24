@@ -1780,6 +1780,15 @@ Dois pedidos independentes do usuário, mesma sessão.
   barra de endereço visível; se ela recolhe, sobra espaço embaixo do
   footer). Não reproduzido com toque simulado nem no código antigo;
   confirmado pelo usuário no celular que não acontece mais.
+- **Rodapé do evento ao vivo**: aba atual ganhou halo amarelo da marca
+  desfocado atrás do ícone (`ActiveTabGlow` em `EventLiveShared.tsx`,
+  `bg-brand-yellow/60 blur-[6px]`; com `blur-md` num círculo de 40px a
+  cor se espalhava tanto que sumia no fundo branco).
+- **Súmulas do jurado (mobile)**: as 4 métricas (`MetricTile`) saíram do
+  `grid-cols-4` espremido pra um carrossel com rolagem própria (cards de
+  `w-36`, mesmo padrão de `EventStatCards`). Na lista de súmulas
+  (`AdminNotesOverviewList`) os selos (Contestação/Desistência) foram
+  pra baixo do nome da equipe, que ficava cortado em "Hur…".
 - **Como depurar no celular real (Android) sem cabo**: `adb pair
   IP:PORTA CODIGO` (tela "Parear dispositivo" da Depuração por Wi-Fi —
   o `!` do Claude Code não aceita digitar o código, passar como

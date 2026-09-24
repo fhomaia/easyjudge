@@ -125,6 +125,17 @@ export function buildEventNavTabs(opts: {
 // só "Notificações" e "Histórico" antes de Histórico sair do menu do
 // evento, 2026-07-26); o mecanismo fica pronto pra quando a barra
 // crescer de novo.
+// Halo amarelo (cor da marca) desfocado atrás do ícone da aba atual do
+// rodapé — só a cor do texto não destacava o suficiente no celular.
+function ActiveTabGlow() {
+  return (
+    <span
+      aria-hidden
+      className="absolute top-1/2 left-1/2 -z-10 size-9 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-yellow/60 blur-[6px]"
+    />
+  );
+}
+
 export function EventLiveBottomNav({
   tabs,
   overflowKeys = [],
@@ -158,7 +169,8 @@ export function EventLiveBottomNav({
             current ? "text-primary" : onClick ? "text-foreground/70" : "text-muted-foreground/60",
           )}
         >
-          <span className="relative">
+          <span className="relative isolate">
+            {current && <ActiveTabGlow />}
             <Icon className="size-5" />
             {badge ? (
               <span className="absolute -top-1 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
@@ -183,7 +195,8 @@ export function EventLiveBottomNav({
               />
             }
           >
-            <span className="relative">
+            <span className="relative isolate">
+              {overflowCurrent && <ActiveTabGlow />}
               <MoreHorizontal className="size-5" />
               {overflowBadge ? (
                 <span className="absolute -top-1 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] font-semibold text-white">
@@ -286,6 +299,7 @@ export function MetricTile({
   sub,
   lines,
   onExpand,
+  className,
 }: {
   icon: typeof CalendarDays;
   iconClassName: string;
@@ -300,6 +314,7 @@ export function MetricTile({
   // padrão de JudgesSummaryDialog/ProgramsSummaryDialog, "clicar pra
   // ver todos"). Sem efeito se `lines` couber sem truncar.
   onExpand?: () => void;
+  className?: string;
 }) {
   const expandable = !!onExpand && !!lines && lines.length > 3;
   return (
@@ -320,6 +335,7 @@ export function MetricTile({
       className={cn(
         "rounded-xl border border-border bg-card p-3",
         expandable && "cursor-pointer transition-colors hover:bg-muted/50",
+        className,
       )}
     >
       <div className="flex items-center gap-1.5">

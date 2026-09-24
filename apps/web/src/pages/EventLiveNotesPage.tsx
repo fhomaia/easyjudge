@@ -185,8 +185,12 @@ export function EventLiveNotesPage() {
   // evita duplicar todo este JSX nos dois lugares.
   const judgeQueueContent = (
     <>
-      <div className="grid grid-cols-4 gap-2 px-4 pt-4">
+      {/* Rolagem horizontal própria: em 4 colunas os cards ficavam
+          espremidos no celular e os textos sumiam em "…". Mesmo padrão
+          do carrossel de EventStatCards (scroll-px-4 pelo mesmo motivo). */}
+      <div className="scrollbar-none flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pt-4 scroll-px-4">
         <MetricTile
+          className="w-36 shrink-0 snap-start"
           icon={Clock}
           iconClassName="bg-violet-500/10 text-violet-600"
           label="Horário"
@@ -194,6 +198,7 @@ export function EventLiveNotesPage() {
           sub={formatDate(isoToday)}
         />
         <MetricTile
+          className="w-36 shrink-0 snap-start"
           icon={CalendarDays}
           iconClassName="bg-blue-500/10 text-blue-600"
           label="Apresentações"
@@ -201,6 +206,7 @@ export function EventLiveNotesPage() {
           sub="Concluídas"
         />
         <MetricTile
+          className="w-36 shrink-0 snap-start"
           icon={Scale}
           iconClassName="bg-emerald-500/10 text-emerald-600"
           label="Funções"
@@ -208,6 +214,7 @@ export function EventLiveNotesPage() {
           onExpand={() => setFunctionsDialogOpen(true)}
         />
         <MetricTile
+          className="w-36 shrink-0 snap-start"
           icon={Percent}
           iconClassName="bg-amber-500/10 text-amber-600"
           label="Progresso"
