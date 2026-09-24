@@ -1924,6 +1924,37 @@ qualquer evento, unidade = categoria em um dia.
   uso, apresentação com nota). "Dados do evento" continua despublicando
   ao editar publicado, mas só o popup da Home chama essa rota.
 
+## Avaliações do evento e da plataforma (2026-09-24)
+
+Pedido do usuário: feedback separado do evento e da plataforma, pra um
+não contaminar o outro. Só nota (1 a 5 estrelas) e comentário opcional.
+
+- **Backend**: módulo `feedback` (tabelas próprias, migration
+  `CreateFeedbacks`, só cria tabelas). `EventFeedback` (`event_feedbacks`,
+  único por `alias_id`+`user_id`, editável; `PUT/GET
+  /events/:id/feedback/me` pra qualquer papel do evento, a qualquer
+  momento depois de publicado; quem tem papel admin/assessor NÃO avalia, mesmo
+  acumulando jurado — pego no teste). `GET /events/:id/feedback`
+  (admin/assessor) lista com nome, email e papéis de quem avaliou
+  (decisão do usuário: o produtor vê quem avaliou). `PlatformFeedback`
+  (`platform_feedbacks`, cada envio uma linha, guarda tipo da conta e
+  tela de origem); `POST /feedback/platform` qualquer logado; `GET` só o
+  dono da plataforma (`IMPERSONATOR_EMAIL`, mesma exceção do "ver
+  como"), senão 403.
+- **Frontend**: `FeedbackDialog` genérico (estrelas `StarRating` +
+  comentário) usado pelos dois. "Avaliar a Cheer Cup" = ícone no rodapé
+  do `AppSidebar` e do `MobileNavSheet` (`PlatformFeedbackDialog`, manda
+  o path atual). Avaliação do evento: popup único `EventFeedbackHost`
+  (montado no App, aberto por `useEventFeedbackStore.open(event)`;
+  `canRateEvent` = publicado em diante e sem papel admin/assessor), com
+  entrada no menu do evento ("Avaliar evento" abaixo de Notificações,
+  `sidebarOnly` = fica fora da barra inferior mobile) e coração ao lado
+  do sininho no cabeçalho mobile do Início e de Súmulas
+  (`EventFeedbackHeaderButton`). Produtor vê as avaliações na
+  tela Métricas do evento (`FeedbackOverview`: média, distribuição,
+  lista). Dono da plataforma: ícone de caixa de entrada no rodapé do
+  menu → `/admin/feedback` (`PlatformFeedbackPage`).
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
