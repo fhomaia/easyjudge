@@ -1612,6 +1612,8 @@ export interface ReleaseDay {
 // — por decisão do usuário, esta view não expõe jurado por jurado.
 export interface PresentationDetailCriterion extends ScoringCriterionView {
   value: number | null;
+  // Subgrupos entre o grupo raiz e o critério (vazio = direto no grupo).
+  subgroupPath: string[];
 }
 
 export interface PresentationDetailGroup {

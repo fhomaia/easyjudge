@@ -226,6 +226,10 @@ export interface AdminOverviewEntryView {
 // usuário, esta view não expõe jurado por jurado, só o valor final.
 export interface PresentationDetailCriterionView extends ScoringCriterionView {
   value: number | null;
+  // Subgrupos entre o grupo raiz e o critério, de cima pra baixo (vazio
+  // quando o critério fica direto no grupo). A súmula mostra um
+  // subtítulo quando muda, pra seguir a árvore do template.
+  subgroupPath: string[];
 }
 
 export interface PresentationDetailGroupView {
@@ -352,6 +356,35 @@ export interface ResultsDayView {
 
 export interface EventResultsResponse {
   days: ResultsDayView[];
+}
+
+// Critérios na ordem da árvore do sistema de pontuação (pré-ordem: cada
+// grupo seguido dos seus filhos, cada nível pelo `order` entre irmãos).
+// `order` é a posição DENTRO do mesmo pai — ordenar a lista inteira por
+// ele misturava os níveis e os grupos saíam fora da ordem do template
+// (ex. Jump antes de Stunt), 2026-09-24.
+function sortCriteriaByTree(criteria: ScoringCriterion[]): ScoringCriterion[] {
+  const childrenOf = new Map<string | null, ScoringCriterion[]>();
+  for (const c of criteria) {
+    const key = c.parentId ?? null;
+    childrenOf.set(key, [...(childrenOf.get(key) ?? []), c]);
+  }
+  for (const list of childrenOf.values())
+    list.sort((a, b) => a.order - b.order);
+  const ordered: ScoringCriterion[] = [];
+  const visit = (parentId: string | null) => {
+    for (const child of childrenOf.get(parentId) ?? []) {
+      ordered.push(child);
+      visit(child.id);
+    }
+  };
+  visit(null);
+  // Critério com pai ausente não some: vai pro fim.
+  if (ordered.length < criteria.length) {
+    const seen = new Set(ordered.map((c) => c.id));
+    ordered.push(...criteria.filter((c) => !seen.has(c.id)));
+  }
+  return ordered;
 }
 
 type PresentationResult = {
@@ -2348,33 +2381,19 @@ export class ScoringService {
     const { entry, category, team, resource, allCriteria } =
       await this.loadPresentationContext(eventId, scheduleEntryId);
 
-    const [
-      releaseMap,
-      assignmentsState,
-      specialRoles,
-      allJudges,
-      events,
-      deductionRules,
-    ] = await Promise.all([
-      this.releasesService.getReleaseMap(eventId),
-      this.judgingService.getAssignments(eventId, category.scoringTemplateId!),
-      this.judgingService.getSpecialRoles(eventId, entry.resourceId),
-      this.judgesService.findAllForEvent(eventId),
-      this.scoreEventsRepo.find({
-        where: { scheduleEntryId: entry.id },
-        order: { clientCreatedAt: 'ASC' },
-      }),
-      this.getDeductionRulesForTemplate(category.scoringTemplateId!),
-    ]);
+    const [releaseMap, specialRoles, allJudges, events, deductionRules] =
+      await Promise.all([
+        this.releasesService.getReleaseMap(eventId),
+        this.judgingService.getSpecialRoles(eventId, entry.resourceId),
+        this.judgesService.findAllForEvent(eventId),
+        this.scoreEventsRepo.find({
+          where: { scheduleEntryId: entry.id },
+          order: { clientCreatedAt: 'ASC' },
+        }),
+        this.getDeductionRulesForTemplate(category.scoringTemplateId!),
+      ]);
 
     const judgeNameById = new Map(allJudges.map((j) => [j.id, j.name]));
-
-    const assignedLeafIds = new Set<string>();
-    for (const assignment of assignmentsState.criterionAssignments) {
-      if (assignment.resourceId !== entry.resourceId) continue;
-      if (assignment.judgeIds.length === 0) continue;
-      assignedLeafIds.add(assignment.criterionId);
-    }
 
     const scoreByCriterion = this.computeAverageScoreByCriterion(events);
     const deductionAdds = new Map<string, ScoreEvent>();
@@ -2400,8 +2419,9 @@ export class ScoringService {
     const byId = new Map(allCriteria.map((c) => [c.id, c]));
     const groups = new Map<string, PresentationDetailGroupView>();
     for (const criterion of allCriteria) {
+      // Árvore inteira (pedido do usuário): todo critério do template
+      // aparece, inclusive sem jurado escalado (nota "—").
       if (criterion.type !== ScoringCriterionType.SCORE_ITEM) continue;
-      if (!assignedLeafIds.has(criterion.id)) continue;
 
       let root = criterion;
       while (root.parentId) {
@@ -2417,10 +2437,12 @@ export class ScoringService {
       }
 
       const subgroupDescriptions: { name: string; description: string }[] = [];
+      const subgroupPath: string[] = [];
       let ancestor = criterion.parentId
         ? byId.get(criterion.parentId)
         : undefined;
       while (ancestor && ancestor.id !== root.id) {
+        subgroupPath.unshift(ancestor.name);
         if (ancestor.description) {
           subgroupDescriptions.push({
             name: ancestor.name,
@@ -2446,10 +2468,8 @@ export class ScoringService {
         bestScore: null,
         teamScores: [],
         value: scoreByCriterion.get(criterion.id) ?? null,
+        subgroupPath,
       });
-    }
-    for (const group of groups.values()) {
-      group.criteria.sort((a, b) => a.order - b.order);
     }
 
     const deductionValueByType = new Map(
@@ -2708,10 +2728,11 @@ export class ScoringService {
       );
     }
 
-    const allCriteria =
+    const allCriteria = sortCriteriaByTree(
       await this.scoringCriteriaService.findAllForTemplateUnchecked(
         category.scoringTemplateId,
-      );
+      ),
+    );
 
     return { entry, category, team, resource, allCriteria };
   }
@@ -2727,10 +2748,16 @@ export class ScoringService {
   ): ScoringGroupView[] {
     const byId = new Map(allCriteria.map((c) => [c.id, c]));
     const groups = new Map<string, ScoringGroupView>();
+    const assigned = new Set(assignedLeafIds);
 
-    for (const leafId of assignedLeafIds) {
-      const leaf = byId.get(leafId);
-      if (!leaf || leaf.type !== ScoringCriterionType.SCORE_ITEM) continue;
+    // Na ordem da árvore (allCriteria já vem ordenado, ver
+    // loadPresentationContext), não na ordem das atribuições.
+    for (const leaf of allCriteria) {
+      if (
+        !assigned.has(leaf.id) ||
+        leaf.type !== ScoringCriterionType.SCORE_ITEM
+      )
+        continue;
 
       let root = leaf;
       while (root.parentId) {
@@ -2781,10 +2808,8 @@ export class ScoringService {
       });
     }
 
-    for (const group of groups.values()) {
-      group.criteria.sort((a, b) => a.order - b.order);
-    }
-
+    // Sem reordenar por `order` aqui: `order` é a posição entre irmãos e
+    // misturaria os subgrupos; a lista já vem na ordem da árvore.
     return Array.from(groups.values());
   }
 }

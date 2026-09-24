@@ -1,10 +1,13 @@
 import { AlertTriangle, Scale } from "lucide-react";
+import { CurrentBandBadge } from "@/components/scoring/CurrentBandBadge";
+import { formatCriterionScore } from "@/lib/formatNumber";
+import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWithSubgroups";
 import { formatElapsed } from "@/lib/deductionIcons";
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
 import { HitZeroCelebration } from "@/components/scoring/HitZeroCelebration";
 import { sumMaxScores } from "@/lib/scoringSummary";
 import { isPresentationHitZero } from "@/lib/hitZero";
-import type { PresentationDetail } from "@/api/client";
+import type { PresentationDetail, PresentationDetailCriterion } from "@/api/client";
 
 // Visão somente-leitura de UMA apresentação — todos os grupos do
 // sistema de pontuação + legalidade JUNTOS. Quando um critério tem mais
@@ -26,6 +29,13 @@ import type { PresentationDetail } from "@/api/client";
 interface PresentationNotesDetailProps {
   detail: PresentationDetail;
   celebrateHitZero?: boolean;
+}
+
+// Faixa em que a nota do critério caiu (mesma regra da tela do jurado,
+// findMatchingBand). Nada quando o critério não usa faixas ou está sem nota.
+function CriterionBand({ criterion }: { criterion: PresentationDetailCriterion }) {
+  if (!criterion.useScoreBands || !criterion.scoreBands?.length || criterion.value === null) return null;
+  return <CurrentBandBadge bands={criterion.scoreBands} score={criterion.value} />;
 }
 
 export function PresentationNotesDetail({
@@ -80,23 +90,50 @@ export function PresentationNotesDetail({
         variant="desktop"
       />
 
-      {detail.groups.map((group) => (
+      {detail.groups.map((group) =>
+        isStandaloneCriterion(group) ? (
+          // Critério solto no primeiro nível da árvore (sem grupo): uma
+          // linha só, sem repetir o nome como título e como item.
+          <div key={group.id} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold tracking-wide text-foreground">{group.name}</p>
+              <CriterionBand criterion={group.criteria[0]} />
+            </div>
+            <span className="w-16 shrink-0 rounded-lg bg-muted py-1.5 text-center text-base font-bold tabular-nums text-foreground">
+              {formatCriterionScore(group.criteria[0].value)}
+            </span>
+          </div>
+        ) : (
         <div key={group.id} className="rounded-2xl border border-border bg-card p-4">
           <p className="text-sm font-bold tracking-wide text-foreground">{group.name}</p>
           <div className="mt-2 divide-y divide-border">
-            {group.criteria.map((criterion) => (
-              <div key={criterion.id} className="flex items-center gap-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-foreground">{criterion.name}</p>
+            {criteriaWithSubgroups(group.criteria).map((row, i) =>
+              row.kind === "subgroup" ? (
+                <p
+                  key={`sub-${i}`}
+                  style={{ paddingLeft: `${row.depth * 12}px` }}
+                  className="pt-3 pb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                  {row.label}
+                </p>
+              ) : (
+                <div key={row.criterion.id} className="flex items-center gap-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div style={{ paddingLeft: `${row.criterion.subgroupPath.length * 12}px` }}>
+                      <p className="truncate text-sm text-foreground">{row.criterion.name}</p>
+                      <CriterionBand criterion={row.criterion} />
+                    </div>
+                  </div>
+                  <span className="w-16 shrink-0 rounded-lg bg-muted py-1.5 text-center text-base font-bold tabular-nums text-foreground">
+                    {formatCriterionScore(row.criterion.value)}
+                  </span>
                 </div>
-                <span className="w-16 shrink-0 rounded-lg bg-muted py-1.5 text-center text-base font-bold tabular-nums text-foreground">
-                  {criterion.value !== null ? criterion.value.toFixed(1) : "—"}
-                </span>
-              </div>
-            ))}
+              ),
+            )}
           </div>
         </div>
-      ))}
+        ),
+      )}
 
       {detail.legality && (
         <div className="rounded-2xl border border-red-300/50 bg-red-500/5 p-4">

@@ -1,11 +1,13 @@
 import { jsPDF } from "jspdf";
+import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWithSubgroups";
 import autoTable from "jspdf-autotable";
 import JSZip from "jszip";
 import { formatElapsed } from "@/lib/deductionIcons";
-import { formatPercent, formatPoints } from "@/lib/formatNumber";
+import { formatCriterionScore, formatPercent, formatPoints } from "@/lib/formatNumber";
 import { sumMaxScores } from "@/lib/scoringSummary";
 import { isPresentationHitZero } from "@/lib/hitZero";
-import type { PresentationDetail } from "@/api/client";
+import type { PresentationDetail, PresentationDetailCriterion } from "@/api/client";
+import { findMatchingBand } from "@/lib/scoreBands";
 
 // Súmula PREENCHIDA de uma apresentação (admin/assessor) — mesmo
 // conteúdo de PresentationNotesDetail.tsx (resumo, notas por critério
@@ -22,6 +24,20 @@ import type { PresentationDetail } from "@/api/client";
 // (ver --soft-primary em index.css), menos espaço em branco, texto
 // maior. autoTable cuida da paginação das tabelas de grupo/legalidade
 // sozinho (repete o cabeçalho se estourar a página).
+
+// Faixa de pontuação em que a nota do critério caiu (null quando o
+// critério não usa faixas ou está sem nota).
+function criterionBand(criterion: PresentationDetailCriterion) {
+  if (!criterion.useScoreBands || !criterion.scoreBands?.length || criterion.value === null) return null;
+  return findMatchingBand(criterion.scoreBands, criterion.value);
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace("#", "");
+  const full = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
+  const n = parseInt(full, 16);
+  return Number.isNaN(n) ? INK : [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
 export function slugify(name: string): string {
   return (
@@ -224,16 +240,78 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
   // --- Um grupo por tabela — cabeçalho colorido com o nome do grupo
   // (colSpan 2, sem 2ª coluna própria), corpo com critério + nota. ---
   for (const group of detail.groups) {
+    // Critério solto no primeiro nível da árvore: só a faixa com nome e
+    // nota, sem repetir o nome numa linha abaixo. A faixa de pontuação
+    // (quando houver) vai em branco, legível sobre o azul.
+    if (isStandaloneCriterion(group)) {
+      const criterion = group.criteria[0];
+      const band = criterionBand(criterion);
+      autoTable(doc, {
+        startY: cursorY,
+        head: [
+          [
+            group.name.toUpperCase(),
+            ...(band ? [{ content: band.name, styles: { fontStyle: "normal" as const, fontSize: 9.5 } }] : []),
+            { content: formatCriterionScore(criterion.value), styles: { halign: "right" } },
+          ],
+        ],
+        body: [],
+        theme: "grid",
+        styles: { fontSize: 10.5, cellPadding: 8, textColor: INK, lineColor: [225, 229, 234] },
+        headStyles: { fillColor: BRAND, textColor: 255, fontStyle: "bold", fontSize: 11 },
+        columnStyles: band ? { 1: { cellWidth: 130 }, 2: { cellWidth: 90 } } : { 1: { cellWidth: 90 } },
+        margin: { left: MARGIN, right: MARGIN },
+        pageBreak: "avoid",
+      });
+      cursorY = getLastAutoTableFinalY(doc) + 20;
+      continue;
+    }
+    // Coluna "Faixa" só nos grupos em que algum critério usa faixas de
+    // pontuação; o nome sai na cor da faixa (mesma regra da tela do
+    // jurado, findMatchingBand).
+    const hasBands = group.criteria.some((c) => c.useScoreBands && c.scoreBands?.length);
+    const cols = hasBands ? 3 : 2;
     autoTable(doc, {
       startY: cursorY,
-      head: [[{ content: group.name.toUpperCase(), colSpan: 2 }]],
-      body: group.criteria.map((c) => [c.name, c.value !== null ? c.value.toFixed(1) : "—"]),
+      head: [[{ content: group.name.toUpperCase(), colSpan: cols }]],
+      // Subgrupos da árvore viram uma linha de subtítulo (ocupando a
+      // largura toda) antes dos critérios deles; critério recuado
+      // conforme o nível.
+      body: criteriaWithSubgroups(group.criteria).map((row) => {
+        if (row.kind === "subgroup") {
+          return [
+            {
+              content: `${"   ".repeat(row.depth)}${row.label}`,
+              colSpan: cols,
+              styles: { fontStyle: "bold" as const, fontSize: 9.5, textColor: MUTED, fillColor: [243, 245, 248] as [number, number, number] },
+            },
+          ];
+        }
+        const band = criterionBand(row.criterion);
+        return [
+          `${"   ".repeat(row.criterion.subgroupPath.length)}${row.criterion.name}`,
+          ...(hasBands
+            ? [
+                {
+                  content: band?.name ?? "",
+                  styles: { fontStyle: "bold" as const, fontSize: 9.5, textColor: band ? hexToRgb(band.color) : INK },
+                },
+              ]
+            : []),
+          formatCriterionScore(row.criterion.value),
+        ];
+      }),
       theme: "grid",
       styles: { fontSize: 10.5, cellPadding: 8, textColor: INK, lineColor: [225, 229, 234] },
       headStyles: { fillColor: BRAND, textColor: 255, fontStyle: "bold", fontSize: 11 },
-      columnStyles: { 1: { cellWidth: 90, halign: "right", fontStyle: "bold" } },
+      columnStyles: hasBands
+        ? { 1: { cellWidth: 130 }, 2: { cellWidth: 90, halign: "right", fontStyle: "bold" } }
+        : { 1: { cellWidth: 90, halign: "right", fontStyle: "bold" } },
       alternateRowStyles: { fillColor: STRIPE },
       margin: { left: MARGIN, right: MARGIN },
+      // Grupo inteiro na mesma página quando cabe (senão começa na
+      // próxima), pra subgrupo não ficar separado dos itens dele.
+      pageBreak: "avoid",
     });
     cursorY = getLastAutoTableFinalY(doc) + 20;
   }
