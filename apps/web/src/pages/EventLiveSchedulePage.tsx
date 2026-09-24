@@ -619,7 +619,7 @@ export function EventLiveSchedulePage() {
           </div>
         </div>
 
-        <EventLiveBottomNav tabs={eventNavTabs} className="sm:hidden" />
+        <EventLiveBottomNav tabs={eventNavTabs} className="sticky bottom-0 z-20 sm:hidden" />
       </main>
 
       <WithdrawPresentationDialog
