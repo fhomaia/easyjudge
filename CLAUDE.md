@@ -1801,6 +1801,17 @@ Dois pedidos independentes do usuário, mesma sessão.
   senha) ganharam `console.error` no ramo não-ApiError (bug de tela).
   Obs.: servidor fora do ar (502 do Render sem CORS) também cai nessa
   mensagem — o navegador não distingue de rede ruim.
+- **Resultados e lista de súmulas lentos (N+1 sequencial)**:
+  `getEventResults` fazia, por apresentação, uma consulta de súmulas
+  enviadas e outra de notas, em série (~150 consultas num evento de 60
+  apresentações). Agora reaproveita `findCompletedEntries` (em lote) e
+  `computePresentationResults` (notas de todas as apresentações numa
+  consulta; `computePresentationResult` virou um wrapper dele, a conta
+  ficou em `summarizePresentationScore`); `getAdminOverview` também.
+  Consultas fixas (~33) independente do tamanho. Validado comparando a
+  saída JSON das duas funções antes/depois nos 3 eventos locais
+  (idêntica). Render e Neon estão ambos em Oregon (us-west, confirmado
+  2026-09-24).
 - **Como depurar no celular real (Android) sem cabo**: `adb pair
   IP:PORTA CODIGO` (tela "Parear dispositivo" da Depuração por Wi-Fi —
   o `!` do Claude Code não aceita digitar o código, passar como

@@ -345,6 +345,14 @@ export interface EventResultsResponse {
   results: EventResultsView | null;
 }
 
+type PresentationResult = {
+  totalScore: number;
+  deductionsTotal: number;
+  finalResult: number;
+  maxScore: number;
+  percentage: number;
+};
+
 @Injectable()
 export class ScoringService {
   constructor(
@@ -795,20 +803,22 @@ export class ScoringService {
     const days = await this.scheduleService.getDays(eventId);
     const deductionsCache = new Map<string, DeductionRuleView[]>();
 
+    const completed = await this.findCompletedEntries(eventId, days);
+    const scoreResults = await this.computePresentationResults(
+      completed
+        .filter(({ entry }) => !entry.withdrawnAt)
+        .map(({ entry, category }) => ({
+          scheduleEntryId: entry.id,
+          category,
+        })),
+      deductionsCache,
+    );
+
     const results: AdminOverviewEntryView[] = [];
-    for (const {
-      day,
-      resource,
-      entry,
-      category,
-    } of await this.findCompletedEntries(eventId, days)) {
+    for (const { day, resource, entry } of completed) {
       const { finalResult, percentage } = entry.withdrawnAt
         ? { finalResult: 0, percentage: 0 }
-        : await this.computePresentationResult(
-            entry.id,
-            category,
-            deductionsCache,
-          );
+        : scoreResults.get(entry.id)!;
 
       results.push({
         scheduleEntryId: entry.id,
@@ -1001,24 +1011,62 @@ export class ScoringService {
     scheduleEntryId: string,
     category: Category,
     deductionsCache: Map<string, DeductionRuleView[]>,
-  ): Promise<{
-    totalScore: number;
-    deductionsTotal: number;
-    finalResult: number;
-    maxScore: number;
-    percentage: number;
-  }> {
-    const deductionRules = await this.getDeductionRulesForTemplate(
-      category.scoringTemplateId!,
+  ): Promise<PresentationResult> {
+    const results = await this.computePresentationResults(
+      [{ scheduleEntryId, category }],
       deductionsCache,
     );
+    return results.get(scheduleEntryId)!;
+  }
+
+  // Mesma conta de computePresentationResult, pra várias apresentações
+  // de uma vez: as notas de todas vêm numa consulta só. Antes a tela de
+  // Resultados e a lista de súmulas faziam uma consulta por
+  // apresentação, uma depois da outra, e em produção cada uma paga a
+  // ida e volta até o Neon (lentidão relatada em 2026-09-24).
+  private async computePresentationResults(
+    items: Array<{ scheduleEntryId: string; category: Category }>,
+    deductionsCache: Map<string, DeductionRuleView[]>,
+  ): Promise<Map<string, PresentationResult>> {
+    const results = new Map<string, PresentationResult>();
+    if (items.length === 0) return results;
+
+    const allScoreEvents = await this.scoreEventsRepo.find({
+      where: { scheduleEntryId: In(items.map((i) => i.scheduleEntryId)) },
+      order: { clientCreatedAt: 'ASC' },
+    });
+    const scoreEventsByEntry = new Map<string, ScoreEvent[]>();
+    for (const event of allScoreEvents) {
+      const list = scoreEventsByEntry.get(event.scheduleEntryId) ?? [];
+      list.push(event);
+      scoreEventsByEntry.set(event.scheduleEntryId, list);
+    }
+
+    for (const { scheduleEntryId, category } of items) {
+      const deductionRules = await this.getDeductionRulesForTemplate(
+        category.scoringTemplateId!,
+        deductionsCache,
+      );
+      results.set(
+        scheduleEntryId,
+        this.summarizePresentationScore(
+          scoreEventsByEntry.get(scheduleEntryId) ?? [],
+          category,
+          deductionRules,
+        ),
+      );
+    }
+    return results;
+  }
+
+  private summarizePresentationScore(
+    scoreEvents: ScoreEvent[],
+    category: Category,
+    deductionRules: DeductionRuleView[],
+  ): PresentationResult {
     const deductionValueByType = new Map(
       deductionRules.map((r) => [r.type, r.value]),
     );
-    const scoreEvents = await this.scoreEventsRepo.find({
-      where: { scheduleEntryId },
-      order: { clientCreatedAt: 'ASC' },
-    });
     const scoreByCriterion = this.computeAverageScoreByCriterion(scoreEvents);
     const deductionAdds = new Map<string, ScoreEvent>();
     const undoneDeductionIds = new Set<string>();
@@ -1052,112 +1100,80 @@ export class ScoringService {
   // programa) e os 3 destaques do topo da página.
   async getEventResults(eventId: string): Promise<EventResultsView> {
     const event = await this.eventsService.findEventOrThrow(eventId);
-    const days = await this.scheduleService.getDays(eventId);
     const deductionsCache = new Map<string, DeductionRuleView[]>();
 
-    const teams = await this.teamsRepo
-      .createQueryBuilder('team')
-      .innerJoin('team.program', 'program', 'program.aliasId = :aliasId', {
-        aliasId: event.aliasId,
-      })
-      .getMany();
+    const [days, teams, programs] = await Promise.all([
+      this.scheduleService.getDays(eventId),
+      this.teamsRepo
+        .createQueryBuilder('team')
+        .innerJoin('team.program', 'program', 'program.aliasId = :aliasId', {
+          aliasId: event.aliasId,
+        })
+        .getMany(),
+      this.programsService.findAllForEvent(eventId),
+    ]);
     const teamsById = new Map(teams.map((t) => [t.id, t]));
-
-    const programs = await this.programsService.findAllForEvent(eventId);
     const programNameById = new Map(programs.map((p) => [p.id, p.name]));
 
-    const templateCache = new Map<string, CriterionAssignmentsState>();
-    const categoryCache = new Map<string, Category | null>();
-    const specialRolesCache = new Map<
-      string,
-      Awaited<ReturnType<JudgingService['getSpecialRoles']>>
-    >();
-
-    const presentations: ResultsPresentationView[] = [];
-    const categoriesInOrder: Category[] = [];
-
+    // Ordem das categorias = primeira aparição no cronograma (mesma de
+    // antes da busca em lote).
+    const categoryOrder = new Map<string, number>();
     for (const day of days) {
       for (const resource of day.resources) {
         for (const entry of resource.entries) {
           if (
-            entry.type !== ScheduleEntryType.PRESENTATION ||
-            !entry.categoryId ||
-            !entry.teamId
+            entry.type === ScheduleEntryType.PRESENTATION &&
+            entry.categoryId &&
+            entry.teamId &&
+            !categoryOrder.has(entry.categoryId)
           ) {
-            continue;
+            categoryOrder.set(entry.categoryId, categoryOrder.size);
           }
-
-          let category = categoryCache.get(entry.categoryId);
-          if (category === undefined) {
-            category = await this.categoriesRepo.findOne({
-              where: { id: entry.categoryId },
-              relations: ['scoringTemplate'],
-            });
-            categoryCache.set(entry.categoryId, category);
-            if (category) categoriesInOrder.push(category);
-          }
-          if (!category?.scoringTemplateId) continue;
-
-          const team = teamsById.get(entry.teamId);
-          if (!team) continue;
-
-          let assignmentsState = templateCache.get(category.scoringTemplateId);
-          if (!assignmentsState) {
-            assignmentsState = await this.judgingService.getAssignments(
-              eventId,
-              category.scoringTemplateId,
-            );
-            templateCache.set(category.scoringTemplateId, assignmentsState);
-          }
-
-          let specialRoles = specialRolesCache.get(entry.resourceId);
-          if (!specialRoles) {
-            specialRoles = await this.judgingService.getSpecialRoles(
-              eventId,
-              entry.resourceId,
-            );
-            specialRolesCache.set(entry.resourceId, specialRoles);
-          }
-
-          const complete = await this.isPresentationFullyScored(
-            entry.id,
-            entry.resourceId,
-            assignmentsState,
-            specialRoles,
-          );
-          if (!complete) continue;
-
-          const {
-            totalScore,
-            deductionsTotal,
-            finalResult,
-            maxScore,
-            percentage,
-          } = await this.computePresentationResult(
-            entry.id,
-            category,
-            deductionsCache,
-          );
-
-          presentations.push({
-            scheduleEntryId: entry.id,
-            teamId: team.id,
-            teamName: team.name,
-            programId: team.programId,
-            programName: programNameById.get(team.programId) ?? 'Programa',
-            categoryId: category.id,
-            categoryName: category.name,
-            categoryFormat: category.categoryFormat,
-            categoryCustomFormatLabel: category.customFormatLabel ?? null,
-            totalScore,
-            deductionsTotal,
-            finalResult,
-            maxScore,
-            percentage,
-          });
         }
       }
     }
+
+    // Desistência nunca tem nota (só dá pra desistir antes do primeiro
+    // ScoreEvent), então fica fora do resultado.
+    const completed = (await this.findCompletedEntries(eventId, days)).filter(
+      ({ entry }) => !entry.withdrawnAt && teamsById.has(entry.teamId!),
+    );
+    const scoreResults = await this.computePresentationResults(
+      completed.map(({ entry, category }) => ({
+        scheduleEntryId: entry.id,
+        category,
+      })),
+      deductionsCache,
+    );
+
+    const presentations: ResultsPresentationView[] = [];
+    const categoryById = new Map<string, Category>();
+    for (const { entry, category } of completed) {
+      const team = teamsById.get(entry.teamId!)!;
+      categoryById.set(category.id, category);
+      const { totalScore, deductionsTotal, finalResult, maxScore, percentage } =
+        scoreResults.get(entry.id)!;
+
+      presentations.push({
+        scheduleEntryId: entry.id,
+        teamId: team.id,
+        teamName: team.name,
+        programId: team.programId,
+        programName: programNameById.get(team.programId) ?? 'Programa',
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryFormat: category.categoryFormat,
+        categoryCustomFormatLabel: category.customFormatLabel ?? null,
+        totalScore,
+        deductionsTotal,
+        finalResult,
+        maxScore,
+        percentage,
+      });
+    }
+    const categoriesInOrder = [...categoryById.values()].sort(
+      (x, y) => categoryOrder.get(x.id)! - categoryOrder.get(y.id)!,
+    );
 
     const presentationsByCategory = new Map<
       string,
