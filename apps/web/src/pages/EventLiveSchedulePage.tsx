@@ -54,6 +54,7 @@ import {
 import { computeEventLiveSchedule } from "@/lib/eventLiveSchedule";
 import { exportScheduleToExcel, exportScheduleToPdf } from "@/lib/scheduleExport";
 import { cn } from "@/lib/utils";
+import { useExpandedIds } from "@/lib/useExpandedIds";
 import {
   eventsApi,
   notificationsApi,
@@ -88,6 +89,7 @@ export function EventLiveSchedulePage() {
   useEventLiveGuard(id, { allowSpectator: true });
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const scheduleRows = useExpandedIds();
   const [event, setEvent] = useState<Event | null>(null);
   const [days, setDays] = useState<ScheduleDay[] | null>(null);
   const [teams, setTeams] = useState<TeamWithProgram[] | null>(null);
@@ -532,11 +534,22 @@ export function EventLiveSchedulePage() {
                           // cronograma, só sinaliza desistência.
                           const canMove =
                             item.entry.type === "presentation" && !withdrawn && isAdminOrAssessor;
+                          const expanded = scheduleRows.isExpanded(item.entry.id);
                           return (
                             <div
                               key={item.entry.id}
+                              role="button"
+                              tabIndex={0}
+                              aria-expanded={expanded}
+                              onClick={() => scheduleRows.toggle(item.entry.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  scheduleRows.toggle(item.entry.id);
+                                }
+                              }}
                               className={cn(
-                                "flex items-center gap-3 rounded-lg px-2 py-2.5 first:pt-1 last:pb-1",
+                                "flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 first:pt-1 last:pb-1",
                                 isCurrent && "bg-violet-500/5 ring-1 ring-violet-500/30",
                                 withdrawn && "opacity-60",
                               )}
@@ -555,7 +568,12 @@ export function EventLiveSchedulePage() {
                                 <Icon className="size-3.5" />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="flex items-center gap-1.5 truncate text-sm font-medium text-foreground">
+                                <p
+                                  className={cn(
+                                    "flex items-center gap-1.5 text-sm font-medium text-foreground",
+                                    expanded ? "flex-wrap break-words" : "truncate",
+                                  )}
+                                >
                                   {display.title}
                                   {isCurrent && (
                                     <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
@@ -564,8 +582,22 @@ export function EventLiveSchedulePage() {
                                   )}
                                 </p>
                                 {display.subtitle && (
-                                  <p className="truncate text-xs text-muted-foreground">
+                                  <p
+                                    className={cn(
+                                      "text-xs text-muted-foreground",
+                                      expanded ? "break-words" : "truncate",
+                                    )}
+                                  >
                                     {display.subtitle}
+                                  </p>
+                                )}
+                                {/* No celular a pista não cabe na linha (o selo à
+                                    direita só aparece a partir de `sm`), então
+                                    vem junto com o texto completo ao abrir. */}
+                                {expanded && (
+                                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground sm:hidden">
+                                    <MapPin className="size-3" />
+                                    {item.resourceName}
                                   </p>
                                 )}
                               </div>
@@ -579,6 +611,8 @@ export function EventLiveSchedulePage() {
                                 {item.resourceName}
                               </span>
                               {(canWithdraw || canMove) && (
+                                // Menu "⋯" não abre/fecha a linha.
+                                <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger
                                     render={
@@ -606,6 +640,7 @@ export function EventLiveSchedulePage() {
                                     )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
+                                </div>
                               )}
                             </div>
                           );

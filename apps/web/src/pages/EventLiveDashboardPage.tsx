@@ -48,6 +48,7 @@ import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { buildJudgePresentationList } from "@/lib/judgeSchedule";
 import { NOTIFICATION_ICONS, formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
 import { cn } from "@/lib/utils";
+import { useExpandedIds } from "@/lib/useExpandedIds";
 import {
   ApiError,
   categoriesApi,
@@ -91,6 +92,7 @@ export function EventLiveDashboardPage() {
   useEventLiveGuard(id, { allowSpectator: true });
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const upcomingRows = useExpandedIds();
   const [event, setEvent] = useState<Event | null>(null);
   const [days, setDays] = useState<ScheduleDay[] | null>(null);
   const [judges, setJudges] = useState<Judge[] | null>(null);
@@ -600,8 +602,22 @@ export function EventLiveDashboardPage() {
                   const display = scheduleItemTitleParts(item);
                   const visual = ENTRY_VISUALS[item.entry.type];
                   const Icon = visual.icon;
+                  const expanded = upcomingRows.isExpanded(item.entry.id);
                   return (
-                    <div key={item.entry.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <div
+                      key={item.entry.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expanded}
+                      onClick={() => upcomingRows.toggle(item.entry.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          upcomingRows.toggle(item.entry.id);
+                        }
+                      }}
+                      className="flex cursor-pointer items-center gap-3 py-3 first:pt-0 last:pb-0"
+                    >
                       <div className="w-14 shrink-0">
                         <p className="text-sm font-medium text-foreground">{formatMinutes(item.start)}</p>
                         {item.dayDate !== isoToday && (
@@ -617,9 +633,23 @@ export function EventLiveDashboardPage() {
                         <Icon className="size-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">{display.title}</p>
+                        <p
+                          className={cn(
+                            "text-sm font-medium text-foreground",
+                            expanded ? "break-words" : "truncate",
+                          )}
+                        >
+                          {display.title}
+                        </p>
                         {display.subtitle && (
-                          <p className="truncate text-xs text-muted-foreground">{display.subtitle}</p>
+                          <p
+                            className={cn(
+                              "text-xs text-muted-foreground",
+                              expanded ? "break-words" : "truncate",
+                            )}
+                          >
+                            {display.subtitle}
+                          </p>
                         )}
                       </div>
                       <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
