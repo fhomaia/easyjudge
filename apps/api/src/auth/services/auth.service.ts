@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -243,11 +244,17 @@ export class AuthService {
         // Vínculo inicial informado no cadastro (ver RegisterDto.
         // programEmail) — opcional, fica pendente de confirmação do
         // programa (ver AthletesService.createOrRequestLink).
+        // Se o programa já tinha convidado o atleta, o vínculo acabou de
+        // ser ligado acima e createOrRequestLink responde 409 ("já pediu
+        // vínculo"). No cadastro isso não é erro: o vínculo pedido já
+        // existe. Antes o 409 subia depois da senha já salva, e o atleta
+        // via erro na tela de senha com a conta pronta (2026-09-24).
         if (user.programEmail) {
-          await this.athletesService.createOrRequestLink(
-            user.id,
-            user.programEmail,
-          );
+          await this.athletesService
+            .createOrRequestLink(user.id, user.programEmail)
+            .catch((err: unknown) => {
+              if (!(err instanceof ConflictException)) throw err;
+            });
         }
       }
     }
