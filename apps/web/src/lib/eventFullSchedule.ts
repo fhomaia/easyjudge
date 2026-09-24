@@ -58,8 +58,41 @@ function matchesEntry(entry: ScheduleEntry, query: string): boolean {
   return haystack.includes(query);
 }
 
+// Categorias dos chips de filtro do Cronograma ao vivo. "Eventos
+// especiais" junta abertura, premiação e os intervalos SEM
+// `linkedEntryId` (almoço, batalhas, contestação, personalizados — tudo
+// que o produtor adiciona como evento especial). "Intervalos" fica só
+// com as esperas automáticas, que são os únicos breaks ligados a uma
+// apresentação (ver lib/dropSlots.ts). Antes o filtro era pelo tipo cru
+// e esconder "Intervalos" escondia as batalhas junto (2026-09-24).
+// Os rótulos automáticos também contam como "Intervalos" mesmo sem
+// `linkedEntryId`: dado antigo e esperas que perderam o vínculo quando a
+// apresentação foi apagada (a FK é SET NULL) existem no banco.
+export type ScheduleFilterCategory = "presentation" | "warmup" | "special" | "break";
+
+// Mesmos textos gravados por ScheduleService (backend).
+const AUTOMATIC_BREAK_LABELS = new Set([
+  "Aguardando aquecimento",
+  "Aguardando disponibilidade da equipe",
+  "Intervalo entre apresentações",
+]);
+
+export function scheduleFilterCategory(entry: ScheduleEntry): ScheduleFilterCategory {
+  switch (entry.type) {
+    case "presentation":
+    case "warmup":
+      return entry.type;
+    case "break":
+      return entry.linkedEntryId || AUTOMATIC_BREAK_LABELS.has(entry.label ?? "")
+        ? "break"
+        : "special";
+    default:
+      return "special";
+  }
+}
+
 export interface FullScheduleFilters {
-  types: Set<ScheduleEntry["type"]>;
+  categories: Set<ScheduleFilterCategory>;
   teamId: string | null;
   programId: string | null;
   search: string;
@@ -76,7 +109,7 @@ export function filterFullSchedule(
 ): FullScheduleItem[] {
   const query = filters.search.trim().toLowerCase();
   return items.filter((item) => {
-    if (!filters.types.has(item.entry.type)) return false;
+    if (!filters.categories.has(scheduleFilterCategory(item.entry))) return false;
     if (filters.teamId && item.entry.teamId !== filters.teamId) return false;
     if (filters.programId) {
       const programId = item.entry.teamId ? teamProgramMap.get(item.entry.teamId) : undefined;

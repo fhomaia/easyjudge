@@ -49,6 +49,7 @@ import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import {
   computeFullSchedule,
   filterFullSchedule,
+  type ScheduleFilterCategory,
   type FullScheduleItem,
 } from "@/lib/eventFullSchedule";
 import { computeEventLiveSchedule } from "@/lib/eventLiveSchedule";
@@ -71,14 +72,21 @@ import {
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 
-const TYPE_ORDER: ScheduleEntryType[] = ["presentation", "warmup", "break", "ceremony", "award"];
+const FILTER_ORDER: ScheduleFilterCategory[] = ["presentation", "warmup", "special", "break"];
 
-const TYPE_LABELS: Record<ScheduleEntryType, string> = {
+const FILTER_LABELS: Record<ScheduleFilterCategory, string> = {
   presentation: "Apresentações",
   warmup: "Aquecimentos",
+  special: "Eventos especiais",
   break: "Intervalos",
-  ceremony: "Aberturas",
-  award: "Premiações",
+};
+
+// Ícone/cor do chip: "Eventos especiais" usa o visual de abertura.
+const FILTER_VISUALS: Record<ScheduleFilterCategory, (typeof ENTRY_VISUALS)[ScheduleEntryType]> = {
+  presentation: ENTRY_VISUALS.presentation,
+  warmup: ENTRY_VISUALS.warmup,
+  special: ENTRY_VISUALS.ceremony,
+  break: ENTRY_VISUALS.break,
 };
 
 export function EventLiveSchedulePage() {
@@ -100,11 +108,12 @@ export function EventLiveSchedulePage() {
   const [moveTarget, setMoveTarget] = useState<FullScheduleItem | null>(null);
 
   const [search, setSearch] = useState("");
-  // "Intervalos" (break) começa oculto por padrão pra todo mundo
-  // (2026-07-27, a pedido do usuário) — só admin/assessor conseguem
-  // reexibi-lo (ver botão de filtro abaixo, escondido pra quem não é).
-  const [selectedTypes, setSelectedTypes] = useState<Set<ScheduleEntryType>>(
-    new Set(TYPE_ORDER.filter((t) => t !== "break")),
+  // "Intervalos" (só as esperas automáticas) começa oculto por padrão
+  // pra todo mundo (2026-07-27, a pedido do usuário) — só admin/assessor
+  // conseguem reexibi-lo (ver botão de filtro abaixo, escondido pra quem
+  // não é). Eventos especiais (batalhas, almoço etc.) têm chip próprio.
+  const [selectedTypes, setSelectedTypes] = useState<Set<ScheduleFilterCategory>>(
+    new Set(FILTER_ORDER.filter((t) => t !== "break")),
   );
   const [teamId, setTeamId] = useState("all");
   const [programId, setProgramId] = useState("all");
@@ -243,7 +252,7 @@ export function EventLiveSchedulePage() {
       filterFullSchedule(
         fullSchedule,
         {
-          types: selectedTypes,
+          categories: selectedTypes,
           teamId: teamId === "all" ? null : teamId,
           programId: programId === "all" ? null : programId,
           search,
@@ -268,7 +277,7 @@ export function EventLiveSchedulePage() {
     navigate("/login");
   }
 
-  function toggleType(type: ScheduleEntryType) {
+  function toggleType(type: ScheduleFilterCategory) {
     setSelectedTypes((prev) => {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
@@ -446,8 +455,8 @@ export function EventLiveSchedulePage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {TYPE_ORDER.filter((type) => type !== "break" || isAdminOrAssessor).map((type) => {
-                const visual = ENTRY_VISUALS[type];
+              {FILTER_ORDER.filter((type) => type !== "break" || isAdminOrAssessor).map((type) => {
+                const visual = FILTER_VISUALS[type];
                 const Icon = visual.icon;
                 const selected = selectedTypes.has(type);
                 return (
@@ -463,7 +472,7 @@ export function EventLiveSchedulePage() {
                     )}
                   >
                     <Icon className="size-3.5" />
-                    {TYPE_LABELS[type]}
+                    {FILTER_LABELS[type]}
                   </button>
                 );
               })}
