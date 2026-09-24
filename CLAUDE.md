@@ -1763,6 +1763,35 @@ Dois pedidos independentes do usuário, mesma sessão.
     mudança, puramente lógica/determinística sobre dado já testado em
     produção).
 
+## Bugs de layout mobile: scroll horizontal e footer flutuando (2026-09-24)
+
+- **Scroll horizontal em "Meus eventos"**: a barra de filtros (os dois
+  `Select` lado a lado) não cabia em 360px e alargava a coluna da grade
+  inteira (item de grid tem `min-width: auto`). Fix: grade da página com
+  `grid-cols-[minmax(0,1fr)]`, `min-w-0` nos `SelectTrigger` (rótulo
+  num `<span className="truncate">`) e no card `EventGridItem` (nome
+  longo com `truncate` também alargava o card).
+- **Resultados**: aba "Por equipe" removida (pedido do usuário); a
+  linha de abas tem rolagem horizontal própria (`overflow-x-auto
+  scrollbar-none`, botões `shrink-0 whitespace-nowrap`, aba tocada vai
+  pro centro via `scrollIntoView`) e o conteúdo tem `overflow-x-hidden`.
+- **Footer flutuando ao abrir evento ao vivo pela Home**: todas as
+  telas trocaram `h-svh` por `h-dvh` (svh é sempre a altura COM a
+  barra de endereço visível; se ela recolhe, sobra espaço embaixo do
+  footer). Não reproduzido com toque simulado nem no código antigo;
+  confirmado pelo usuário no celular que não acontece mais.
+- **Como depurar no celular real (Android) sem cabo**: `adb pair
+  IP:PORTA CODIGO` (tela "Parear dispositivo" da Depuração por Wi-Fi —
+  o `!` do Claude Code não aceita digitar o código, passar como
+  argumento) + `adb connect IP:PORTA` (porta principal, diferente da de
+  pareamento) + `adb forward tcp:9333 localabstract:chrome_devtools_remote`.
+  `/json/list` do Chrome Android veio desatualizado (não listava a aba
+  nova) e `/json/new` dá 500: usar `Target.getTargets` pelo
+  `webSocketDebuggerUrl` de `/json/version` e `Runtime.evaluate` com
+  sessão `flatten`. Print da tela: `adb exec-out screencap -p`. Front
+  exposto com `npm run dev -- --host`. Cabo USB-C deste notebook deu
+  erro -71 com dois cabos (não investigado).
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do

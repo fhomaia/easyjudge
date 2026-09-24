@@ -57,7 +57,7 @@ export function JoinEventPage() {
 
   if (error) {
     return (
-      <div className="flex h-svh items-center justify-center bg-background p-4">
+      <div className="flex h-dvh items-center justify-center bg-background p-4">
         <div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-dashed border-border p-8 text-center">
           <AlertTriangle className="size-8 text-muted-foreground" />
           <p className="text-sm font-medium text-foreground">{error}</p>
@@ -70,7 +70,7 @@ export function JoinEventPage() {
   }
 
   return (
-    <div className="flex h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+    <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
       Entrando no evento...
     </div>
   );

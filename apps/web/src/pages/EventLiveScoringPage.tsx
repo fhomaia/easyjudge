@@ -504,7 +504,7 @@ export function EventLiveScoringPage() {
 
   return (
     <>
-    <div className="flex h-svh flex-col bg-background lg:hidden">
+    <div className="flex h-dvh flex-col bg-background lg:hidden">
       <header className="sticky top-0 z-20 border-b border-border bg-card px-4 py-3">
         <div className="flex items-center gap-3">
           <button
@@ -813,7 +813,7 @@ export function EventLiveScoringPage() {
       )}
     </AnimatePresence>
 
-    <div className="hidden h-svh lg:flex">
+    <div className="hidden h-dvh lg:flex">
       <EventLiveScoringDesktopView
         sheet={sheet}
         scores={scores}

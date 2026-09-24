@@ -24,7 +24,7 @@ import {
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 
-type ResultsTab = "ranking" | "categoria" | "modalidade" | "equipe" | "programa";
+type ResultsTab = "ranking" | "categoria" | "modalidade" | "programa";
 
 const CATEGORY_COLORS = [
   { bg: "bg-violet-500/10", text: "text-violet-600" },
@@ -214,7 +214,7 @@ export function EventLiveResultsPage() {
   });
 
   return (
-    <div className="flex h-svh bg-background">
+    <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} eventNavItems={eventNavTabs} />
 
       <main className="flex flex-1 flex-col overflow-hidden pt-14 sm:pt-0">
@@ -259,25 +259,29 @@ export function EventLiveResultsPage() {
               </p>
             </div>
           ) : results ? (
-            <div className="flex-1 overflow-y-auto">
+            <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
               <h2 className="text-xl font-bold text-foreground">Resultados</h2>
 
-              <div className="mt-4 flex items-center gap-1 border-b border-border">
+              {/* Rolagem horizontal própria: no celular as abas não cabem
+                  na largura, e sem isso a página inteira rolava de lado. */}
+              <div className="scrollbar-none mt-4 flex items-center gap-1 overflow-x-auto border-b border-border">
                 {(
                   [
                     ["ranking", "Ranking geral"],
                     ["categoria", "Por categoria"],
                     ["modalidade", "Por modalidade"],
-                    ["equipe", "Por equipe"],
                     ["programa", "Por programa"],
                   ] as const
                 ).map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setActiveTab(key)}
+                    onClick={(e) => {
+                      setActiveTab(key);
+                      e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                    }}
                     className={cn(
-                      "border-b-2 px-4 py-2.5 text-sm font-medium",
+                      "shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap",
                       activeTab === key
                         ? "border-primary text-primary"
                         : "border-transparent text-muted-foreground hover:text-foreground",
@@ -519,38 +523,6 @@ export function EventLiveResultsPage() {
                       Ranking cruzado entre todas as categorias/níveis da mesma modalidade. Toque numa modalidade pra
                       ver a colocação de todas as equipes.
                     </p>
-                  </div>
-                )}
-
-                {activeTab === "equipe" && (
-                  <div>
-                    <p className="px-4 pt-4 text-sm font-bold text-foreground">Ranking por equipe</p>
-                    {results.presentations.length === 0 ? (
-                      <p className="p-6 text-center text-sm text-muted-foreground">
-                        Nenhuma apresentação totalmente pontuada ainda.
-                      </p>
-                    ) : (
-                      <div className="mt-3 divide-y divide-border">
-                        {results.presentations.map((p, index) => (
-                          <div key={p.scheduleEntryId} className="flex items-center gap-3 px-4 py-3">
-                            <div className="flex w-9 shrink-0 items-center gap-1">
-                              {index < 3 && <Trophy className={cn("size-4 shrink-0", MEDAL_COLORS[index])} />}
-                              <span className="text-sm font-semibold text-muted-foreground">{index + 1}º</span>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-foreground">{p.teamName}</p>
-                              <p className="truncate text-xs text-muted-foreground">
-                                {p.categoryName} · {p.programName}
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <p className="font-bold text-primary">{formatPercent(p.percentage)}</p>
-                              <p className="text-xs text-muted-foreground">{formatPoints(p.finalResult)} pts</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
 

@@ -323,7 +323,7 @@ export function AppSidebar({
           comum desse tipo de controle). */}
       <aside
         className={cn(
-          "relative hidden h-svh shrink-0 flex-col bg-brand-navy text-white transition-[width] duration-200 sm:flex",
+          "relative hidden h-dvh shrink-0 flex-col bg-brand-navy text-white transition-[width] duration-200 sm:flex",
           collapsed ? "w-20" : "w-72",
         )}
       >

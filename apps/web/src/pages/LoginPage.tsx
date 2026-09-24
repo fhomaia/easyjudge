@@ -70,7 +70,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-svh items-center justify-center overflow-x-hidden overflow-y-auto p-6 short:p-3">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto p-6 short:p-3">
       <BrandBackdrop />
 
       {/* Só chama `login()` (que seta o token no useAuthStore) DEPOIS

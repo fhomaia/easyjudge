@@ -161,7 +161,7 @@ export function EventLiveDesktopView({
 
   return (
     <>
-    <div className="hidden h-svh lg:flex">
+    <div className="hidden h-dvh lg:flex">
       <AppSidebar profile={profile} onLogout={onLogout} eventNavItems={eventNavItems} />
       <div className="flex flex-1 flex-col overflow-hidden bg-background">
       <header className="border-b border-border bg-card px-8 py-5">

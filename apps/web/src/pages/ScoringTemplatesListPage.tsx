@@ -58,7 +58,7 @@ export function ScoringTemplatesListPage() {
   const systemTemplates = templates?.filter((t) => t.isSystemTemplate) ?? [];
 
   return (
-    <div className="flex h-svh bg-background">
+    <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

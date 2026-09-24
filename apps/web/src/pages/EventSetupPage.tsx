@@ -326,7 +326,7 @@ export function EventSetupPage() {
   const allStepsCompleted = steps.length > 0 && steps.every((s) => s.completed);
 
   return (
-    <div className="flex h-svh bg-background">
+    <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto">

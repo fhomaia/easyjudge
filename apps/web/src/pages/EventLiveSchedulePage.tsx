@@ -320,7 +320,7 @@ export function EventLiveSchedulePage() {
   });
 
   return (
-    <div className="flex h-svh bg-background">
+    <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} eventNavItems={eventNavTabs} />
 
       <main className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto pt-14 sm:pt-0">

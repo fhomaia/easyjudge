@@ -115,7 +115,7 @@ export function EventLiveTeamNotesPage() {
 
   return (
     <>
-      <div className="flex h-svh flex-col bg-background lg:hidden">
+      <div className="flex h-dvh flex-col bg-background lg:hidden">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-card px-4 py-3">
           <div className="min-w-0">
             <p className="truncate text-base font-bold text-foreground">{event.name}</p>
@@ -152,7 +152,7 @@ export function EventLiveTeamNotesPage() {
         </main>
       </div>
 
-      <div className="hidden h-svh lg:flex">
+      <div className="hidden h-dvh lg:flex">
         <AppSidebar profile={profile} onLogout={handleLogout} eventNavItems={eventNavTabs} />
         <div className="flex flex-1 flex-col overflow-hidden bg-background">
           <header className="border-b border-border bg-card px-8 py-5">

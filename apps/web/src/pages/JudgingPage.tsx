@@ -537,7 +537,7 @@ export function JudgingPage() {
   ]);
 
   return (
-    <div className="flex h-svh bg-background">
+    <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>

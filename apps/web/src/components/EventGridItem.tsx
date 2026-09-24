@@ -67,7 +67,7 @@ export function EventGridItem({
             : undefined
       }
       className={cn(
-        "flex flex-col gap-3 rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:shadow-md",
+        "flex min-w-0 flex-col gap-3 rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:shadow-md",
         isClickable && "cursor-pointer",
       )}
     >

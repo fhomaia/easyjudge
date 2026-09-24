@@ -78,7 +78,7 @@ export function EventLiveNotificationsPage() {
   });
 
   return (
-    <div className="flex h-svh bg-background">
+    <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} eventNavItems={eventNavTabs} />
 
       <main className="flex flex-1 flex-col overflow-hidden pt-14 sm:pt-0">

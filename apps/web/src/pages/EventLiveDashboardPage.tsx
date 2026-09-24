@@ -404,7 +404,7 @@ export function EventLiveDashboardPage() {
 
   return (
     <>
-    <div className="flex h-svh flex-col bg-background lg:hidden">
+    <div className="flex h-dvh flex-col bg-background lg:hidden">
       <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/10 bg-brand-navy px-4 py-3 text-white">
         <button
           type="button"

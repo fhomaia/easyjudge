@@ -39,7 +39,7 @@ export function HeadJudgeMobileSheet({ eventId, scheduleEntryId, canWrite, onClo
       animate={{ x: 0 }}
       exit={{ x: "100%" }}
       transition={{ duration: 0.28, ease: "easeOut" }}
-      className="fixed inset-0 z-30 flex h-svh flex-col bg-background lg:hidden">
+      className="fixed inset-0 z-30 flex h-dvh flex-col bg-background lg:hidden">
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-bold tracking-wide text-foreground">
           <ShieldCheck className="size-4 text-primary" />

@@ -23,7 +23,7 @@ interface LegalPageLayoutProps {
 // extra vira o sumário, não mais texto por linha.
 export function LegalPageLayout({ title, updatedAt, sections }: LegalPageLayoutProps) {
   return (
-    <div className="min-h-svh bg-background">
+    <div className="min-h-dvh bg-background">
       <div className="mx-auto max-w-5xl px-6 py-12 lg:px-10 lg:py-16">
         <Link
           to="/login"

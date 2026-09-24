@@ -37,7 +37,7 @@ export function HeadJudgePanel({ eventId, scheduleEntryId, canWrite, onClose }: 
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: "100%", opacity: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="flex h-svh w-[380px] shrink-0 flex-col border-l border-border bg-card">
+      className="flex h-dvh w-[380px] shrink-0 flex-col border-l border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-bold tracking-wide text-foreground">
           <ShieldCheck className="size-4 text-primary" />

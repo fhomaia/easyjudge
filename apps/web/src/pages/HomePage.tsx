@@ -228,7 +228,7 @@ export function HomePage() {
   const showingTo = Math.min(currentPage * PAGE_SIZE, filteredEvents.length);
 
   return (
-    <div className="flex h-svh bg-background">
+    <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
       <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
@@ -241,7 +241,7 @@ export function HomePage() {
           <AnimatePresence mode="wait">
             {events !== null && (
               <motion.div key="events" initial="hidden" animate="show" exit={{ opacity: 0 }}>
-                <div className="grid gap-6">
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <h1 className="text-2xl font-semibold text-foreground">Meus eventos</h1>

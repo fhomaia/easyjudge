@@ -69,7 +69,7 @@ export function DocumentViewerDialog({ document, onOpenChange }: DocumentViewerD
     <Dialog open={document !== null} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="top-0 left-0 flex h-svh max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 sm:top-1/2 sm:left-1/2 sm:h-[90svh] sm:w-[min(56rem,calc(100vw-2rem))] sm:max-w-none sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
+        className="top-0 left-0 flex h-dvh max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 sm:top-1/2 sm:left-1/2 sm:h-[90svh] sm:w-[min(56rem,calc(100vw-2rem))] sm:max-w-none sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-3">
           <div className="min-w-0 flex-1">

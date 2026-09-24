@@ -66,8 +66,8 @@ export function EventFiltersBar({
           value={statusFilter}
           onValueChange={(value) => onStatusFilterChange(value as EventStatusFilter)}
         >
-          <SelectTrigger className="flex-1 sm:w-48 sm:flex-none">
-            <SelectValue>{(value: EventStatusFilter) => STATUS_FILTER_LABELS[value]}</SelectValue>
+          <SelectTrigger className="min-w-0 flex-1 sm:w-48 sm:flex-none">
+            <SelectValue>{(value: EventStatusFilter) => <span className="truncate">{STATUS_FILTER_LABELS[value]}</span>}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {(Object.keys(STATUS_FILTER_LABELS) as EventStatusFilter[]).map((key) => (
@@ -79,8 +79,8 @@ export function EventFiltersBar({
         </Select>
 
         <Select value={sort} onValueChange={(value) => onSortChange(value as EventSortOption)}>
-          <SelectTrigger className="flex-1 sm:w-44 sm:flex-none">
-            <SelectValue>{(value: EventSortOption) => SORT_LABELS[value]}</SelectValue>
+          <SelectTrigger className="min-w-0 flex-1 sm:w-44 sm:flex-none">
+            <SelectValue>{(value: EventSortOption) => <span className="truncate">{SORT_LABELS[value]}</span>}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {(Object.keys(SORT_LABELS) as EventSortOption[]).map((key) => (

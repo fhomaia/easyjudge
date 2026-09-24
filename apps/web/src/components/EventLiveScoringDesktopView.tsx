@@ -171,7 +171,7 @@ export function EventLiveScoringDesktopView({
   );
 
   return (
-    <div className="flex h-svh flex-1 flex-col bg-background">
+    <div className="flex h-dvh flex-1 flex-col bg-background">
       <header className="border-b border-border bg-card px-8 py-4">
         <div className="flex items-center justify-between gap-6">
           <div className="flex min-w-0 items-center gap-3">
