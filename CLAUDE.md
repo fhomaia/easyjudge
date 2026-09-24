@@ -1789,6 +1789,18 @@ Dois pedidos independentes do usuário, mesma sessão.
   `w-36`, mesmo padrão de `EventStatCards`). Na lista de súmulas
   (`AdminNotesOverviewList`) os selos (Contestação/Desistência) foram
   pra baixo do nome da equipe, que ficava cortado em "Hur…".
+- **Falha de rede agora tem mensagem própria**: relato real de cadastro
+  (programa sem CPF, "Não foi possível criar a conta.") investigado: API
+  aceitava o payload, CORS ok, sem reinício no Render (aba Events) — só
+  sobra rede do usuário (fallback genérico só aparece quando o `fetch`
+  rejeita sem resposta). `apiFetch` em `api/client.ts` converte essa
+  rejeição em `ApiError` status 0 com `NETWORK_ERROR_MESSAGE`, então
+  toda tela mostra "Não foi possível conectar ao servidor..." sem mexer
+  nelas; erro HTTP continua com a mensagem do backend. `AbortError`
+  continua sendo relançado. Fluxos de conta (cadastro/login/esqueci a
+  senha) ganharam `console.error` no ramo não-ApiError (bug de tela).
+  Obs.: servidor fora do ar (502 do Render sem CORS) também cai nessa
+  mensagem — o navegador não distingue de rede ruim.
 - **Como depurar no celular real (Android) sem cabo**: `adb pair
   IP:PORTA CODIGO` (tela "Parear dispositivo" da Depuração por Wi-Fi —
   o `!` do Claude Code não aceita digitar o código, passar como

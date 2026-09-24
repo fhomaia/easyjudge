@@ -313,6 +313,8 @@ export function RegisterDialog({
       setUserId(userId);
       goNext();
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(
         err instanceof ApiError
           ? err.message
@@ -332,6 +334,8 @@ export function RegisterDialog({
       await authApi.verifyEmail(userId, form.code);
       goNext();
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(err instanceof ApiError ? err.message : "Código inválido.");
     } finally {
       setLoading(false);
@@ -344,6 +348,8 @@ export function RegisterDialog({
     try {
       await authApi.resendCode(userId);
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(
         err instanceof ApiError
           ? err.message
@@ -376,6 +382,8 @@ export function RegisterDialog({
       // — mesmo raciocínio de LoginPage.pendingToken.
       setPendingToken(accessToken);
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(
         err instanceof ApiError
           ? err.message

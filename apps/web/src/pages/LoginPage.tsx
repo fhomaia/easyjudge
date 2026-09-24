@@ -55,6 +55,8 @@ export function LoginPage() {
       const { accessToken } = await authApi.login(email, password);
       setPendingToken(accessToken);
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(
         err instanceof ApiError ? err.message : "Não foi possível entrar.",
       );

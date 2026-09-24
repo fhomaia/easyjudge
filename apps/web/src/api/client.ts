@@ -17,8 +17,26 @@ export class ApiError extends Error {
   }
 }
 
+export const NETWORK_ERROR_MESSAGE =
+  "Não foi possível conectar ao servidor. Verifique sua internet e tente de novo.";
+
+// `fetch` só rejeita quando não chega resposta nenhuma (sem internet,
+// rede bloqueando o domínio, servidor fora do ar ou erro de CORS). Vira
+// ApiError com status 0 pra toda tela mostrar uma mensagem clara em vez
+// do fallback genérico, que antes escondia que o problema era conexão
+// (relato real de cadastro, 2026-09-24). Resposta com erro HTTP continua
+// passando pelo `!res.ok` normal, com a mensagem do backend.
+async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${API_BASE}${path}`, init);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -105,7 +123,7 @@ async function authUpload<T>(path: string, formData: FormData): Promise<T> {
   // usersMeCache mais abaixo.
   usersMeCache.clear();
   const accessToken = useAuthStore.getState().accessToken;
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(path, {
     method: "POST",
     headers: {
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),

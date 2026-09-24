@@ -70,6 +70,8 @@ export function ForgotPasswordDialog({
       setResetId(resetId);
       setStep("code");
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(err instanceof ApiError ? err.message : "Erro inesperado. Tente novamente.");
     } finally {
       setLoading(false);
@@ -85,6 +87,8 @@ export function ForgotPasswordDialog({
       await authApi.verifyPasswordReset(resetId, code);
       setStep("password");
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(err instanceof ApiError ? err.message : "Erro inesperado. Tente novamente.");
     } finally {
       setLoading(false);
@@ -101,6 +105,8 @@ export function ForgotPasswordDialog({
       handleOpenChange(false);
       onResetSuccess();
     } catch (err) {
+      // Fora da API = bug da tela (falha de rede já vira ApiError, ver apiFetch).
+      if (!(err instanceof ApiError)) console.error(err);
       setError(err instanceof ApiError ? err.message : "Erro inesperado. Tente novamente.");
       setLoading(false);
     }
