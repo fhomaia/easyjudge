@@ -99,16 +99,14 @@ export function EventSetupPage() {
     scheduleApi.listDays(id).then(setScheduleDays).catch(() => setScheduleDays([]));
   }, [id]);
 
-  // Setup só faz sentido pra evento ainda não publicado (2026-07-26, a
-  // pedido do usuário) — depois de publicado/iniciado/concluído, quem
-  // quiser mexer nas configurações reverte a publicação primeiro (ver
-  // EventActionsMenu na Home), não edita direto por aqui. Mesmo padrão
-  // de redirect já usado em EventLiveDashboardPage, no sentido inverso
-  // (lá "created" volta pra cá; aqui qualquer status diferente de
-  // "created" manda pra lá).
+  // Setup abre pra evento em rascunho, publicado ou iniciado (antes era
+  // só rascunho; liberado em 2026-09-24 a pedido do usuário, via
+  // "Configurar evento" no menu "⋯" da Home). As telas de cada etapa já
+  // aceitavam edição com o evento publicado. Evento concluído continua
+  // indo pro ao vivo.
   useEffect(() => {
     if (!event) return;
-    if (event.status !== "created") {
+    if (event.status === "completed") {
       navigate(`/events/${event.aliasId}/live`, { replace: true });
     }
   }, [event, navigate]);
@@ -389,23 +387,13 @@ export function EventSetupPage() {
                   event={event}
                   stepNumber={steps.length + 1}
                   allStepsCompleted={allStepsCompleted}
-                  // De propósito NÃO chama `setEvent(updated)` aqui —
-                  // bug real (2026-08-05): fazer isso atualiza
-                  // `event.status` pra "published" na hora, e o efeito
-                  // logo abaixo ("Setup só faz sentido pra evento ainda
-                  // não publicado") reage a essa mudança IMEDIATAMENTE,
-                  // disparando o `navigate(...replace...)` pra `/live`
-                  // antes da animação do EventCelebrationOverlay sequer
-                  // começar a rodar — a página de Setup era desmontada
-                  // (levando a animação junto) no mesmo instante em que
-                  // `publishCelebrationOpen` virava `true`. Mesma causa
-                  // raiz do bug já corrigido no fluxo de login/cadastro
-                  // (ver BrandBackdrop/LoginPage): navegar/mudar estado
-                  // que dispara navegação cedo demais compete com a
-                  // animação. Como o botão do overlay já leva pra Home
-                  // (não precisa do `event` atualizado pra nada antes
-                  // disso), simplesmente não atualiza esse estado local
-                  // — a página é abandonada de qualquer forma.
+                  // De propósito NÃO chama `setEvent(updated)` aqui:
+                  // o overlay de celebração já leva pra Home e não
+                  // precisa do evento atualizado. Bug real (2026-08-05):
+                  // quando o Setup ainda redirecionava evento publicado
+                  // pro ao vivo, atualizar o status aqui desmontava a
+                  // página junto com a animação (hoje o Setup abre com o
+                  // evento publicado, mas manter isso evita o risco).
                   onPublished={() => setPublishCelebrationOpen(true)}
                 />
               </div>

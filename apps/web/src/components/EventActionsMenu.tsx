@@ -63,7 +63,10 @@ export function EventActionsMenu({
   // Mesmo destino do clique no card de um evento em "Criado" (ver
   // EventListItem/EventGridItem) — aqui com nome explícito, pra não
   // confundir com "Dados do evento" (popup de nome/data/local/foto).
-  const canConfigure = event.status === "created";
+  // Também com o evento publicado/iniciado (2026-09-24, a pedido do
+  // usuário): é o único caminho pro Setup depois de publicar, já que o
+  // clique no card leva pro evento ao vivo. Concluído continua fora.
+  const canConfigure = event.status !== "completed";
 
   const canTogglePublish =
     isAdmin && (event.status === "created" || event.status === "published");
