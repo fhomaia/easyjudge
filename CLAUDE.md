@@ -1812,6 +1812,55 @@ Dois pedidos independentes do usuário, mesma sessão.
   saída JSON das duas funções antes/depois nos 3 eventos locais
   (idêntica). Render e Neon estão ambos em Oregon (us-west, confirmado
   2026-09-24).
+- **Cronômetro pra qualquer jurado da pista** (antes só o de Legalidade):
+  `buildScoreEventRows` separa TIMER_STARTED/TIMER_STOPPED das deduções
+  e aceita de quem é Legalidade OU tem critério atribuído naquela pista
+  (403 pra quem não tem nada ali); deduções continuam só Legalidade.
+  Frontend mostra o bloco do cronômetro com `isLegalityJudge ||
+  groups.length > 0` (mobile e `EventLiveScoringDesktopView`). Cada
+  jurado tem o próprio relógio (getSheet lê só os eventos dele); o
+  início da apresentação é o PRIMEIRO TIMER_STARTED de qualquer jurado
+  (`getStartedPresentations` -> card "Atraso atual" e notificação
+  "Apresentação iniciada"). "Acontecendo agora"/"Próxima apresentação"
+  continuam pelo relógio × cronograma (não mudou nesta rodada).
+  "Reiniciar" agora zera e deixa PARADO (grava TIMER_STOPPED com 0, então
+  ao reabrir volta zerado só com "Iniciar"); só "Iniciar" emite
+  TIMER_STARTED (`startTimer`/`resetTimer` em `EventLiveScoringPage`).
+- **Convite pendente acompanha a troca de email** (programa e jurado):
+  `ProgramsService.update`/`JudgesService.update` só limpavam o convite
+  antigo do roster quando havia conta pra vincular
+  (`syncNewlyLinked*`). Sem conta, o convite (`event_members`, sem
+  `user_id`) ficava com o email antigo, quase sempre errado, e uma conta
+  criada com ele herdaria o acesso. Agora, se o email mudou e não há
+  conta, move o papel do email antigo pro novo (`removeMemberRole` +
+  `upsertMemberRole`). Caso real: Atelopus (Batalha), convite com
+  `diretoriatelopus@gmail.com` sobrou em produção. Testado com
+  programa/jurado descartáveis no evento local "Teste" (apagados).
+- **Filtro "Eventos especiais" no Cronograma ao vivo**: chips passaram
+  a ser por categoria (`scheduleFilterCategory` em
+  `lib/eventFullSchedule.ts`), não pelo tipo cru. "Eventos especiais"
+  (marcado por padrão, visível pra todos) = abertura + premiação + break
+  que NÃO é espera automática (almoço, batalhas, contestação,
+  personalizados). "Intervalos" (oculto por padrão, só admin/assessor)
+  = break com `linkedEntryId` OU com um dos 3 rótulos automáticos
+  ("Aguardando aquecimento", "Aguardando disponibilidade da equipe",
+  "Intervalo entre apresentações") — existem esperas sem vínculo no
+  banco (dado antigo / FK SET NULL). Antes, esconder "Intervalos"
+  escondia as batalhas pra quem não é staff (sem como reexibir).
+- **Atleta convidado que informa o email do mesmo programa no
+  cadastro**: `AuthService.setPassword` liga o convite
+  (`linkUnclaimedAthleteInvitesByEmail`) e depois chama
+  `createOrRequestLink(programEmail)`, que dava 409 ("já pediu vínculo")
+  com a senha já salva — atleta via erro na tela de senha e não entrava,
+  com a conta pronta. Agora o 409 é ignorado só no cadastro (a tela "Meus
+  programas" continua avisando). Reproduzido com o código antigo e
+  corrigido, com atleta descartável e o programa demo local (Hurrycane).
+- **Conta criada com o tipo errado (caso real, Clara/Atelopus)**: conta
+  Programa não recebe convite de atleta (só `role === ATHLETE`). Saída
+  usada: a pessoa exclui a própria conta em "Meu perfil"
+  (`deleteAccount` anonimiza e troca o email por
+  `deleted-<id>@cheercup.invalid`, liberando o email) e recadastra como
+  Atleta com o mesmo email.
 - **Como depurar no celular real (Android) sem cabo**: `adb pair
   IP:PORTA CODIGO` (tela "Parear dispositivo" da Depuração por Wi-Fi —
   o `!` do Claude Code não aceita digitar o código, passar como
