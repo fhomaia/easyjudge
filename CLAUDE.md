@@ -1873,6 +1873,57 @@ Dois pedidos independentes do usuário, mesma sessão.
   exposto com `npm run dev -- --host`. Cabo USB-C deste notebook deu
   erro -71 com dois cabos (não investigado).
 
+## Liberação por categoria em cada dia + Setup com evento publicado (2026-09-24)
+
+Motivo: o Batalha tem duas premiações, então notas/contestação/resultado
+precisam ser liberados aos poucos. Decidido com o usuário: vale pra
+qualquer evento, unidade = categoria em um dia.
+
+- **Modelo**: tabela `category_day_releases` (`CategoryDayRelease`, uma
+  linha por `schedule_day_id` + `category_id`, FK CASCADE nos dois,
+  `alias_id` do evento pra busca). Sem linha = nada liberado. As 3
+  colunas `events.*_released_at` ficaram OBSOLETAS (não são mais
+  lidas); a migration `CreateCategoryDayReleases` copiou o valor delas
+  pra todo par dia+categoria com apresentação, então eventos antigos não
+  mudam. Categoria que ganha apresentação num dia novo nasce fechada.
+- **`ReleasesService`** (`scoring/services/releases.service.ts`):
+  `getReleaseState` (dias com apresentação → categorias com as 3
+  chaves; chave do dia = "todas as categorias do dia"), `setRelease`
+  (`{ dayId, categoryId? }`; sem categoria = dia inteiro), `getReleaseMap`
+  e `isEntryReleased` pro resto do sistema. Regras entre as chaves
+  iguais às antigas (contestação liga notas; fechar notas fecha
+  contestação; resultado independente). Notificação só na transição
+  fechado→liberado, com o nome das categorias no título.
+  `EventsService.setReleaseFlags` foi removido.
+- **Quem vê o quê**: admin/assessor/jurado sempre veem tudo (inclusive
+  nos Resultados — não confundir ao testar; conta de espectador de teste
+  local: `espectador.teste@cheercup.invalid`). Programa/atleta: a lista
+  traz as apresentações completas com `released` (não liberada vem com
+  nota zerada e aparece "Aguardando liberação", sem abrir; detalhe dá
+  403); contestação por apresentação conforme a categoria no dia.
+  Resultados (`getPublicEventResults` → `{ days: ResultsDayView[] }`):
+  um bloco por dia; só as categorias com resultado liberado, e os
+  rankings que cruzam categorias (geral, destaques, modalidade,
+  programa) só com `complete` = todas as categorias do dia liberadas
+  (decisão do usuário: ranking parcial pareceria final).
+- **UI**: `AdminNotesOverview` agrupa as súmulas por categoria, cada uma
+  com 3 chaves (`ReleaseToggles`) e "x de y súmulas completas"; topo com
+  as chaves do dia. Abas por dia (Notas e Resultados) só com mais de um
+  dia com apresentação, e só esses dias (`formatDayTab`). Pra admin que
+  também é jurado, fica na aba "Súmulas finalizadas" (o
+  `ReleaseFlagsPanel` global foi removido).
+- **Exemplo local**: Easy Judge Cup ganhou apresentações no dia 14/07
+  (Fenix com notas copiadas da Aurora, Tornado sem nota, Hurrycane
+  Nível 2 com notas copiadas), escala copiada da pista do dia 13/07 e a
+  conta de espectador acima; ids em `zz_example_ids` (script de limpeza
+  no scratchpad da sessão, não versionado). O usuário pediu pra manter.
+- **"Configurar evento" com evento publicado/iniciado**: menu "⋯" da
+  Home mostra o item em qualquer status menos concluído, e
+  `EventSetupPage` só redireciona pro ao vivo se concluído. As rotas das
+  etapas nunca travaram por status (só as travas de sempre: template em
+  uso, apresentação com nota). "Dados do evento" continua despublicando
+  ao editar publicado, mas só o popup da Home chama essa rota.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
