@@ -1955,6 +1955,40 @@ não contaminar o outro. Só nota (1 a 5 estrelas) e comentário opcional.
   lista). Dono da plataforma: ícone de caixa de entrada no rodapé do
   menu → `/admin/feedback` (`PlatformFeedbackPage`).
 
+## Súmula fiel à árvore do sistema de pontuação (2026-09-24)
+
+- **Causa da ordem errada**: `ScoringCriteriaService.findAllForTemplateUnchecked`
+  ordena a lista inteira por `order`, que é a posição ENTRE IRMÃOS — misturava
+  os níveis e os grupos saíam fora da ordem (Jump antes de Stunt). Além disso,
+  o detalhe da súmula e a folha do jurado (`buildGroups`) reordenavam cada grupo
+  por `order` depois de montar, intercalando subgrupos. Agora
+  `sortCriteriaByTree` (pré-ordem, cada nível pelo `order`) roda em
+  `loadPresentationContext`, `buildGroups` percorre essa lista, e as duas
+  reordenações por `order` foram removidas. Vale pro detalhe (admin/programa/
+  atleta), PDF baixado, folha do jurado e painel Head Judge.
+- **Árvore inteira no detalhe**: todo critério do template aparece, mesmo sem
+  jurado escalado (nota "—"); com isso a nota máxima exibida (soma dos
+  critérios) passa a ser o total do template. Cada critério traz
+  `subgroupPath` (subgrupos entre o grupo raiz e ele); `criteriaWithSubgroups`
+  (web/lib) intercala subtítulos na tela e no PDF, com recuo por nível.
+  Critério solto no primeiro nível (`isStandaloneCriterion`) vira cartão/faixa
+  de uma linha, sem repetir o nome.
+- **PDF**: grupos com `pageBreak: "avoid"` (não cortam entre páginas quando
+  cabem numa); notas com `formatCriterionScore` (1 a 2 casas, vírgula) — antes
+  `toFixed(1)` mostrava 9,25 como 9.3 e a soma das linhas não batia com o total.
+- **Faixa de pontuação na súmula**: quando o critério usa faixas e tem nota,
+  mostra a faixa em que a nota caiu (mesma regra da tela do jurado,
+  `findMatchingBand`: sobreposição → a de início mais baixo). Tela:
+  `CurrentBandBadge` embaixo do nome. PDF: coluna "Faixa" (nome na cor da
+  faixa) só nos grupos em que algum critério usa faixas; no critério solto do
+  primeiro nível, o nome da faixa vai em branco na própria faixa azul.
+- **Exemplos locais**: no Easy Judge Cup, dia 14/07, categorias "Team Cheer All
+  Star COED Nível 5 (exemplo)" (Team Cheer (Coed), Aurora, 4 jurados com
+  comentários, Stunt Difficulty com 2 jurados, dedução) e "Team Cheer COED
+  Non-Tumbling (exemplo subgrupos)" (template de 58 pts com subgrupos, Fenix);
+  ids em `zz_example_ids`. Validado gerando o PDF real no Node (bundle do
+  `presentationDetailExport` com rolldown) e convertendo com `pdftoppm`.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
