@@ -33,7 +33,8 @@ interface EventLiveScoringDesktopViewProps {
   nextTeam: { id: string; teamName: string; categoryName: string | null } | null;
   onBack: () => void;
   onGoToNextTeam: () => void;
-  onStartOrRestartTimer: () => void;
+  onStartTimer: () => void;
+  onResetTimer: () => void;
   onResumeTimer: () => void;
   onStopTimer: () => void;
   isGroupComplete: (criteriaIds: string[]) => boolean;
@@ -71,7 +72,8 @@ export function EventLiveScoringDesktopView({
   nextTeam,
   onBack,
   onGoToNextTeam,
-  onStartOrRestartTimer,
+  onStartTimer,
+  onResetTimer,
   onResumeTimer,
   onStopTimer,
   isGroupComplete,
@@ -157,6 +159,10 @@ export function EventLiveScoringDesktopView({
   // Só existe quando a pista tem jurado de legalidade — nesse caso
   // ocupa a vaga ao lado do Rascunho na linha 1 (ver layout mais
   // abaixo); sem legalidade, Comentários ocupa essa vaga no lugar.
+  // Cronômetro pra qualquer jurado da pista, não só o de Legalidade (o
+  // primeiro "Iniciar" de qualquer um marca o início da apresentação).
+  const canUseTimer = sheet.isLegalityJudge || sheet.groups.length > 0;
+
   const legalidadeBlock = sheet.isLegalityJudge && (
     <LegalityDeductionsPanel
       rules={sheet.deductions}
@@ -202,7 +208,7 @@ export function EventLiveScoringDesktopView({
             <EventDocumentsButton className="ml-1" />
           </div>
 
-          {sheet.isLegalityJudge && (
+          {canUseTimer && (
             <div className={cn("flex shrink-0 items-center gap-4", !interactionUnlocked && "pointer-events-none opacity-50")}>
               <div className="text-right">
                 <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">TEMPO DE APRESENTAÇÃO</p>
@@ -212,7 +218,7 @@ export function EventLiveScoringDesktopView({
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    onClick={onStartOrRestartTimer}
+                    onClick={onResetTimer}
                     className="flex items-center gap-2 rounded-xl bg-muted px-4 py-2.5 text-sm font-bold text-foreground shadow-md transition-colors hover:bg-muted/80"
                   >
                     <RotateCcw className="size-4" />
@@ -239,7 +245,7 @@ export function EventLiveScoringDesktopView({
                   </button>
                   <button
                     type="button"
-                    onClick={onStartOrRestartTimer}
+                    onClick={onResetTimer}
                     className="flex items-center gap-2 rounded-xl bg-muted px-4 py-2.5 text-sm font-bold text-foreground shadow-md transition-colors hover:bg-muted/80"
                   >
                     <RotateCcw className="size-4" />
@@ -249,7 +255,7 @@ export function EventLiveScoringDesktopView({
               ) : (
                 <button
                   type="button"
-                  onClick={onStartOrRestartTimer}
+                  onClick={onStartTimer}
                   className="flex shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-emerald-700"
                 >
                   <Play className="size-4" />
@@ -288,7 +294,7 @@ export function EventLiveScoringDesktopView({
             )}
           </div>
         </div>
-        {sheet.isLegalityJudge && sheet.presentation.presentationTimeSeconds && (
+        {canUseTimer && sheet.presentation.presentationTimeSeconds && (
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress * 100}%` }} />
           </div>

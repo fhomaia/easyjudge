@@ -1685,7 +1685,7 @@ export class ScoringService {
   // painel Início (comparação feita no frontend, que já tem toda a
   // lógica de hora agendada × relógio em lib/eventLiveSchedule.ts, sem
   // duplicar aqui). Uma linha por apresentação, só as que já foram
-  // iniciadas por algum Jurado de Legalidade.
+  // iniciadas por algum jurado (o primeiro que der "Iniciar").
   async getStartedPresentations(
     eventId: string,
   ): Promise<Array<{ scheduleEntryId: string; startedAt: string }>> {
@@ -1929,10 +1929,50 @@ export class ScoringService {
           );
         }
       } else if (
+        input.kind === ScoreEventKind.TIMER_STARTED ||
+        input.kind === ScoreEventKind.TIMER_STOPPED
+      ) {
+        // Qualquer jurado escalado nesta pista usa o cronômetro (antes era
+        // só o de Legalidade, pedido do usuário em 2026-09-24). Cada um
+        // tem o próprio relógio (getSheet só lê os eventos do jurado), e
+        // o horário de início da apresentação é sempre o PRIMEIRO
+        // TIMER_STARTED de qualquer jurado (getStartedPresentations).
+        let isLegality = legalityCache.get(resourceId);
+        if (isLegality === undefined) {
+          isLegality = await this.judgingService.isLegalityJudgeForResource(
+            ownerParticipationId,
+            resourceId,
+          );
+          legalityCache.set(resourceId, isLegality);
+        }
+        if (!isLegality) {
+          let leafIds = assignedLeafCache.get(resourceId);
+          if (!leafIds) {
+            leafIds = new Set(
+              await this.judgingService.getAssignedLeafCriterionIds(
+                ownerParticipationId,
+                resourceId,
+              ),
+            );
+            assignedLeafCache.set(resourceId, leafIds);
+          }
+          if (leafIds.size === 0) {
+            throw new ForbiddenException(
+              'Só jurados escalados nesta pista podem usar o cronômetro.',
+            );
+          }
+        }
+        if (
+          input.kind === ScoreEventKind.TIMER_STOPPED &&
+          input.presentationElapsedMs === undefined
+        ) {
+          throw new BadRequestException(
+            'Evento de cronômetro parado precisa de presentationElapsedMs.',
+          );
+        }
+      } else if (
         input.kind === ScoreEventKind.DEDUCTION_ADD ||
         input.kind === ScoreEventKind.DEDUCTION_REMOVE ||
-        input.kind === ScoreEventKind.TIMER_STARTED ||
-        input.kind === ScoreEventKind.TIMER_STOPPED ||
         input.kind === ScoreEventKind.DEDUCTION_CODE_SET
       ) {
         let isLegality = legalityCache.get(resourceId);
@@ -1945,7 +1985,7 @@ export class ScoringService {
         }
         if (!isLegality) {
           throw new ForbiddenException(
-            'Só o Jurado de Legalidade pode registrar deduções/cronômetro.',
+            'Só o Jurado de Legalidade pode registrar deduções.',
           );
         }
         if (
@@ -1962,14 +2002,6 @@ export class ScoringService {
         ) {
           throw new BadRequestException(
             'Evento de desfazer dedução precisa de undoesEventId.',
-          );
-        }
-        if (
-          input.kind === ScoreEventKind.TIMER_STOPPED &&
-          input.presentationElapsedMs === undefined
-        ) {
-          throw new BadRequestException(
-            'Evento de cronômetro parado precisa de presentationElapsedMs.',
           );
         }
         if (

@@ -207,22 +207,30 @@ export function EventLiveScoringPage() {
     return () => clearInterval(interval);
   }, [timerRunning]);
 
-  // Três estados: (a) nunca iniciado — só "Iniciar"; (b) rodando —
-  // "Reiniciar" (zera e continua contando, falsa largada) + "Parar";
-  // (c) parado com um tempo já marcado (por "Parar" nesta sessão ou ao
-  // reabrir a apresentação depois — ver hidratação acima) — "Retomar"
-  // (continua contando A PARTIR do tempo marcado) + "Reiniciar" (zera
-  // e continua). "Iniciar" e "Reiniciar" são a mesma ação, só o rótulo
-  // muda conforme o estado. Emite TIMER_STARTED em toda chamada
-  // (inclusive "Reiniciar", uma falsa largada) — o cálculo de atraso do
-  // evento (ver ScoringService.getStartedPresentations) usa sempre o
-  // PRIMEIRO desses eventos por apresentação, então um reinício não
-  // deturpa o horário real de início já registrado.
-  function startOrRestartTimer() {
+  // Três estados: (a) nunca iniciado ou zerado — só "Iniciar"; (b)
+  // rodando — "Reiniciar" + "Parar"; (c) parado com um tempo já marcado
+  // (por "Parar" nesta sessão ou ao reabrir a apresentação depois — ver
+  // hidratação acima) — "Retomar" (continua A PARTIR do tempo marcado) +
+  // "Reiniciar". "Reiniciar" zera e deixa PARADO (pedido do usuário,
+  // 2026-09-24): o jurado precisa clicar "Iniciar" de novo. Só "Iniciar"
+  // emite TIMER_STARTED — o cálculo de atraso do evento (ver
+  // ScoringService.getStartedPresentations) usa sempre o PRIMEIRO desses
+  // eventos por apresentação (de qualquer jurado), então zerar e iniciar
+  // de novo não deturpa o horário real de início já registrado.
+  function startTimer() {
     timerStartRef.current = Date.now();
     setElapsedMs(0);
     setTimerRunning(true);
     void emitEvent({ kind: "timer_started" });
+  }
+
+  // Grava "parado em 0" (TIMER_STOPPED), então ao reabrir a apresentação
+  // o cronômetro volta zerado, só com "Iniciar".
+  function resetTimer() {
+    timerStartRef.current = null;
+    setTimerRunning(false);
+    setElapsedMs(0);
+    void emitEvent({ kind: "timer_stopped", presentationElapsedMs: 0 });
   }
 
   // Retoma de onde parou — desloca o "início" pro passado na medida do
@@ -337,7 +345,7 @@ export function EventLiveScoringPage() {
     // com um tempo marcado (ver hidratação), usa o valor atual e não
     // mexe no cronômetro.
     const hasStarted = timerRunning || elapsedMs > 0;
-    if (!hasStarted) startOrRestartTimer();
+    if (!hasStarted) startTimer();
     const presentationElapsedMs = hasStarted ? Math.round(elapsedMs / 1000) * 1000 : 0;
     const entry: DeductionLogEntry = {
       id: crypto.randomUUID(),
@@ -613,7 +621,10 @@ export function EventLiveScoringPage() {
         )}
 
         <div className={cn(!interactionUnlocked && "pointer-events-none opacity-50")}>
-        {sheet.isLegalityJudge && (
+        {/* Cronômetro pra qualquer jurado da pista, não só o de
+            Legalidade: o primeiro "Iniciar" de qualquer um marca o início
+            real da apresentação (ver ScoringService.getStartedPresentations). */}
+        {(sheet.isLegalityJudge || sheet.groups.length > 0) && (
           <div className="m-4 rounded-2xl border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -636,7 +647,7 @@ export function EventLiveScoringPage() {
                 <>
                   <button
                     type="button"
-                    onClick={startOrRestartTimer}
+                    onClick={resetTimer}
                     className="flex items-center gap-2 rounded-xl bg-muted px-4 py-3 text-base font-bold text-foreground shadow-md transition-colors hover:bg-muted/80"
                   >
                     <RotateCcw className="size-5" />
@@ -663,7 +674,7 @@ export function EventLiveScoringPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={startOrRestartTimer}
+                    onClick={resetTimer}
                     className="flex items-center gap-2 rounded-xl bg-muted px-4 py-3 text-base font-bold text-foreground shadow-md transition-colors hover:bg-muted/80"
                   >
                     <RotateCcw className="size-5" />
@@ -673,7 +684,7 @@ export function EventLiveScoringPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={startOrRestartTimer}
+                  onClick={startTimer}
                   className="flex shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-base font-bold text-white shadow-md transition-colors hover:bg-emerald-700"
                 >
                   <Play className="size-5" />
@@ -831,7 +842,8 @@ export function EventLiveScoringPage() {
         nextTeam={nextTeam}
         onBack={() => navigate(`/events/${id}/live/notes`)}
         onGoToNextTeam={() => nextTeam && navigate(`/events/${id}/live/scoring/${nextTeam.id}`)}
-        onStartOrRestartTimer={startOrRestartTimer}
+        onStartTimer={startTimer}
+        onResetTimer={resetTimer}
         onResumeTimer={resumeTimer}
         onStopTimer={stopTimer}
         onEditDeductionTime={editDeductionTime}
