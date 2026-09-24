@@ -187,6 +187,19 @@ export class JudgesService {
     const saved = await this.participationsRepo.save(participation);
     if (linkedUser) {
       await this.syncNewlyLinkedJudge(saved, linkedUser, previousEmail);
+    } else if (saved.email.toLowerCase() !== previousEmail.toLowerCase()) {
+      // Sem conta pra vincular ainda: o convite pendente do roster muda
+      // pro email novo (mesmo ajuste de ProgramsService.update).
+      await this.eventsService.removeMemberRole(
+        saved.aliasId,
+        EventMemberRole.JUDGE,
+        { userId: null, email: previousEmail },
+      );
+      await this.eventsService.upsertMemberRole(
+        saved.aliasId,
+        EventMemberRole.JUDGE,
+        { userId: null, email: saved.email, ...splitDisplayName(saved.name) },
+      );
     }
     return this.toJudgeView(saved);
   }

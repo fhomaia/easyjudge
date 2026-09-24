@@ -225,6 +225,21 @@ export class ProgramsService {
     const saved = await this.participationsRepo.save(participation);
     if (linkedUser) {
       await this.syncNewlyLinkedProgram(saved, linkedUser, previousEmail);
+    } else if (saved.email.toLowerCase() !== previousEmail.toLowerCase()) {
+      // Sem conta pra vincular ainda: o convite pendente do roster muda
+      // pro email novo. Sem isso ficava um convite com o email antigo
+      // (quase sempre digitado errado), e uma conta Programa criada com
+      // ele ganharia acesso ao evento (achado em 2026-09-24).
+      await this.eventsService.removeMemberRole(
+        saved.aliasId,
+        EventMemberRole.PROGRAM,
+        { userId: null, email: previousEmail },
+      );
+      await this.eventsService.upsertMemberRole(
+        saved.aliasId,
+        EventMemberRole.PROGRAM,
+        { userId: null, email: saved.email, firstName: saved.name },
+      );
     }
     await this.activityLogService.record(
       saved.aliasId,
