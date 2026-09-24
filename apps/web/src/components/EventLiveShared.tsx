@@ -9,11 +9,13 @@ import {
   PartyPopper,
   Trophy,
   Users,
+  Heart,
 } from "lucide-react";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import type { LiveScheduleItem } from "@/lib/eventLiveSchedule";
 import { cn } from "@/lib/utils";
-import type { ScheduleEntryType } from "@/api/client";
+import type { Event, ScheduleEntryType } from "@/api/client";
+import { canRateEvent, useEventFeedbackStore } from "@/store/eventFeedback";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +56,9 @@ export interface EventNavTab {
   current?: boolean;
   badge?: number;
   onClick?: () => void;
+  // Só nos menus lateral/☰, nunca na barra inferior mobile (5 posições
+  // fixas) — ex. "Avaliar evento".
+  sidebarOnly?: boolean;
 }
 
 export function buildEventNavTabs(opts: {
@@ -72,6 +77,9 @@ export function buildEventNavTabs(opts: {
   // do menu inferior — ver lib/eventNavPriority.ts. Default "resultados"
   // (comportamento de sempre) pra quem já chama sem passar isso.
   centerTab?: "resultados" | "notas";
+  // Com o evento, entra "Avaliar evento" abaixo de Notificações pra quem
+  // pode avaliar (ver canRateEvent).
+  event?: Event | null;
 }): EventNavTab[] {
   const resultadosTab: EventNavTab = {
     key: "resultados",
@@ -112,6 +120,17 @@ export function buildEventNavTabs(opts: {
       onClick: opts.onNavigateNotifications,
       badge: opts.notificationsUnreadCount ?? 0,
     },
+    ...(canRateEvent(opts.event)
+      ? [
+          {
+            key: "avaliar",
+            label: "Avaliar evento",
+            icon: Heart,
+            onClick: () => useEventFeedbackStore.getState().open(opts.event!),
+            sidebarOnly: true,
+          },
+        ]
+      : []),
   ];
 }
 
@@ -145,8 +164,9 @@ export function EventLiveBottomNav({
   overflowKeys?: string[];
   className?: string;
 }) {
-  const primaryTabs = tabs.filter((tab) => !overflowKeys.includes(tab.key));
-  const overflowTabs = tabs.filter((tab) => overflowKeys.includes(tab.key));
+  const barTabs = tabs.filter((tab) => !tab.sidebarOnly);
+  const primaryTabs = barTabs.filter((tab) => !overflowKeys.includes(tab.key));
+  const overflowTabs = barTabs.filter((tab) => overflowKeys.includes(tab.key));
   const overflowBadge = overflowTabs.reduce((sum, tab) => sum + (tab.badge ?? 0), 0);
   const overflowCurrent = overflowTabs.some((tab) => tab.current);
 

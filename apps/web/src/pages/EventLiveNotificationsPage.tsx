@@ -69,6 +69,7 @@ export function EventLiveNotificationsPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "notificacoes",
+    event,
     onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
     onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),

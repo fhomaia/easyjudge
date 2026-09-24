@@ -228,6 +228,7 @@ export function EventLiveResultsPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "resultados",
+    event,
     onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
     onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),

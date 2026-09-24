@@ -5,6 +5,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { GuestRoute } from "@/components/GuestRoute";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { UploadStatusBanner } from "@/components/UploadStatusBanner";
+import { EventFeedbackHost } from "@/components/EventFeedbackHost";
 
 const HomePage = lazy(() =>
   import("@/pages/HomePage").then((m) => ({ default: m.HomePage })),
@@ -98,6 +99,9 @@ const AthleteProgramsPage = lazy(() =>
 const ProfilePage = lazy(() =>
   import("@/pages/ProfilePage").then((m) => ({ default: m.ProfilePage })),
 );
+const PlatformFeedbackPage = lazy(() =>
+  import("@/pages/PlatformFeedbackPage").then((m) => ({ default: m.PlatformFeedbackPage })),
+);
 const JoinEventPage = lazy(() =>
   import("@/pages/JoinEventPage").then((m) => ({ default: m.JoinEventPage })),
 );
@@ -173,11 +177,13 @@ function App() {
           <Route path="/athletes" element={<AthletesManagementPage />} />
           <Route path="/athletes/programs" element={<AthleteProgramsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/admin/feedback" element={<PlatformFeedbackPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
     <UploadStatusBanner />
+    <EventFeedbackHost />
     </>
   );
 }

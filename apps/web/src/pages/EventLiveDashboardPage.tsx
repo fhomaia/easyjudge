@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { EventFeedbackHeaderButton } from "@/components/EventFeedbackHeaderButton";
 import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
@@ -389,6 +390,7 @@ export function EventLiveDashboardPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "inicio",
+    event,
     onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
     onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),
@@ -425,6 +427,7 @@ export function EventLiveDashboardPage() {
             {formatEventDateRange(event.startDate, event.competitionDays)} · {event.location}
           </p>
         </div>
+        <EventFeedbackHeaderButton event={event} />
         <button
           type="button"
           aria-label="Notificações"

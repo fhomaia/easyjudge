@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { EventFeedbackHeaderButton } from "@/components/EventFeedbackHeaderButton";
 import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
@@ -159,6 +160,7 @@ export function EventLiveNotesPage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "notas",
+    event,
     onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
     onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),
@@ -402,6 +404,7 @@ export function EventLiveNotesPage() {
             {formatDate(event.startDate)} · {event.location}
           </p>
         </div>
+        <EventFeedbackHeaderButton event={event} />
         <button
           type="button"
           aria-label="Notificações"

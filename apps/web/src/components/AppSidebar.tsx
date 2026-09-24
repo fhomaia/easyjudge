@@ -4,8 +4,10 @@ import {
   ChevronRight,
   CircleHelp,
   Eye,
+  Inbox,
   LogOut,
   Menu,
+  MessageSquareHeart,
   UserCog,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -20,6 +22,7 @@ import {
 } from "@/components/MobileNavSheet";
 import { ImpersonateDialog } from "@/components/ImpersonateDialog";
 import { HelpDialog } from "@/components/HelpDialog";
+import { PlatformFeedbackDialog } from "@/components/PlatformFeedbackDialog";
 import { useAuthStore } from "@/store/auth";
 import { useSidebarCollapseStore } from "@/store/sidebarCollapse";
 import type { UserProfile } from "@/api/client";
@@ -134,6 +137,7 @@ function ProfileFooter({
   const navigate = useNavigate();
   const [impersonateOpen, setImpersonateOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const canImpersonate = profile?.email.toLowerCase() === IMPERSONATOR_EMAIL;
   const impersonatorToken = useAuthStore((s) => s.impersonatorToken);
   const impersonatingLabel = useAuthStore((s) => s.impersonatingLabel);
@@ -247,8 +251,27 @@ function ProfileFooter({
             <CircleHelp className="size-4" />
           </button>
           <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+          <button
+            type="button"
+            onClick={() => setFeedbackOpen(true)}
+            aria-label="Avaliar a Cheer Cup"
+            title="Avaliar a Cheer Cup"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <MessageSquareHeart className="size-4" />
+          </button>
+          <PlatformFeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
           {canImpersonate && (
             <>
+              <button
+                type="button"
+                onClick={() => navigate("/admin/feedback")}
+                aria-label="Avaliações da Cheer Cup"
+                title="Avaliações da Cheer Cup"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <Inbox className="size-4" />
+              </button>
               <button
                 type="button"
                 onClick={() => setImpersonateOpen(true)}

@@ -4,7 +4,9 @@ import {
   Calculator,
   CalendarDays,
   CircleHelp,
+  Inbox,
   LogOut,
+  MessageSquareHeart,
   Users,
   X,
 } from "lucide-react";
@@ -13,6 +15,8 @@ import { cn } from "@/lib/utils";
 import { getAccountLabel } from "@/lib/roleLabels";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { HelpDialog } from "@/components/HelpDialog";
+import { PlatformFeedbackDialog } from "@/components/PlatformFeedbackDialog";
+import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
 import type { UserProfile, UserRole } from "@/api/client";
 
 // `mobile: false` tira o item do menu hambúrguer sem afetar a sidebar de
@@ -135,6 +139,7 @@ export function MobileNavSheet({
 }: MobileNavSheetProps) {
   const location = useLocation();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   function goTo(href: string) {
     onNavigate(href);
@@ -267,6 +272,26 @@ export function MobileNavSheet({
               </button>
               <button
                 type="button"
+                onClick={() => setFeedbackOpen(true)}
+                aria-label="Avaliar a Cheer Cup"
+                title="Avaliar a Cheer Cup"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <MessageSquareHeart className="size-4" />
+              </button>
+              {profile?.email.toLowerCase() === IMPERSONATOR_EMAIL && (
+                <button
+                  type="button"
+                  onClick={() => goTo("/admin/feedback")}
+                  aria-label="Avaliações da Cheer Cup"
+                  title="Avaliações da Cheer Cup"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <Inbox className="size-4" />
+                </button>
+              )}
+              <button
+                type="button"
                 onClick={onLogout}
                 aria-label="Sair"
                 className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
@@ -278,6 +303,7 @@ export function MobileNavSheet({
         </SheetContent>
       </Sheet>
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <PlatformFeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </>
   );
 }

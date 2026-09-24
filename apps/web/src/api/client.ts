@@ -1762,6 +1762,68 @@ export const adminScoringApi = {
     }),
 };
 
+// Avaliações (2026-09-24): do evento (uma por pessoa, editável; o
+// produtor vê quem avaliou) e da plataforma (cada envio é uma linha;
+// só o dono da Cheer Cup lista). Separadas de propósito.
+export interface MyEventFeedback {
+  rating: number;
+  comment: string | null;
+  updatedAt: string;
+}
+
+export interface FeedbackSummary {
+  count: number;
+  average: number | null;
+  distribution: number[];
+}
+
+export interface EventFeedbackItem {
+  id: string;
+  userName: string;
+  userEmail: string;
+  roles: EventMemberRole[];
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlatformFeedbackItem {
+  id: string;
+  userName: string;
+  userEmail: string;
+  userRole: string;
+  rating: number;
+  comment: string | null;
+  page: string | null;
+  createdAt: string;
+}
+
+export const feedbackApi = {
+  getMine: (eventId: string) =>
+    authRequest<MyEventFeedback | null>(`/events/${eventId}/feedback/me`),
+
+  saveMine: (eventId: string, payload: { rating: number; comment?: string }) =>
+    authRequest<MyEventFeedback>(`/events/${eventId}/feedback/me`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  listForEvent: (eventId: string) =>
+    authRequest<{ summary: FeedbackSummary; items: EventFeedbackItem[] }>(
+      `/events/${eventId}/feedback`,
+    ),
+
+  sendPlatform: (payload: { rating: number; comment?: string; page?: string }) =>
+    authRequest<void>(`/feedback/platform`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listPlatform: () =>
+    authRequest<{ summary: FeedbackSummary; items: PlatformFeedbackItem[] }>(`/feedback/platform`),
+};
+
 export const resultsApi = {
   get: (eventId: string) =>
     authRequest<EventResultsResponse>(`/events/${eventId}/scoring/results`),

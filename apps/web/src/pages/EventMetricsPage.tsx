@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { FeedbackOverview } from "@/components/FeedbackOverview";
+import { EVENT_MEMBER_ROLE_LABELS } from "@/lib/eventMemberRoles";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -24,9 +26,12 @@ import { autoFormatKeyLabel } from "@/lib/autoFormatKey";
 import {
   eventsApi,
   eventMetricsApi,
+  feedbackApi,
   usersApi,
   type Event,
+  type EventFeedbackItem,
   type EventMetricsResponse,
+  type FeedbackSummary,
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
@@ -65,8 +70,9 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 // Tela dedicada de métricas gerais do evento (2026-09-23, a pedido do
 // usuário) — só admin/assessor (useEventSetupGuard, mesmo gate de
 // EventHistoryPage/EventStaffPage). Alcançada só pelo menu "⋯" da
-// listagem de eventos (ver EventActionsMenu). Puramente leitura
-// agregada, sem dado sensível por pessoa (só contagens).
+// listagem de eventos (ver EventActionsMenu). Leitura agregada (só
+// contagens) + as avaliações do evento, com o nome de quem avaliou
+// (decisão do usuário, 2026-09-24).
 export function EventMetricsPage() {
   const { id } = useParams<{ id: string }>();
   const notificationsUnreadCount = useNotificationsUnreadCount(id);
@@ -78,6 +84,9 @@ export function EventMetricsPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [metrics, setMetrics] = useState<EventMetricsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ summary: FeedbackSummary; items: EventFeedbackItem[] } | null>(
+    null,
+  );
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -90,6 +99,10 @@ export function EventMetricsPage() {
       .get(id)
       .then(setMetrics)
       .catch(() => setError("Não foi possível carregar as métricas do evento."));
+    feedbackApi
+      .listForEvent(id)
+      .then(setFeedback)
+      .catch(() => setFeedback(null));
   }, [id]);
 
   function handleLogout() {
@@ -176,6 +189,25 @@ export function EventMetricsPage() {
                   <MetricDonutChart colorMode="categorical" items={metrics.programsByState} />
                 </ChartCard>
               </div>
+
+              {feedback && (
+                <ChartCard title="Avaliações do evento">
+                  <FeedbackOverview
+                    summary={feedback.summary}
+                    emptyMessage="Ninguém avaliou o evento ainda. Os participantes avaliam pelo ícone de coração, a partir da publicação do evento."
+                    items={feedback.items.map((item) => ({
+                      id: item.id,
+                      name: item.userName,
+                      details: [item.userEmail, item.roles.map((r) => EVENT_MEMBER_ROLE_LABELS[r]).join(", ")]
+                        .filter(Boolean)
+                        .join(" · "),
+                      rating: item.rating,
+                      comment: item.comment,
+                      date: item.updatedAt,
+                    }))}
+                  />
+                </ChartCard>
+              )}
             </div>
           )}
         </div>

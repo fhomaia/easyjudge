@@ -321,6 +321,7 @@ export function EventLiveSchedulePage() {
 
   const eventNavTabs = buildEventNavTabs({
     current: "cronograma",
+    event,
     onNavigateHome: () => navigate(`/events/${event.aliasId}/live`),
     onNavigateSchedule: () => navigate(`/events/${event.aliasId}/live/schedule`),
     onNavigateNotes: () => navigate(resolveNotesHref(event.aliasId, event.currentUserRoles)),

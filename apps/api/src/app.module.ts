@@ -18,6 +18,7 @@ import { ScheduleModule } from './schedule/schedule.module';
 import { ScoringModule } from './scoring/scoring.module';
 import { AthletesModule } from './athletes/athletes.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { CommonModule } from './common/common.module';
 import { SupportModule } from './support/support.module';
@@ -65,6 +66,7 @@ import { EventMetricsModule } from './event-metrics/event-metrics.module';
     ScoringModule,
     AthletesModule,
     NotificationsModule,
+    FeedbackModule,
     RealtimeModule,
     SupportModule,
     EventMetricsModule,
