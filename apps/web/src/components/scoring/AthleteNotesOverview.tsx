@@ -50,12 +50,12 @@ export function AthleteNotesOverview({ eventId }: AthleteNotesOverviewProps) {
         <Lock className="mx-auto size-6 text-muted-foreground" />
         <p className="mt-2 text-sm font-medium text-foreground">Notas ainda bloqueadas</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Assim que o seu programa confirmar o vínculo (e o produtor liberar as notas do evento),
-          as apresentações da sua equipe aparecem aqui.
+          Assim que o seu programa confirmar o vínculo, as apresentações da sua equipe aparecem
+          aqui. As notas de cada uma são mostradas quando a organização liberar a categoria.
         </p>
       </div>
     );
   }
 
-  return <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />;
+  return <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} hideUnreleased />;
 }

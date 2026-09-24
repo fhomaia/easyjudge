@@ -25,13 +25,12 @@ export class AdminScoringController {
     return this.scoringService.getAdminOverview(eventId);
   }
 
-  // Liberação global do evento (notas/contestação/resultado) — ação
-  // única pro evento inteiro, não por apresentação (rota fixa
-  // "release", precisa vir antes de ":scheduleEntryId" pra não ser
-  // interpretada como um id).
+  // Liberação de notas/contestação/resultado por categoria em cada dia
+  // (rota fixa "release", precisa vir antes de ":scheduleEntryId" pra
+  // não ser interpretada como um id).
   @Get('release')
   getRelease(@Param('eventId') eventId: string) {
-    return this.scoringService.getReleaseFlags(eventId);
+    return this.scoringService.getReleaseState(eventId);
   }
 
   @Patch('release')
@@ -39,7 +38,12 @@ export class AdminScoringController {
     @Param('eventId') eventId: string,
     @Body() dto: SetPresentationReleaseDto,
   ) {
-    return this.scoringService.setReleaseFlags(eventId, dto);
+    const { dayId, categoryId, ...changes } = dto;
+    return this.scoringService.setRelease(
+      eventId,
+      { dayId, categoryId },
+      changes,
+    );
   }
 
   @Get(':scheduleEntryId')

@@ -85,8 +85,8 @@ export class ScheduleEntry {
   // apresentação só pode ser contestada uma única vez": uma vez
   // preenchido, a apresentação fica contestada pra sempre, mesmo
   // depois de resolvida. Liberação de notas/contestação/resultado NÃO
-  // fica aqui — virou ação global do evento (ver Event.scoresReleasedAt/
-  // contestationReleasedAt/resultsReleasedAt), não por apresentação.
+  // fica aqui — hoje é por categoria em cada dia (ver CategoryDayRelease), não por
+  // apresentação.
   @Column({
     name: 'contestation_requested_at',
     type: 'timestamptz',

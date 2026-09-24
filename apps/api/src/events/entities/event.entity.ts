@@ -62,17 +62,10 @@ export class Event {
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt: Date | null;
 
-  // Liberação de notas/contestação/resultado pra equipe/atletas — ação
-  // global do evento (não mais por apresentação, ver EventsService.
-  // setReleaseFlags), pensada pro produtor liberar tudo de uma vez ao
-  // fim da competição em vez de visitar apresentação por apresentação.
-  // Estado mutável simples (não event-sourced): é "a última vontade do
-  // admin". Ligar `contestationReleasedAt` liga `scoresReleasedAt`
-  // junto (não dá pra contestar sem poder ver a nota); desligar
-  // `scoresReleasedAt` desliga `contestationReleasedAt` junto.
-  // `resultsReleasedAt` (resultado final/ranking) é independente — não
-  // participa dessa cascata, um produtor pode querer revelar o
-  // resultado final sem abrir o detalhamento de notas por critério.
+  // OBSOLETAS desde 2026-09-24: a liberação passou a ser por categoria
+  // em cada dia (ver CategoryDayRelease/ReleasesService). As colunas
+  // ficam no banco (a migration CreateCategoryDayReleases copiou o
+  // valor delas pra category_day_releases), mas não são mais lidas.
   @Column({ name: 'scores_released_at', type: 'timestamptz', nullable: true })
   scoresReleasedAt: Date | null;
 

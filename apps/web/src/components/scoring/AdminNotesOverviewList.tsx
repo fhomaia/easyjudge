@@ -15,9 +15,13 @@ import type { AdminOverviewEntry } from "@/api/client";
 interface AdminNotesOverviewListProps {
   entries: AdminOverviewEntry[];
   onSelect: (scheduleEntryId: string) => void;
+  // Visão de Programa/Atleta: apresentação cuja categoria ainda não teve
+  // as notas liberadas naquele dia aparece sem nota, com o selo
+  // "Aguardando liberação", e não abre (ver backend ReleasesService).
+  hideUnreleased?: boolean;
 }
 
-export function AdminNotesOverviewList({ entries, onSelect }: AdminNotesOverviewListProps) {
+export function AdminNotesOverviewList({ entries, onSelect, hideUnreleased = false }: AdminNotesOverviewListProps) {
   if (entries.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
@@ -28,50 +32,61 @@ export function AdminNotesOverviewList({ entries, onSelect }: AdminNotesOverview
 
   return (
     <div className="space-y-2">
-      {entries.map((entry) => (
-        <button
-          key={entry.scheduleEntryId}
-          type="button"
-          onClick={() => !entry.withdrawn && onSelect(entry.scheduleEntryId)}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left",
-            entry.withdrawn
-              ? "cursor-default opacity-60"
-              : "cursor-pointer hover:border-primary/40 hover:bg-primary/5",
-          )}
-        >
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{entry.teamName}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {entry.categoryName} · {entry.resourceName}
-            </p>
-            {/* Selos embaixo do nome, não ao lado: na mesma linha eles
-                espremiam o nome da equipe no celular. */}
-            {entry.withdrawn && (
-              <span className="mt-1.5 inline-flex rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
-                Desistência
-              </span>
+      {entries.map((entry) => {
+        const waiting = hideUnreleased && !entry.released && !entry.withdrawn;
+        const inactive = entry.withdrawn || waiting;
+        return (
+          <button
+            key={entry.scheduleEntryId}
+            type="button"
+            onClick={() => !inactive && onSelect(entry.scheduleEntryId)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left",
+              entry.withdrawn
+                ? "cursor-default opacity-60"
+                : waiting
+                  ? "cursor-default"
+                  : "cursor-pointer hover:border-primary/40 hover:bg-primary/5",
             )}
-            {entry.contestationRequested && entry.contestationResolved && (
-              <span className="mt-1.5 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                Contestação resolvida
-              </span>
-            )}
-            {entry.contestationRequested && !entry.contestationResolved && (
-              <span className="mt-1.5 inline-flex rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
-                Contestação
-              </span>
-            )}
-          </div>
-          {!entry.withdrawn && (
-            <div className="shrink-0 text-right">
-              <p className="text-sm font-bold text-foreground">{formatPoints(entry.finalResult)} pts</p>
-              <p className="text-xs text-muted-foreground">{formatPercent(entry.percentage)}</p>
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-foreground">{entry.teamName}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {entry.categoryName} · {entry.resourceName}
+              </p>
+              {/* Selos embaixo do nome, não ao lado: na mesma linha eles
+                  espremiam o nome da equipe no celular. */}
+              {waiting && (
+                <span className="mt-1.5 inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Aguardando liberação
+                </span>
+              )}
+              {entry.withdrawn && (
+                <span className="mt-1.5 inline-flex rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+                  Desistência
+                </span>
+              )}
+              {entry.contestationRequested && entry.contestationResolved && (
+                <span className="mt-1.5 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  Contestação resolvida
+                </span>
+              )}
+              {entry.contestationRequested && !entry.contestationResolved && (
+                <span className="mt-1.5 inline-flex rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
+                  Contestação
+                </span>
+              )}
             </div>
-          )}
-          {!entry.withdrawn && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
-        </button>
-      ))}
+            {!inactive && (
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-bold text-foreground">{formatPoints(entry.finalResult)} pts</p>
+                <p className="text-xs text-muted-foreground">{formatPercent(entry.percentage)}</p>
+              </div>
+            )}
+            {!inactive && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
+          </button>
+        );
+      })}
     </div>
   );
 }

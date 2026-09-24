@@ -12,6 +12,8 @@ import { ResultsController } from './controllers/results.controller';
 import { AthleteScoringController } from './controllers/athlete-scoring.controller';
 import { WithdrawalController } from './controllers/withdrawal.controller';
 import { ScoringService } from './services/scoring.service';
+import { ReleasesService } from './services/releases.service';
+import { CategoryDayRelease } from './entities/category-day-release.entity';
 import { EventsModule } from '../events/events.module';
 import { JudgesModule } from '../judges/judges.module';
 import { JudgingModule } from '../judging/judging.module';
@@ -34,6 +36,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       Team,
       ScheduleEntry,
       ScoringTemplate,
+      CategoryDayRelease,
     ]),
     EventsModule,
     JudgesModule,
@@ -52,6 +55,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AthleteScoringController,
     WithdrawalController,
   ],
-  providers: [ScoringService],
+  providers: [ScoringService, ReleasesService],
 })
 export class ScoringModule {}

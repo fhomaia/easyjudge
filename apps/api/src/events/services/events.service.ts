@@ -28,9 +28,6 @@ import { Regulation } from '../../regulations/entities/regulation.entity';
 import { StorageService } from '../../common/services/storage.service';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
 import { SpecialRoleAssignment } from '../../judging/entities/special-role-assignment.entity';
-import { NotificationsService } from '../../notifications/services/notifications.service';
-import { NotificationType } from '../../notifications/enums/notification-type.enum';
-import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 import { EVENT_STAFF_ROLES } from '../constants/event-staff-roles';
 
 // Entidades filhas endereçadas pelo `aliasId` do evento (estável entre
@@ -126,7 +123,6 @@ export class EventsService {
     private readonly dataSource: DataSource,
     private readonly usersService: UsersService,
     private readonly activityLogService: EventActivityLogService,
-    private readonly notificationsService: NotificationsService,
     private readonly eventEmitter: EventEmitter2,
     private readonly storageService: StorageService,
   ) {}
@@ -426,19 +422,14 @@ export class EventsService {
   // diferente de startEvent, que é admin-only), sem nenhuma regra
   // automática por data (ver CLAUDE.md "Próximos passos" — decisão
   // consciente de deixar 100% manual por enquanto).
-  async completeEvent(
-    aliasId: string,
-    userId: string,
-  ): Promise<EventWithRole> {
+  async completeEvent(aliasId: string, userId: string): Promise<EventWithRole> {
     const event = await this.getOwnEventOrThrow(aliasId, userId, [
       EventMemberRole.ADMIN,
       EventMemberRole.ASSESSOR,
     ]);
 
     if (event.status !== EventStatus.STARTED) {
-      throw new ConflictException(
-        'Só é possível concluir um evento iniciado.',
-      );
+      throw new ConflictException('Só é possível concluir um evento iniciado.');
     }
 
     event.status = EventStatus.COMPLETED;
@@ -543,9 +534,7 @@ export class EventsService {
   async deleteEvent(aliasId: string, userId: string): Promise<void> {
     const event = await this.findEventOrThrow(aliasId);
     if (event.createdById !== userId) {
-      throw new ForbiddenException(
-        'Só quem criou o evento pode excluí-lo.',
-      );
+      throw new ForbiddenException('Só quem criou o evento pode excluí-lo.');
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -612,74 +601,6 @@ export class EventsService {
       actorName: `${log.actor.firstName} ${log.actor.lastName}`.trim(),
       createdAt: log.createdAt,
     }));
-  }
-
-  // Liberação de notas/contestação/resultado pra equipe/atletas — ação
-  // global do evento (ver ScoringService, que é quem chama isto a
-  // partir de AdminScoringController). Cascata: ligar contestação liga
-  // notas junto (não dá pra contestar sem poder ver a nota); desligar
-  // notas desliga contestação junto. `resultsReleased` não participa
-  // dessa cascata — resultado final é uma liberação independente das
-  // outras duas (ver Event.resultsReleasedAt).
-  async setReleaseFlags(
-    aliasId: string,
-    changes: {
-      scoresReleased?: boolean;
-      contestationReleased?: boolean;
-      resultsReleased?: boolean;
-    },
-  ): Promise<Event> {
-    const event = await this.findEventOrThrow(aliasId);
-    // Guardado ANTES de mutar — só dispara notificação na transição
-    // false -> true (liberar de verdade), nunca ao desligar nem ao
-    // "reforçar" um valor que já estava ligado.
-    const wasScoresReleased = !!event.scoresReleasedAt;
-    const wasContestationReleased = !!event.contestationReleasedAt;
-    const wasResultsReleased = !!event.resultsReleasedAt;
-
-    if (changes.scoresReleased !== undefined) {
-      event.scoresReleasedAt = changes.scoresReleased ? new Date() : null;
-      if (!changes.scoresReleased) event.contestationReleasedAt = null;
-    }
-    if (changes.contestationReleased !== undefined) {
-      event.contestationReleasedAt = changes.contestationReleased
-        ? new Date()
-        : null;
-      if (changes.contestationReleased && !event.scoresReleasedAt) {
-        event.scoresReleasedAt = new Date();
-      }
-    }
-    if (changes.resultsReleased !== undefined) {
-      event.resultsReleasedAt = changes.resultsReleased ? new Date() : null;
-    }
-    const saved = await this.eventsRepo.save(event);
-
-    if (!wasScoresReleased && saved.scoresReleasedAt) {
-      await this.notificationsService.create(
-        saved.aliasId,
-        NotificationType.SCORES_RELEASED,
-        NotificationAudience.ALL,
-        'Súmulas disponíveis',
-      );
-    }
-    if (!wasContestationReleased && saved.contestationReleasedAt) {
-      await this.notificationsService.create(
-        saved.aliasId,
-        NotificationType.CONTESTATION_RELEASED,
-        NotificationAudience.ALL,
-        'Período de contestação iniciado',
-      );
-    }
-    if (!wasResultsReleased && saved.resultsReleasedAt) {
-      await this.notificationsService.create(
-        saved.aliasId,
-        NotificationType.RESULTS_RELEASED,
-        NotificationAudience.ALL,
-        'Resultado disponível',
-      );
-    }
-
-    return saved;
   }
 
   // Resolve o `aliasId` (identidade lógica estável do evento através das
@@ -778,7 +699,10 @@ export class EventsService {
   // findAllForUser), mas continua sem conseguir abrir o evento de
   // verdade até published (ver findOneForUser/canSee, inalterado).
   async joinByCode(code: string, userId: string): Promise<EventWithRole> {
-    const normalized = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const normalized = code
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
     const event = await this.eventsRepo.findOneBy({
       eventCode: normalized,
       active: true,

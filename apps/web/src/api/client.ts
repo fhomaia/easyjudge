@@ -1573,6 +1573,11 @@ export interface AdminOverviewEntry {
   categoryName: string;
   resourceName: string;
   dayDate: string;
+  scheduleDayId: string;
+  categoryId: string;
+  // Notas desta categoria já liberadas neste dia. Na visão do Programa/
+  // Atleta, `false` vem com nota zerada ("Aguardando liberação").
+  released: boolean;
   contestationRequested: boolean;
   contestationResolved: boolean;
   finalResult: number;
@@ -1580,13 +1585,26 @@ export interface AdminOverviewEntry {
   withdrawn: boolean;
 }
 
-// Liberação global do evento — "Liberar notas"/"Liberar contestação"/
-// "Liberar resultado", um switch só por evento (não mais por
-// apresentação — ver ScoringService.getReleaseFlags/setReleaseFlags).
-export interface ReleaseFlags {
+// Liberação de notas/contestação/resultado por categoria em cada dia do
+// cronograma com apresentação (ver backend ReleasesService). As chaves
+// do dia valem "todas as categorias deste dia liberadas".
+export interface ReleaseCategory {
+  categoryId: string;
+  categoryName: string;
+  presentationCount: number;
   scoresReleased: boolean;
   contestationReleased: boolean;
   resultsReleased: boolean;
+}
+
+export interface ReleaseDay {
+  dayId: string;
+  date: string;
+  dayIndex: number;
+  scoresReleased: boolean;
+  contestationReleased: boolean;
+  resultsReleased: boolean;
+  categories: ReleaseCategory[];
 }
 
 // `value` já é a média quando mais de um jurado pontua o mesmo
@@ -1633,7 +1651,10 @@ export interface PresentationDetail {
   contestationRequested: boolean;
 }
 
-export interface SetReleaseFlagsPayload {
+// Sem `categoryId` = todas as categorias do dia (a chave do dia).
+export interface SetReleasePayload {
+  dayId: string;
+  categoryId?: string;
   scoresReleased?: boolean;
   contestationReleased?: boolean;
   resultsReleased?: boolean;
@@ -1701,14 +1722,23 @@ export interface EventResults {
   updatedAt: string;
 }
 
-// Resposta pública da página de Resultados (ver ResultsController) —
-// admin/assessor/jurado sempre vêm `released: true`; programa/
-// espectador só depois que o admin ligar "Liberar resultado" em
-// ReleaseFlagsPanel (Event.resultsReleasedAt). `results` vem `null`
-// enquanto não liberado.
-export interface EventResultsResponse {
+// Página de Resultados: um bloco por dia com apresentação.
+// `released`: alguma categoria do dia já tem resultado liberado (staff
+// sempre true); `results` vem `null` enquanto nada foi liberado.
+// `complete`: todas as categorias do dia liberadas; antes disso os
+// rankings que cruzam categorias (destaques, modalidade, programa) vêm
+// vazios.
+export interface ResultsDay {
+  dayId: string;
+  date: string;
+  dayIndex: number;
   released: boolean;
+  complete: boolean;
   results: EventResults | null;
+}
+
+export interface EventResultsResponse {
+  days: ResultsDay[];
 }
 
 export const adminScoringApi = {
@@ -1723,10 +1753,10 @@ export const adminScoringApi = {
     ),
 
   getRelease: (eventId: string) =>
-    authRequest<ReleaseFlags>(`/events/${eventId}/scoring/admin/release`),
+    authRequest<ReleaseDay[]>(`/events/${eventId}/scoring/admin/release`),
 
-  setRelease: (eventId: string, payload: SetReleaseFlagsPayload) =>
-    authRequest<ReleaseFlags>(`/events/${eventId}/scoring/admin/release`, {
+  setRelease: (eventId: string, payload: SetReleasePayload) =>
+    authRequest<ReleaseDay[]>(`/events/${eventId}/scoring/admin/release`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),

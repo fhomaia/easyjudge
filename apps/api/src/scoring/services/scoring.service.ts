@@ -38,6 +38,13 @@ import {
   UNKNOWN_DEDUCTION_LABEL,
 } from '../../scoring-templates/constants/iasf-deductions';
 import { NotificationsService } from '../../notifications/services/notifications.service';
+import {
+  ReleasesService,
+  presentationCategoriesByDay,
+  type ReleaseChanges,
+  type ReleaseDayView,
+} from './releases.service';
+import type { ScheduleDayView } from '../../schedule/services/schedule.service';
 import { NotificationType } from '../../notifications/enums/notification-type.enum';
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 
@@ -187,9 +194,14 @@ export interface AdminOverviewEntryView {
   categoryName: string;
   resourceName: string;
   dayDate: string;
-  // scoresReleased/contestationReleased NÃO ficam mais aqui — viraram
-  // ação global do evento (ver ReleaseFlagsView/getReleaseFlags), não
-  // faz mais sentido repetir o mesmo valor em toda linha da lista.
+  // Dia e categoria da apresentação — a tela de Notas agrupa por eles e
+  // a liberação é por categoria em cada dia (ver ReleasesService).
+  scheduleDayId: string;
+  categoryId: string;
+  // Notas desta categoria já liberadas neste dia. Na visão do Programa/
+  // Atleta, apresentação ainda não liberada vem com `released: false` e
+  // nota zerada (a tela mostra "Aguardando liberação").
+  released: boolean;
   contestationRequested: boolean;
   // Diferente de PresentationDetailView/ScoringSheetView (que também
   // têm esse campo) — aqui é o que dá pra badge da LISTA trocar de
@@ -207,15 +219,6 @@ export interface AdminOverviewEntryView {
   // true e finalResult/percentage zerados (nunca foi avaliada de
   // verdade).
   withdrawn: boolean;
-}
-
-// Liberação global do evento — "Liberar notas"/"Liberar contestação"/
-// "Liberar resultado", um switch só por evento (ver
-// EventsService.setReleaseFlags pela cascata entre os dois primeiros).
-export interface ReleaseFlagsView {
-  scoresReleased: boolean;
-  contestationReleased: boolean;
-  resultsReleased: boolean;
 }
 
 // `value` já é a MÉDIA quando mais de um jurado pontua o mesmo
@@ -265,10 +268,9 @@ export interface PresentationDetailView {
 // Página de Resultados (produtor/admin) — agregação read-only sobre as
 // mesmas apresentações "100% pontuadas" já usadas em getAdminOverview,
 // só que aqui calculamos nota final/percentual de cada uma pra rankear
-// por categoria, por equipe (cross-categoria) e por programa. Não
-// depende de `resultsReleasedAt` (isso vai gatear a visão de
-// equipes/atletas quando essa jornada existir — aqui é a visão de
-// trabalho do próprio admin/assessor).
+// por categoria, por equipe (cross-categoria) e por programa. Quem não
+// é staff só recebe o que já foi liberado por categoria em cada dia
+// (ver getPublicEventResults/ReleasesService).
 export interface ResultsPresentationView {
   scheduleEntryId: string;
   teamId: string;
@@ -334,15 +336,22 @@ export interface EventResultsView {
   updatedAt: string;
 }
 
-// Resposta da página de Resultados pública (ver ResultsController) —
-// admin/assessor/jurado sempre veem (`released: true`); programa/
-// espectador (e, futuramente, atleta) só depois que o admin acionar
-// `Event.resultsReleasedAt` (ver ReleaseFlagsPanel na tela de Notas).
-// Antes disso `results` vem `null` e o front mostra um aviso de "em
-// breve".
-export interface EventResultsResponse {
+// Um dia do cronograma com apresentação (ver ResultsController).
+// `released`: alguma categoria do dia já tem resultado liberado (staff
+// sempre true). `complete`: TODAS as categorias do dia liberadas; só
+// então entram os rankings que cruzam categorias (geral, modalidade,
+// programa, destaques) — antes disso eles vêm vazios.
+export interface ResultsDayView {
+  dayId: string;
+  date: string;
+  dayIndex: number;
   released: boolean;
+  complete: boolean;
   results: EventResultsView | null;
+}
+
+export interface EventResultsResponse {
+  days: ResultsDayView[];
 }
 
 type PresentationResult = {
@@ -374,6 +383,7 @@ export class ScoringService {
     private readonly programsService: ProgramsService,
     private readonly athletesService: AthletesService,
     private readonly notificationsService: NotificationsService,
+    private readonly releasesService: ReleasesService,
   ) {}
 
   // Monta a folha de pontuação de UMA apresentação pro jurado logado —
@@ -803,7 +813,10 @@ export class ScoringService {
     const days = await this.scheduleService.getDays(eventId);
     const deductionsCache = new Map<string, DeductionRuleView[]>();
 
-    const completed = await this.findCompletedEntries(eventId, days);
+    const [completed, releaseMap] = await Promise.all([
+      this.findCompletedEntries(eventId, days),
+      this.releasesService.getReleaseMap(eventId),
+    ]);
     const scoreResults = await this.computePresentationResults(
       completed
         .filter(({ entry }) => !entry.withdrawnAt)
@@ -815,7 +828,7 @@ export class ScoringService {
     );
 
     const results: AdminOverviewEntryView[] = [];
-    for (const { day, resource, entry } of completed) {
+    for (const { day, resource, entry, category } of completed) {
       const { finalResult, percentage } = entry.withdrawnAt
         ? { finalResult: 0, percentage: 0 }
         : scoreResults.get(entry.id)!;
@@ -826,6 +839,9 @@ export class ScoringService {
         categoryName: entry.categoryName ?? '',
         resourceName: resource.name,
         dayDate: day.date,
+        scheduleDayId: day.id,
+        categoryId: category.id,
+        released: releaseMap.isReleased(day.id, category.id, 'scores'),
         contestationRequested: !!entry.contestationRequestedAt,
         contestationResolved: !!entry.contestationResolvedAt,
         finalResult,
@@ -1098,12 +1114,21 @@ export class ScoringService {
   // nota final + percentual de cada apresentação (finalResult / meta de
   // pontos do template) pra montar os 3 rankings (categoria/equipe/
   // programa) e os 3 destaques do topo da página.
-  async getEventResults(eventId: string): Promise<EventResultsView> {
+  // `dayId`/`includeCategory` restringem a apuração a um dia e às
+  // categorias liberadas (ver getPublicEventResults).
+  async getEventResults(
+    eventId: string,
+    opts: {
+      days?: ScheduleDayView[];
+      dayId?: string;
+      includeCategory?: (categoryId: string) => boolean;
+    } = {},
+  ): Promise<EventResultsView> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const deductionsCache = new Map<string, DeductionRuleView[]>();
 
     const [days, teams, programs] = await Promise.all([
-      this.scheduleService.getDays(eventId),
+      opts.days ?? this.scheduleService.getDays(eventId),
       this.teamsRepo
         .createQueryBuilder('team')
         .innerJoin('team.program', 'program', 'program.aliasId = :aliasId', {
@@ -1136,7 +1161,11 @@ export class ScoringService {
     // Desistência nunca tem nota (só dá pra desistir antes do primeiro
     // ScoreEvent), então fica fora do resultado.
     const completed = (await this.findCompletedEntries(eventId, days)).filter(
-      ({ entry }) => !entry.withdrawnAt && teamsById.has(entry.teamId!),
+      ({ day, entry, category }) =>
+        !entry.withdrawnAt &&
+        teamsById.has(entry.teamId!) &&
+        (!opts.dayId || day.id === opts.dayId) &&
+        (!opts.includeCategory || opts.includeCategory(category.id)),
     );
     const scoreResults = await this.computePresentationResults(
       completed.map(({ entry, category }) => ({
@@ -1289,16 +1318,15 @@ export class ScoringService {
     };
   }
 
-  // Página de Resultados pública (ver ResultsController/EventResultsView
-  // resposta) — admin/assessor/jurado sempre veem a apuração de
-  // trabalho (mesma de getEventResults); programa/espectador só depois
-  // que `Event.resultsReleasedAt` for ligado pelo admin (toggle
-  // "Liberar resultado" em ReleaseFlagsPanel).
+  // Página de Resultados (ver ResultsController): um bloco por dia com
+  // apresentação. Admin/assessor/jurado sempre veem tudo; os demais só
+  // as categorias com resultado liberado naquele dia, e os rankings que
+  // cruzam categorias só quando o dia inteiro estiver liberado.
   async getPublicEventResults(
     eventId: string,
     userId: string,
   ): Promise<EventResultsResponse> {
-    const { event, member } = await this.eventsService.getMemberForEventId(
+    const { member } = await this.eventsService.getMemberForEventId(
       eventId,
       userId,
     );
@@ -1307,56 +1335,75 @@ export class ScoringService {
       EventMemberRole.ASSESSOR,
       EventMemberRole.JUDGE,
     ];
-    const isAlwaysReleased = !!member?.roles.some((r) =>
+    const isStaff = !!member?.roles.some((r) =>
       alwaysReleasedRoles.includes(r),
     );
-    const released = isAlwaysReleased || !!event.resultsReleasedAt;
-    if (!released) return { released: false, results: null };
-    return { released: true, results: await this.getEventResults(eventId) };
+    const days = await this.scheduleService.getDays(eventId);
+    const releaseMap = isStaff
+      ? null
+      : await this.releasesService.getReleaseMap(eventId);
+
+    const result: ResultsDayView[] = [];
+    for (const { day, categories } of presentationCategoriesByDay(days)) {
+      const releasedIds = new Set(
+        categories
+          .filter(
+            (c) =>
+              !releaseMap || releaseMap.isReleased(day.id, c.id, 'results'),
+          )
+          .map((c) => c.id),
+      );
+      const base = { dayId: day.id, date: day.date, dayIndex: day.dayIndex };
+      if (releasedIds.size === 0) {
+        result.push({
+          ...base,
+          released: false,
+          complete: false,
+          results: null,
+        });
+        continue;
+      }
+      const complete = releasedIds.size === categories.length;
+      const results = await this.getEventResults(eventId, {
+        days,
+        dayId: day.id,
+        includeCategory: (id) => releasedIds.has(id),
+      });
+      if (!complete) {
+        results.modalities = [];
+        results.presentations = [];
+        results.programs = [];
+        results.topOverall = null;
+        results.topTeamCheer = null;
+        results.topProgram = null;
+      }
+      result.push({ ...base, released: true, complete, results });
+    }
+    return { days: result };
   }
 
-  // Liberação global do evento (ver ReleaseFlagsView) — usado pelo
-  // painel do admin/assessor pra saber o estado atual dos 3 switches.
-  async getReleaseFlags(eventId: string): Promise<ReleaseFlagsView> {
-    const event = await this.eventsService.findEventOrThrow(eventId);
-    return {
-      scoresReleased: !!event.scoresReleasedAt,
-      contestationReleased: !!event.contestationReleasedAt,
-      resultsReleased: !!event.resultsReleasedAt,
-    };
+  // Estado das chaves de liberação por dia/categoria (painel do admin).
+  getReleaseState(eventId: string): Promise<ReleaseDayView[]> {
+    return this.releasesService.getReleaseState(eventId);
   }
 
-  // Toggles do admin — liberar notas/contestação/resultado, ação
-  // global do evento (ver EventsService.setReleaseFlags pela cascata).
-  async setReleaseFlags(
+  setRelease(
     eventId: string,
-    changes: {
-      scoresReleased?: boolean;
-      contestationReleased?: boolean;
-      resultsReleased?: boolean;
-    },
-  ): Promise<ReleaseFlagsView> {
-    const event = await this.eventsService.setReleaseFlags(eventId, changes);
-    return {
-      scoresReleased: !!event.scoresReleasedAt,
-      contestationReleased: !!event.contestationReleasedAt,
-      resultsReleased: !!event.resultsReleasedAt,
-    };
+    scope: { dayId: string; categoryId?: string },
+    changes: ReleaseChanges,
+  ): Promise<ReleaseDayView[]> {
+    return this.releasesService.setRelease(eventId, scope, changes);
   }
 
   // Visão do Programa (dono da equipe) na tela de notas — só as
-  // apresentações das PRÓPRIAS equipes, quando as notas já foram
-  // liberadas globalmente pro evento (`Event.scoresReleasedAt`).
-  // Continua exigindo completude (mesmo critério do overview do
-  // admin) — mesmo com o switch ligado, não faz sentido mostrar uma
-  // apresentação que nenhum jurado terminou de pontuar ainda.
+  // apresentações das PRÓPRIAS equipes. Continua exigindo completude
+  // (mesmo critério do overview do admin); as que ainda não foram
+  // liberadas (categoria no dia, ver ReleasesService) vêm com
+  // `released: false` e sem nota.
   async getTeamOverview(
     eventId: string,
     userId: string,
   ): Promise<AdminOverviewEntryView[]> {
-    const event = await this.eventsService.findEventOrThrow(eventId);
-    if (!event.scoresReleasedAt) return [];
-
     const participation = await this.assertProgramParticipation(
       eventId,
       userId,
@@ -1375,17 +1422,16 @@ export class ScoringService {
   // programas com vínculo CONFIRMADO (ver AthletesService.
   // getConfirmedProgramUserIds — um atleta pode estar ligado a mais de
   // um programa). `locked: true` quando não há nenhum programa
-  // confirmado com participação NESTE evento, ou quando as notas ainda
-  // não foram liberadas globalmente — a tela mostra um aviso de "aguardando
-  // confirmação" nesse caso, mesmo padrão de `EventResultsResponse.released`.
+  // confirmado com participação NESTE evento — a tela mostra um aviso
+  // de "aguardando confirmação" nesse caso. Liberação das notas é por
+  // apresentação (`released` em cada linha, ver getTeamOverview).
   async getAthleteOverview(
     eventId: string,
     userId: string,
   ): Promise<{ locked: boolean; entries: AdminOverviewEntryView[] }> {
-    const event = await this.eventsService.findEventOrThrow(eventId);
     const programUserIds =
       await this.athletesService.getConfirmedProgramUserIds(userId);
-    if (programUserIds.length === 0 || !event.scoresReleasedAt) {
+    if (programUserIds.length === 0) {
       return { locked: true, entries: [] };
     }
 
@@ -1420,6 +1466,7 @@ export class ScoringService {
     teamIds: Set<string>,
   ): Promise<AdminOverviewEntryView[]> {
     const days = await this.scheduleService.getDays(eventId);
+    const releaseMap = await this.releasesService.getReleaseMap(eventId);
     const deductionsCache = new Map<string, DeductionRuleView[]>();
     const templateCache = new Map<string, CriterionAssignmentsState>();
     const categoryCache = new Map<string, Category | null>();
@@ -1477,13 +1524,19 @@ export class ScoringService {
           );
           if (!complete && !entry.withdrawnAt) continue;
 
-          const { finalResult, percentage } = entry.withdrawnAt
-            ? { finalResult: 0, percentage: 0 }
-            : await this.computePresentationResult(
-                entry.id,
-                category,
-                deductionsCache,
-              );
+          const released = releaseMap.isReleased(
+            day.id,
+            entry.categoryId,
+            'scores',
+          );
+          const { finalResult, percentage } =
+            entry.withdrawnAt || !released
+              ? { finalResult: 0, percentage: 0 }
+              : await this.computePresentationResult(
+                  entry.id,
+                  category,
+                  deductionsCache,
+                );
 
           results.push({
             scheduleEntryId: entry.id,
@@ -1491,6 +1544,9 @@ export class ScoringService {
             categoryName: entry.categoryName ?? '',
             resourceName: resource.name,
             dayDate: day.date,
+            scheduleDayId: day.id,
+            categoryId: entry.categoryId,
+            released,
             contestationRequested: !!entry.contestationRequestedAt,
             contestationResolved: !!entry.contestationResolvedAt,
             finalResult,
@@ -1527,10 +1583,11 @@ export class ScoringService {
       throw new BadRequestException('Apresentação sem equipe definida.');
     }
     await this.assertProgramOwnsTeam(eventId, userId, entry.teamId);
-    const event = await this.eventsService.findEventOrThrow(eventId);
-    if (!event.scoresReleasedAt) {
+    if (
+      !(await this.releasesService.isEntryReleased(eventId, entry, 'scores'))
+    ) {
       throw new ForbiddenException(
-        'As notas deste evento ainda não foram liberadas.',
+        'As notas desta apresentação ainda não foram liberadas.',
       );
     }
     return this.buildPresentationDetail(eventId, scheduleEntryId);
@@ -1551,10 +1608,11 @@ export class ScoringService {
     if (!entry.teamId) {
       throw new BadRequestException('Apresentação sem equipe definida.');
     }
-    const event = await this.eventsService.findEventOrThrow(eventId);
-    if (!event.scoresReleasedAt) {
+    if (
+      !(await this.releasesService.isEntryReleased(eventId, entry, 'scores'))
+    ) {
       throw new ForbiddenException(
-        'As notas deste evento ainda não foram liberadas.',
+        'As notas desta apresentação ainda não foram liberadas.',
       );
     }
     const programUserIds =
@@ -1585,7 +1643,7 @@ export class ScoringService {
   }
 
   // Equipe solicita contestação — só se a apresentação for dela E a
-  // contestação estiver liberada globalmente pro evento. Idempotente
+  // contestação estiver liberada pra categoria dela naquele dia. Idempotente
   // (ver ScheduleService.setContestationRequested — isso continua por
   // apresentação, é o PEDIDO de contestação de uma rotina específica,
   // não a liberação em si).
@@ -1609,10 +1667,15 @@ export class ScoringService {
     if (entry.contestationRequestedAt) {
       throw new ConflictException('Esta apresentação já foi contestada.');
     }
-    const event = await this.eventsService.findEventOrThrow(eventId);
-    if (!event.contestationReleasedAt) {
+    if (
+      !(await this.releasesService.isEntryReleased(
+        eventId,
+        entry,
+        'contestation',
+      ))
+    ) {
       throw new ForbiddenException(
-        'A contestação não está liberada para este evento.',
+        'A contestação não está liberada para esta apresentação.',
       );
     }
     await this.scheduleService.setContestationRequested(
@@ -2286,14 +2349,14 @@ export class ScoringService {
       await this.loadPresentationContext(eventId, scheduleEntryId);
 
     const [
-      event,
+      releaseMap,
       assignmentsState,
       specialRoles,
       allJudges,
       events,
       deductionRules,
     ] = await Promise.all([
-      this.eventsService.findEventOrThrow(eventId),
+      this.releasesService.getReleaseMap(eventId),
       this.judgingService.getAssignments(eventId, category.scoringTemplateId!),
       this.judgingService.getSpecialRoles(eventId, entry.resourceId),
       this.judgesService.findAllForEvent(eventId),
@@ -2407,7 +2470,10 @@ export class ScoringService {
             .filter((d) => !undoneDeductionIds.has(d.id))
             .map((d) => ({
               type: d.deductionType!,
-              label: this.deductionLabel(deductionLabelByType, d.deductionType!),
+              label: this.deductionLabel(
+                deductionLabelByType,
+                d.deductionType!,
+              ),
               value: deductionValueByType.get(d.deductionType!) ?? 0,
               presentationElapsedMs: d.presentationElapsedMs,
               clientCreatedAt: d.clientCreatedAt,
@@ -2436,8 +2502,16 @@ export class ScoringService {
       groups: Array.from(groups.values()),
       legality,
       notes,
-      scoresReleased: !!event.scoresReleasedAt,
-      contestationReleased: !!event.contestationReleasedAt,
+      scoresReleased: releaseMap.isReleased(
+        resource.scheduleDayId,
+        category.id,
+        'scores',
+      ),
+      contestationReleased: releaseMap.isReleased(
+        resource.scheduleDayId,
+        category.id,
+        'contestation',
+      ),
       contestationRequested: !!entry.contestationRequestedAt,
     };
   }

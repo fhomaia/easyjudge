@@ -5,11 +5,9 @@ import { PresentationNotesDetail } from "@/components/scoring/PresentationNotesD
 import { downloadPresentationDetailPdf } from "@/lib/presentationDetailExport";
 import { adminScoringApi, type PresentationDetail } from "@/api/client";
 
-// Detalhe somente-leitura, na visão do admin/assessor — os toggles de
-// liberação (notas/contestação/resultado) saíram daqui e viraram ação
-// global do evento (ver ReleaseFlagsPanel, no topo de
-// AdminNotesOverview), não fazia mais sentido repeti-los apresentação
-// por apresentação.
+// Detalhe somente-leitura, na visão do admin/assessor. A liberação
+// (notas/contestação/resultado) é por categoria em cada dia, feita na
+// lista (ver AdminNotesOverview), não apresentação por apresentação.
 interface AdminPresentationDetailPanelProps {
   eventId: string;
   scheduleEntryId: string;

@@ -10,7 +10,7 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 // trabalho do produtor, sem gate), esta rota é a que qualquer membro
 // do evento acessa: admin/assessor/jurado sempre veem, programa/
 // atleta/espectador só depois que o admin ligar
-// `Event.resultsReleasedAt` (ver ScoringService.getPublicEventResults).
+// o resultado da categoria naquele dia (ver ScoringService.getPublicEventResults).
 // Sem @Roles global de conta de propósito — um espectador pode ser
 // qualquer tipo de UserRole, o que importa é o EventMemberRole dele
 // NESTE evento.

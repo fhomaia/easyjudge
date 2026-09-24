@@ -22,8 +22,9 @@ import {
 import { useAuthStore } from "@/store/auth";
 
 // Visão do Programa (dono da equipe) sobre as notas das próprias
-// equipes — só aparecem apresentações já liberadas
-// (`scoresReleasedAt`). Conteúdo (lista + detalhe) é o mesmo em mobile
+// equipes — as notas de cada apresentação aparecem quando a categoria
+// dela é liberada naquele dia (antes disso, "Aguardando liberação").
+// Conteúdo (lista + detalhe) é o mesmo em mobile
 // e desktop, só o chrome muda: mobile fica enxuto de propósito (mesmo
 // espírito minimalista de EventLiveScoringPage), desktop ganha a
 // AppSidebar completa (2026-07-27, a pedido do usuário — a versão sem
@@ -147,7 +148,7 @@ export function EventLiveTeamNotesPage() {
               <PresentationNotesDetail detail={detail} celebrateHitZero />
             </div>
           ) : (
-            <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />
+            <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} hideUnreleased />
           )}
         </main>
       </div>
@@ -199,7 +200,7 @@ export function EventLiveTeamNotesPage() {
                 <PresentationNotesDetail detail={detail} celebrateHitZero />
               </div>
             ) : (
-              <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} />
+              <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} hideUnreleased />
             )}
           </main>
         </div>

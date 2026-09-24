@@ -9,6 +9,7 @@ import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { useEventLiveSocket } from "@/lib/useEventLiveSocket";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
+import { formatDayTab } from "@/lib/formatDate";
 import { formatPercent, formatPoints } from "@/lib/formatNumber";
 import { FORMAT_LABELS, formatLabelFor } from "@/lib/categoryLabels";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,19 @@ const CATEGORY_COLORS = [
 ];
 
 const MEDAL_COLORS = ["text-yellow-400", "text-slate-400", "text-amber-700"];
+
+// Rankings que cruzam categorias (Ranking geral, modalidade, programa) só
+// aparecem quando todas as categorias do dia tiverem o resultado
+// liberado (decisão do usuário, 2026-09-24): um ranking parcial pareceria
+// resultado final.
+function IncompleteDayNotice() {
+  return (
+    <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+      Disponível quando todas as categorias do dia tiverem o resultado liberado. Enquanto isso, veja a aba
+      “Por categoria”.
+    </p>
+  );
+}
 
 // Os 3 cards de destaque (maior percentual geral/Team Cheer, programa
 // com mais pontos) — no desktop ficam sempre visíveis acima das abas;
@@ -135,6 +149,8 @@ export function EventLiveResultsPage() {
   // "Ranking geral" (métricas de destaque, ver ResultsMetricsGrid) é a
   // primeira aba em qualquer tamanho de tela.
   const [activeTab, setActiveTab] = useState<ResultsTab>("ranking");
+  // Aba de dia (só aparece com mais de um dia com apresentação).
+  const [activeDayId, setActiveDayId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
 
@@ -187,7 +203,15 @@ export function EventLiveResultsPage() {
     },
   });
 
-  const results = resultsResponse?.results ?? null;
+  // Um bloco por dia com apresentação (ver ScoringService.
+  // getPublicEventResults). `complete` = todas as categorias do dia com
+  // resultado liberado; só então aparecem os rankings que cruzam
+  // categorias (Ranking geral, modalidade, programa).
+  const resultDays = resultsResponse?.days ?? [];
+  const activeResultsDay =
+    resultDays.find((d) => d.dayId === activeDayId) ?? resultDays[0] ?? null;
+  const results = activeResultsDay?.results ?? null;
+  const dayComplete = activeResultsDay?.complete ?? false;
 
   function handleLogout() {
     logout();
@@ -246,16 +270,37 @@ export function EventLiveResultsPage() {
         </header>
 
         <div className="flex w-full flex-1 flex-col overflow-hidden px-4 py-4 sm:px-8 sm:py-6">
+          {resultDays.length > 1 && (
+            <div className="scrollbar-none mb-4 flex shrink-0 items-center gap-2 overflow-x-auto">
+              {resultDays.map((day) => (
+                <button
+                  key={day.dayId}
+                  type="button"
+                  onClick={() => setActiveDayId(day.dayId)}
+                  className={cn(
+                    "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+                    day.dayId === activeResultsDay?.dayId
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {formatDayTab(day.date)}
+                </button>
+              ))}
+            </div>
+          )}
           {!resultsResponse ? (
             <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
               Carregando...
             </div>
-          ) : !resultsResponse.released ? (
+          ) : !activeResultsDay?.released ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-10 text-center">
               <Trophy className="size-8 text-muted-foreground" />
               <p className="text-sm font-medium text-foreground">Resultados ainda não liberados</p>
               <p className="max-w-sm text-sm text-muted-foreground">
-                Em breve você poderá consultar os resultados do campeonato aqui.
+                {resultDays.length > 1
+                  ? "Os resultados deste dia ainda não foram liberados."
+                  : "Em breve você poderá consultar os resultados do campeonato aqui."}
               </p>
             </div>
           ) : results ? (
@@ -296,7 +341,7 @@ export function EventLiveResultsPage() {
                 {activeTab === "ranking" && (
                   <div className="p-4">
                     <p className="pb-3 text-sm font-bold text-foreground">Ranking geral</p>
-                    <ResultsMetricsGrid results={results} />
+                    {dayComplete ? <ResultsMetricsGrid results={results} /> : <IncompleteDayNotice />}
                   </div>
                 )}
 
@@ -413,7 +458,11 @@ export function EventLiveResultsPage() {
                 {activeTab === "modalidade" && (
                   <div>
                     <p className="px-4 pt-4 text-sm font-bold text-foreground">Resultados por modalidade</p>
-                    {results.modalities.length === 0 ? (
+                    {!dayComplete ? (
+                      <div className="p-4">
+                        <IncompleteDayNotice />
+                      </div>
+                    ) : results.modalities.length === 0 ? (
                       <p className="p-6 text-center text-sm text-muted-foreground">
                         Nenhuma apresentação totalmente pontuada ainda.
                       </p>
@@ -529,7 +578,11 @@ export function EventLiveResultsPage() {
                 {activeTab === "programa" && (
                   <div>
                     <p className="px-4 pt-4 text-sm font-bold text-foreground">Ranking por programa</p>
-                    {results.programs.length === 0 ? (
+                    {!dayComplete ? (
+                      <div className="p-4">
+                        <IncompleteDayNotice />
+                      </div>
+                    ) : results.programs.length === 0 ? (
                       <p className="p-6 text-center text-sm text-muted-foreground">
                         Nenhuma apresentação totalmente pontuada ainda.
                       </p>
