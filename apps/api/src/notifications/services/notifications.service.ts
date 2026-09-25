@@ -74,6 +74,54 @@ export class NotificationsService {
     });
   }
 
+  // Igual a `create`, mas no máximo UMA notificação deste tipo por
+  // apresentação, mesmo com requisições simultâneas. `existsForEntry` +
+  // `create` separados deixavam duas requisições ao mesmo tempo (a fila
+  // do jurado reenviando junto do envio imediato, ou dois jurados no
+  // mesmo segundo) passarem pela checagem antes de qualquer uma gravar —
+  // "Apresentação X concluída" saía duplicada. A trava do Postgres
+  // (liberada no fim da transação) serializa checagem + gravação por
+  // evento+tipo+apresentação. Devolve se criou.
+  async createOncePerEntry(
+    aliasId: string,
+    type: NotificationType,
+    audience: NotificationAudience,
+    title: string,
+    scheduleEntryId: string,
+  ): Promise<boolean> {
+    const saved = await this.notificationsRepo.manager.transaction(
+      async (manager) => {
+        await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `notification:${aliasId}:${type}:${scheduleEntryId}`,
+        ]);
+        const existing = await manager.count(Notification, {
+          where: { aliasId, type, scheduleEntryId },
+        });
+        if (existing > 0) return null;
+        return manager.save(
+          manager.create(Notification, {
+            aliasId,
+            type,
+            audience,
+            title,
+            scheduleEntryId,
+          }),
+        );
+      },
+    );
+    if (!saved) return false;
+    // Só depois do commit: quem recebe o sinal já acha a linha no banco.
+    this.eventEmitter.emit('notification.created', {
+      aliasId,
+      id: saved.id,
+      type,
+      audience,
+      title,
+      scheduleEntryId,
+    });
+    return true;
+  }
+
   // Dedup — evita duplicar a mesma notificação se o gatilho rodar de
   // novo (reenvio idempotente da fila do jurado, retry de submitEvents
   // etc.). Usado antes de criar notificações ligadas a UMA apresentação

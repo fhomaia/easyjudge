@@ -67,6 +67,21 @@ export class ScoringController {
     return this.scoringService.getStartedPresentations(eventId);
   }
 
+  // Mesmo acesso de started-presentations — alimenta só o card "Atraso
+  // atual" (ver ScoringService.getPresentationStartTimes).
+  @Get('presentation-starts')
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+    EventMemberRole.PROGRAM,
+    EventMemberRole.ATHLETE,
+    EventMemberRole.SPECTATOR,
+  )
+  getPresentationStartTimes(@Param('eventId') eventId: string) {
+    return this.scoringService.getPresentationStartTimes(eventId);
+  }
+
   // Mesmo raciocínio de started-presentations — alimenta o cronograma ao
   // vivo (ver ScoringService.getCompletedPresentationIds).
   @Get('completed-presentations')

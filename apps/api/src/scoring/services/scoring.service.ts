@@ -1803,6 +1803,51 @@ export class ScoringService {
     return [...new Set([...withdrawnIds, ...submitted.map((r) => r.id)])];
   }
 
+  // Início real de cada apresentação pro card "Atraso atual": o primeiro
+  // TIMER_STARTED ou, se nenhum jurado deu "Iniciar", o primeiro registro
+  // de qualquer tipo (nota, dedução, rascunho, envio) — decisão do
+  // usuário (2026-09-25), pra o atraso não parar quando esquecem o
+  // "Iniciar". Separado de getStartedPresentations de propósito: aquele
+  // continua sendo SÓ o "Iniciar" (alimenta "Apresentando agora" e o
+  // aviso de avaliação pendente).
+  async getPresentationStartTimes(
+    eventId: string,
+  ): Promise<Array<{ scheduleEntryId: string; startedAt: string }>> {
+    const days = await this.scheduleService.getDays(eventId);
+    const entryIds: string[] = [];
+    for (const day of days) {
+      for (const resource of day.resources) {
+        for (const entry of resource.entries) {
+          if (entry.type === ScheduleEntryType.PRESENTATION) {
+            entryIds.push(entry.id);
+          }
+        }
+      }
+    }
+    if (entryIds.length === 0) return [];
+
+    const rows = await this.scoreEventsRepo
+      .createQueryBuilder('e')
+      .select('e.schedule_entry_id', 'scheduleEntryId')
+      .addSelect(
+        'MIN(e.client_created_at) FILTER (WHERE e.kind = :timerStarted)',
+        'timerStartedAt',
+      )
+      .addSelect('MIN(e.client_created_at)', 'firstEventAt')
+      .where('e.schedule_entry_id IN (:...entryIds)', { entryIds })
+      .setParameter('timerStarted', ScoreEventKind.TIMER_STARTED)
+      .groupBy('e.schedule_entry_id')
+      .getRawMany<{
+        scheduleEntryId: string;
+        timerStartedAt: Date | null;
+        firstEventAt: Date;
+      }>();
+    return rows.map((r) => ({
+      scheduleEntryId: r.scheduleEntryId,
+      startedAt: new Date(r.timerStartedAt ?? r.firstEventAt).toISOString(),
+    }));
+  }
+
   // Horário real de início de cada apresentação já iniciada (primeiro
   // TIMER_STARTED — ver enum) — alimenta o card "Atraso atual" do
   // painel Início (comparação feita no frontend, que já tem toda a
@@ -2306,7 +2351,7 @@ export class ScoringService {
       const team = entry.teamId
         ? await this.teamsRepo.findOneBy({ id: entry.teamId })
         : null;
-      await this.notificationsService.create(
+      await this.notificationsService.createOncePerEntry(
         event.aliasId,
         NotificationType.PRESENTATION_COMPLETED,
         NotificationAudience.ALL,
@@ -2343,7 +2388,7 @@ export class ScoringService {
       const team = entry.teamId
         ? await this.teamsRepo.findOneBy({ id: entry.teamId })
         : null;
-      await this.notificationsService.create(
+      await this.notificationsService.createOncePerEntry(
         event.aliasId,
         NotificationType.PRESENTATION_STARTED,
         NotificationAudience.ALL,
@@ -2375,7 +2420,7 @@ export class ScoringService {
       const team = entry.teamId
         ? await this.teamsRepo.findOneBy({ id: entry.teamId })
         : null;
-      await this.notificationsService.create(
+      await this.notificationsService.createOncePerEntry(
         event.aliasId,
         NotificationType.EVALUATION_PENDING,
         NotificationAudience.STAFF,

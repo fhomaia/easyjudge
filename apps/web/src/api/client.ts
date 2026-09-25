@@ -1962,6 +1962,14 @@ export const scoringApi = {
       },
     ),
 
+  // Início de cada apresentação pro card "Atraso atual": primeiro
+  // "Iniciar" do cronômetro ou, sem ele, o primeiro registro de qualquer
+  // jurado (ver ScoringService.getPresentationStartTimes).
+  getPresentationStarts: (eventId: string) =>
+    authRequest<Array<{ scheduleEntryId: string; startedAt: string }>>(
+      `/events/${eventId}/scoring/presentation-starts`,
+    ),
+
   // Horário real de início (primeiro TIMER_STARTED) de cada
   // apresentação já iniciada — usado pra calcular o atraso do evento
   // (ver EventLiveDashboardPage, que já tem a hora AGENDADA de cada

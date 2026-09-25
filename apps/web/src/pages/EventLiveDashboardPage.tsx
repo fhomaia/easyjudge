@@ -107,6 +107,11 @@ export function EventLiveDashboardPage() {
     Array<{ scheduleEntryId: string; startedAt: string }>
   >([]);
   const [completedEntryIds, setCompletedEntryIds] = useState<string[]>([]);
+  // Só pro card "Atraso atual": inclui apresentações sem "Iniciar" (usa o
+  // primeiro registro do jurado) — ver ScoringService.getPresentationStartTimes.
+  const [presentationStarts, setPresentationStarts] = useState<
+    Array<{ scheduleEntryId: string; startedAt: string }>
+  >([]);
   const [regulation, setRegulation] = useState<Regulation | null>(null);
   const [notifications, setNotifications] = useState<NotificationView[] | null>(null);
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
@@ -161,6 +166,7 @@ export function EventLiveDashboardPage() {
   const refreshStartedPresentations = useCallback(() => {
     if (!id) return;
     scoringApi.getStartedPresentations(id).then(setStartedPresentations).catch(() => {});
+    scoringApi.getPresentationStarts(id).then(setPresentationStarts).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -297,7 +303,7 @@ export function EventLiveDashboardPage() {
   // Só métrica informativa — não altera a projeção de horário das
   // próximas apresentações (decisão do usuário).
   const delayMinutes = useMemo(() => {
-    if (!days || startedPresentations.length === 0) return null;
+    if (!days || presentationStarts.length === 0) return null;
     const scheduleByEntry = new Map<string, { dayDate: string; startMinutes: number }>();
     for (const day of days) {
       const times = computeResourceTimes(day.resources, day.startMinutes);
@@ -306,7 +312,7 @@ export function EventLiveDashboardPage() {
       }
     }
     let latest: { scheduleEntryId: string; startedAt: Date } | null = null;
-    for (const sp of startedPresentations) {
+    for (const sp of presentationStarts) {
       const startedAt = new Date(sp.startedAt);
       if (!latest || startedAt > latest.startedAt) latest = { scheduleEntryId: sp.scheduleEntryId, startedAt };
     }
@@ -316,7 +322,7 @@ export function EventLiveDashboardPage() {
     const scheduledDate = new Date(`${scheduled.dayDate}T00:00:00`);
     scheduledDate.setMinutes(scheduledDate.getMinutes() + scheduled.startMinutes);
     return Math.round((latest.startedAt.getTime() - scheduledDate.getTime()) / 60_000);
-  }, [days, startedPresentations]);
+  }, [days, presentationStarts]);
 
   // "Atraso" negativo (apresentação começou adiantada) não é atraso de
   // verdade — mostra "No horário" em vez de um número negativo (pedido
