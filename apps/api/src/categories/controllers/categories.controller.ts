@@ -43,8 +43,8 @@ export class CategoriesController {
     return this.categoriesService.create(eventId, dto, req.user.userId);
   }
 
+  // Também lida pelas telas do evento ao vivo: só o papel no evento decide.
   @Get()
-  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
   @EventRoles(...READ_ROLES)
   findAll(@Param('eventId') eventId: string) {
     return this.categoriesService.findAllForEvent(eventId);

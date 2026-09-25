@@ -12,8 +12,6 @@ import { ScoringService } from '../services/scoring.service';
 import { WithdrawPresentationDto } from '../dto/withdraw-presentation.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
-import { Roles } from '../../auth/decorators/roles.decorator';
-import { UserRole } from '../../common/enums/user-role.enum';
 import { EventMemberGuard } from '../../events/guards/event-member.guard';
 import { EventRoles } from '../../events/decorators/event-roles.decorator';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
@@ -29,7 +27,9 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 // que o papel É um dos três.
 @Controller('events/:eventId/scoring/entries')
 @UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
-@Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM)
+// Sem @Roles (tipo de conta) de propósito: nas telas do evento ao vivo
+// o acesso é decidido só pelo papel no evento (@EventRoles abaixo).
+// Ex.: uma conta de espectador/atleta escalada como jurado.
 @EventRoles(
   EventMemberRole.ADMIN,
   EventMemberRole.ASSESSOR,

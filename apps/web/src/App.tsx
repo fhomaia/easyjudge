@@ -6,6 +6,7 @@ import { GuestRoute } from "@/components/GuestRoute";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { UploadStatusBanner } from "@/components/UploadStatusBanner";
 import { EventFeedbackHost } from "@/components/EventFeedbackHost";
+import { EventNotificationToaster } from "@/components/EventNotificationToaster";
 
 const HomePage = lazy(() =>
   import("@/pages/HomePage").then((m) => ({ default: m.HomePage })),
@@ -184,6 +185,7 @@ function App() {
     </Suspense>
     <UploadStatusBanner />
     <EventFeedbackHost />
+    <EventNotificationToaster />
     </>
   );
 }

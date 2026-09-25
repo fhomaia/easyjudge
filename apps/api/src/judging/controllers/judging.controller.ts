@@ -40,7 +40,10 @@ export class JudgingController {
     return this.judgingService.getAssignments(eventId, templateId);
   }
 
+  // Usada pelas telas do evento ao vivo: sem tipo de conta exigido
+  // (@Roles() vazio sobrescreve o da classe), só o papel no evento.
   @Get('me')
+  @Roles()
   @EventRoles(...READ_ROLES)
   getMyAssignments(
     @Param('eventId') eventId: string,

@@ -11,8 +11,6 @@ import { ScoringService } from '../services/scoring.service';
 import { SubmitScoreEventsDto } from '../dto/submit-score-events.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
-import { Roles } from '../../auth/decorators/roles.decorator';
-import { UserRole } from '../../common/enums/user-role.enum';
 import { EventMemberGuard } from '../../events/guards/event-member.guard';
 import { EventRoles } from '../../events/decorators/event-roles.decorator';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
@@ -22,7 +20,9 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 // escalado, ver plano/CLAUDE.md.
 @Controller('events/:eventId/scoring')
 @UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
-@Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
+// Sem @Roles (tipo de conta) de propósito: nas telas do evento ao vivo
+// o acesso é decidido só pelo papel no evento (@EventRoles abaixo).
+// Ex.: uma conta de espectador/atleta escalada como jurado.
 @EventRoles(EventMemberRole.JUDGE)
 export class ScoringController {
   constructor(private readonly scoringService: ScoringService) {}
@@ -54,16 +54,7 @@ export class ScoringController {
   // Início disponível pra todo mundo) espectador também veem Início
   // (ver useEventLiveGuard no front). Sobrescreve o @EventRoles(JUDGE)
   // da classe só nesta rota.
-  //
-  // Bug real achado em 2026-08-01: o @EventRoles abaixo já incluía
-  // PROGRAM/ATHLETE, mas faltava o @Roles (nível de conta,
-  // UserRole) correspondente — sem um @Roles próprio no método, o
-  // NestJS usa o da CLASSE (@Roles(JUDGE, ORGANIZATION)), que barrava
-  // contas program/athlete com 403 mesmo com o EventRoles liberando.
-  // Confirmado via curl que as duas rotas devolviam 403 pra uma conta
-  // atleta antes desta correção.
   @Get('started-presentations')
-  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
   @EventRoles(
     EventMemberRole.ADMIN,
     EventMemberRole.ASSESSOR,
@@ -76,11 +67,9 @@ export class ScoringController {
     return this.scoringService.getStartedPresentations(eventId);
   }
 
-  // Mesmo raciocínio de started-presentations (inclusive o mesmo bug
-  // de @Roles faltando, corrigido junto) — alimenta o cronograma ao
+  // Mesmo raciocínio de started-presentations — alimenta o cronograma ao
   // vivo (ver ScoringService.getCompletedPresentationIds).
   @Get('completed-presentations')
-  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
   @EventRoles(
     EventMemberRole.ADMIN,
     EventMemberRole.ASSESSOR,

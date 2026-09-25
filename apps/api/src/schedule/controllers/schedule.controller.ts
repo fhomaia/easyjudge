@@ -155,7 +155,10 @@ export class ScheduleController {
     return this.scheduleService.createEntry(eventId, dayId, dto);
   }
 
+  // Também usada pelo evento ao vivo (mover apresentação): sem tipo de
+  // conta exigido, só o papel no evento (admin/assessor, da classe).
   @Patch('days/:dayId/entries/:entryId/move')
+  @Roles()
   moveEntry(
     @Param('eventId') eventId: string,
     @Param('dayId') dayId: string,
