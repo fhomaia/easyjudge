@@ -1,5 +1,6 @@
 import { EventDocumentsButton } from "@/components/EventDocumentsButton";
-import { AlertTriangle, ArrowLeft, CheckCircle2, FlaskConical, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
+import { WithdrawnBadge } from "@/components/scoring/WithdrawnBadge";
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, FlaskConical, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
 import { ScoringCriteriaGroups } from "@/components/scoring/ScoringCriteriaGroups";
 import { LegalityDeductionsPanel } from "@/components/scoring/LegalityDeductionsPanel";
 import { RascunhoEditor } from "@/components/scoring/RascunhoEditor";
@@ -49,6 +50,9 @@ interface EventLiveScoringDesktopViewProps {
   onSketchChange: (dataUrl: string) => void;
   onSketchTextChange: (text: string) => void;
   onSubmit: () => void;
+  // Desistência: tela só de consulta, botão principal vai pra próxima.
+  withdrawn: boolean;
+  onGoToNextOrNotes: () => void;
   onOpenSupervision: () => void;
   canWrite: boolean;
   practiceMode: boolean;
@@ -88,12 +92,14 @@ export function EventLiveScoringDesktopView({
   onSketchChange,
   onSketchTextChange,
   onSubmit,
+  withdrawn,
+  onGoToNextOrNotes,
   onOpenSupervision,
   canWrite,
   practiceMode,
   onTogglePracticeMode,
 }: EventLiveScoringDesktopViewProps) {
-  const interactionUnlocked = canWrite || practiceMode;
+  const interactionUnlocked = (canWrite || practiceMode) && !withdrawn;
   const progress = sheet.presentation.presentationTimeSeconds
     ? Math.min(1, elapsedMs / 1000 / sheet.presentation.presentationTimeSeconds)
     : 0;
@@ -190,7 +196,10 @@ export function EventLiveScoringDesktopView({
               <ArrowLeft className="size-5" />
             </button>
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-bold text-foreground">{sheet.presentation.teamName}</h1>
+              <h1 className="flex min-w-0 items-center gap-2 text-lg font-bold text-foreground">
+                <span className="truncate">{sheet.presentation.teamName}</span>
+                {withdrawn && <WithdrawnBadge />}
+              </h1>
               <p className="truncate text-sm text-muted-foreground">
                 {sheet.presentation.categoryName} · {sheet.presentation.resourceName}
               </p>
@@ -437,6 +446,21 @@ export function EventLiveScoringDesktopView({
           {!sheetComplete && interactionUnlocked && (
             <p className="text-xs font-medium text-amber-600">Faltam {missingParts.join(" e ")} pra lançar as notas.</p>
           )}
+          {withdrawn ? (
+            <>
+              <p className="text-xs font-medium text-red-600">
+                Esta equipe desistiu da apresentação. Não há notas pra lançar.
+              </p>
+              <button
+                type="button"
+                onClick={onGoToNextOrNotes}
+                className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground"
+              >
+                {nextTeam ? `Próxima apresentação: ${nextTeam.teamName}` : "Voltar para Súmulas"}
+                <ArrowRight className="size-4" />
+              </button>
+            </>
+          ) : (
           <button
             type="button"
             onClick={onSubmit}
@@ -453,6 +477,7 @@ export function EventLiveScoringDesktopView({
             <Send className="size-4" />
             {submitting ? "Enviando..." : !canWrite && practiceMode ? "Simular envio" : "Lançar notas"}
           </button>
+          )}
         </div>
       </footer>
     </div>

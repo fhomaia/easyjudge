@@ -3,7 +3,8 @@ import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { EventDocumentsButton } from "@/components/EventDocumentsButton";
-import { AlertTriangle, ArrowLeft, CheckCircle2, FlaskConical, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, FlaskConical, Play, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
+import { WithdrawnBadge } from "@/components/scoring/WithdrawnBadge";
 import { EventLiveScoringDesktopView } from "@/components/EventLiveScoringDesktopView";
 import { HeadJudgePanel } from "@/components/HeadJudgePanel";
 import { HeadJudgeMobileSheet } from "@/components/HeadJudgeMobileSheet";
@@ -50,8 +51,15 @@ export function nextPresentationOnResource(
     if (!resource) continue;
     const current = resource.entries.find((e) => e.id === currentEntryId);
     if (!current) continue;
+    // Pula desistências (não há nota pra lançar) e o que saiu do cronograma.
     const next = resource.entries
-      .filter((e) => e.type === "presentation" && e.order > current.order)
+      .filter(
+        (e) =>
+          e.type === "presentation" &&
+          e.order > current.order &&
+          !e.withdrawnAt &&
+          !e.removedFromSchedule,
+      )
       .sort((a, b) => a.order - b.order)[0];
     if (!next) return null;
     return { id: next.id, teamName: next.teamName ?? "Equipe", categoryName: next.categoryName };
@@ -463,6 +471,22 @@ export function EventLiveScoringPage() {
     [days, sheet, id, entryId],
   );
 
+  // Desistência: sem nota pra lançar (a API recusa) — a tela fica só
+  // de consulta e o botão principal leva pra próxima apresentação.
+  const withdrawn = useMemo(() => {
+    for (const day of days ?? []) {
+      for (const resource of day.resources) {
+        const entry = resource.entries.find((e) => e.id === entryId);
+        if (entry) return Boolean(entry.withdrawnAt);
+      }
+    }
+    return false;
+  }, [days, entryId]);
+
+  function goToNextOrNotes() {
+    navigate(nextTeam ? `/events/${id}/live/scoring/${nextTeam.id}` : `/events/${id}/live/notes`);
+  }
+
   async function handleSubmit() {
     if (!id || !sheetComplete) return;
     setSubmitting(true);
@@ -504,7 +528,7 @@ export function EventLiveScoringPage() {
   // quanto pelo modo teste — emitEvent/emitScoreEvent continuam só
   // gravando quando `canWrite` for true de verdade, então modo teste
   // nunca grava nada mesmo com a interface liberada.
-  const interactionUnlocked = canWrite || practiceMode;
+  const interactionUnlocked = (canWrite || practiceMode) && !withdrawn;
 
   const progress = sheet.presentation.presentationTimeSeconds
     ? Math.min(1, elapsedMs / 1000 / sheet.presentation.presentationTimeSeconds)
@@ -528,6 +552,11 @@ export function EventLiveScoringPage() {
             <p className="truncate text-xs text-muted-foreground">
               {sheet.presentation.categoryName} · {sheet.presentation.resourceName}
             </p>
+            {withdrawn && (
+              <div className="mt-1 flex">
+                <WithdrawnBadge />
+              </div>
+            )}
           </div>
           <EventDocumentsButton />
           {sheet.isHeadJudge && (
@@ -793,6 +822,21 @@ export function EventLiveScoringPage() {
             Faltam {missingParts.join(" e ")} pra lançar as notas.
           </p>
         )}
+        {withdrawn ? (
+          <>
+            <p className="mb-2 text-center text-xs font-medium text-red-600">
+              Esta equipe desistiu da apresentação. Não há notas pra lançar.
+            </p>
+            <button
+              type="button"
+              onClick={goToNextOrNotes}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground"
+            >
+              {nextTeam ? `Próxima apresentação: ${nextTeam.teamName}` : "Voltar para Súmulas"}
+              <ArrowRight className="size-4" />
+            </button>
+          </>
+        ) : (
         <button
           type="button"
           onClick={handleSubmit}
@@ -809,6 +853,7 @@ export function EventLiveScoringPage() {
           <Send className="size-4" />
           {submitting ? "Enviando..." : !canWrite && practiceMode ? "Simular envio" : "Lançar notas"}
         </button>
+        )}
       </div>
     </div>
 
@@ -858,6 +903,8 @@ export function EventLiveScoringPage() {
         onSketchChange={handleSketchChange}
         onSketchTextChange={handleSketchTextChange}
         onSubmit={handleSubmit}
+        withdrawn={withdrawn}
+        onGoToNextOrNotes={goToNextOrNotes}
         onOpenSupervision={() => setSupervisionOpen(true)}
         canWrite={canWrite}
         practiceMode={practiceMode}
