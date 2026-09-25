@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { AdminNotesOverviewList } from "@/components/scoring/AdminNotesOverviewList";
+import { AdminNotesOverviewList, findTiedEntryIds } from "@/components/scoring/AdminNotesOverviewList";
 import { AdminPresentationDetailPanel } from "@/components/scoring/AdminPresentationDetailPanel";
 import { ReleaseToggles } from "@/components/scoring/ReleaseToggles";
 import { Button } from "@/components/ui/button";
@@ -207,7 +207,11 @@ export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewPro
                           Nenhuma súmula completa ainda.
                         </p>
                       ) : (
-                        <AdminNotesOverviewList entries={groupEntries} onSelect={setSelectedId} />
+                        <AdminNotesOverviewList
+                          entries={groupEntries}
+                          onSelect={setSelectedId}
+                          tiedEntryIds={findTiedEntryIds(groupEntries)}
+                        />
                       )}
                     </div>
                   </div>
