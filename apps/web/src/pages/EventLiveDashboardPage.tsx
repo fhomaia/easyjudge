@@ -86,6 +86,15 @@ const EMPTY_ASSIGNMENT: JudgeAssignmentsSummary = {
   criterionResourceTemplates: [],
 };
 
+// Atraso a partir de 60 min em horas + minutos (pedido do usuário):
+// "45 min", "1h 05min", "2h".
+function formatDelay(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${String(rest).padStart(2, "0")}min`;
+}
+
 export function EventLiveDashboardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -332,7 +341,7 @@ export function EventLiveDashboardPage() {
     clampedDelayMinutes === null
       ? "—"
       : clampedDelayMinutes > 0
-        ? `+${clampedDelayMinutes} min`
+        ? `+${formatDelay(clampedDelayMinutes)}`
         : "No horário";
   const delayProgress =
     clampedDelayMinutes === null ? 0 : Math.min(1, clampedDelayMinutes / 30);
