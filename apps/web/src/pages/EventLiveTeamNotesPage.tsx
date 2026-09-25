@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
-import { Building2, CalendarDays, ChevronLeft, MapPin, Trophy } from "lucide-react";
+import { Building2, CalendarDays, ChevronLeft, Loader2, MapPin, Trophy } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AdminNotesOverviewList } from "@/components/scoring/AdminNotesOverviewList";
 import { PresentationNotesDetail } from "@/components/scoring/PresentationNotesDetail";
@@ -43,6 +43,7 @@ export function EventLiveTeamNotesPage() {
   const [entries, setEntries] = useState<AdminOverviewEntry[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PresentationDetail | null>(null);
+  const [detailError, setDetailError] = useState(false);
   const [contesting, setContesting] = useState(false);
 
   useEffect(() => {
@@ -56,11 +57,21 @@ export function EventLiveTeamNotesPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!id || !selectedId) {
-      setDetail(null);
-      return;
-    }
-    teamScoringApi.getDetail(id, selectedId).then(setDetail);
+    setDetail(null);
+    setDetailError(false);
+    if (!id || !selectedId) return;
+    let cancelled = false;
+    teamScoringApi
+      .getDetail(id, selectedId)
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDetailError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id, selectedId]);
 
   async function handleContest() {
@@ -115,6 +126,38 @@ export function EventLiveTeamNotesPage() {
       </button>
     ) : undefined;
 
+  // Abre na hora ao clicar (mesmo padrão de admin/atleta): o detalhe leva
+  // ~1,5 s pra chegar em produção e, sem isso, a lista ficava parada
+  // como se o clique não tivesse funcionado.
+  const notesContent = selectedId ? (
+    <div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setSelectedId(null)}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" />
+          Voltar
+        </button>
+        {detail && contestButton}
+      </div>
+      {detail ? (
+        <PresentationNotesDetail detail={detail} celebrateHitZero />
+      ) : detailError ? (
+        <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          Não foi possível carregar a súmula. Volte e tente de novo.
+        </p>
+      ) : (
+        <div className="flex items-center justify-center p-8 text-muted-foreground">
+          <Loader2 className="size-5 animate-spin" />
+        </div>
+      )}
+    </div>
+  ) : (
+    <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} hideUnreleased />
+  );
+
   return (
     <>
       <div className="flex h-dvh flex-col bg-background lg:hidden">
@@ -133,24 +176,7 @@ export function EventLiveTeamNotesPage() {
         </header>
 
         <main className="relative mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-4">
-          {selectedId && detail ? (
-            <div>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(null)}
-                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronLeft className="size-4" />
-                  Voltar
-                </button>
-                {contestButton}
-              </div>
-              <PresentationNotesDetail detail={detail} celebrateHitZero />
-            </div>
-          ) : (
-            <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} hideUnreleased />
-          )}
+          {notesContent}
         </main>
       </div>
 
@@ -185,24 +211,7 @@ export function EventLiveTeamNotesPage() {
           </header>
 
           <main className="relative flex-1 overflow-y-auto p-6">
-            {selectedId && detail ? (
-              <div>
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(null)}
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    <ChevronLeft className="size-4" />
-                    Voltar
-                  </button>
-                  {contestButton}
-                </div>
-                <PresentationNotesDetail detail={detail} celebrateHitZero />
-              </div>
-            ) : (
-              <AdminNotesOverviewList entries={entries} onSelect={setSelectedId} hideUnreleased />
-            )}
+            {notesContent}
           </main>
         </div>
       </div>
