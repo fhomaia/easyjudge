@@ -52,7 +52,8 @@ import {
   type ScheduleFilterCategory,
   type FullScheduleItem,
 } from "@/lib/eventFullSchedule";
-import { computeEventLiveSchedule } from "@/lib/eventLiveSchedule";
+import { computeEventLiveSchedule, liveNextLabel } from "@/lib/eventLiveSchedule";
+import { LivePulseDot } from "@/components/LivePulseDot";
 import { exportScheduleToExcel, exportScheduleToPdf } from "@/lib/scheduleExport";
 import { cn } from "@/lib/utils";
 import { useExpandedIds } from "@/lib/useExpandedIds";
@@ -102,6 +103,7 @@ export function EventLiveSchedulePage() {
   const [days, setDays] = useState<ScheduleDay[] | null>(null);
   const [teams, setTeams] = useState<TeamWithProgram[] | null>(null);
   const [completedEntryIds, setCompletedEntryIds] = useState<string[]>([]);
+  const [startedEntryIds, setStartedEntryIds] = useState<string[]>([]);
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[] | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<FullScheduleItem | null>(null);
@@ -155,12 +157,27 @@ export function EventLiveSchedulePage() {
     scoringApi.getCompletedPresentations(id).then(setCompletedEntryIds).catch(() => {});
   }, [id]);
 
+  // Apresentações já iniciadas por algum jurado (primeiro "Iniciar" do
+  // cronômetro) — só elas viram "Acontecendo agora"; antes disso o card
+  // mostra "Próxima apresentação".
+  const refreshStartedPresentations = useCallback(() => {
+    if (!id) return;
+    scoringApi
+      .getStartedPresentations(id)
+      .then((rows) => setStartedEntryIds(rows.map((r) => r.scheduleEntryId)))
+      .catch(() => {});
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
-    refreshCompletedPresentations();
-    const interval = setInterval(refreshCompletedPresentations, REALTIME_FALLBACK_POLL_MS);
+    const refresh = () => {
+      refreshCompletedPresentations();
+      refreshStartedPresentations();
+    };
+    refresh();
+    const interval = setInterval(refresh, REALTIME_FALLBACK_POLL_MS);
     return () => clearInterval(interval);
-  }, [id, refreshCompletedPresentations]);
+  }, [id, refreshCompletedPresentations, refreshStartedPresentations]);
 
   // Sinal do backend (ver CLAUDE.md "Tempo real") — uma notificação nova
   // pode significar apresentação movida/concluída/desistência/
@@ -172,6 +189,7 @@ export function EventLiveSchedulePage() {
       refreshDays();
       refreshUnreadCount();
       refreshCompletedPresentations();
+      refreshStartedPresentations();
     },
     onEventStatusChanged: () => {
       if (!id) return;
@@ -210,8 +228,8 @@ export function EventLiveSchedulePage() {
 
   const completedEntryIdSet = useMemo(() => new Set(completedEntryIds), [completedEntryIds]);
   const live = useMemo(
-    () => computeEventLiveSchedule(days ?? [], completedEntryIdSet),
-    [days, completedEntryIdSet],
+    () => computeEventLiveSchedule(days ?? [], completedEntryIdSet, new Set(startedEntryIds)),
+    [days, completedEntryIdSet, startedEntryIds],
   );
   const currentItem = live.next;
   const currentEntryId = currentItem?.entry.id ?? null;
@@ -490,11 +508,8 @@ export function EventLiveSchedulePage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-violet-600">
-                  <span className="relative flex size-1.5">
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-violet-500 opacity-75" />
-                    <span className="relative inline-flex size-1.5 rounded-full bg-violet-500" />
-                  </span>
-                  ACONTECENDO AGORA
+                  {live.nextIsLive && <LivePulseDot />}
+                  {live.nextIsLive ? "ACONTECENDO AGORA" : liveNextLabel(live)}
                 </p>
                 <p className="truncate text-base font-semibold text-foreground">{currentDisplay.title}</p>
                 {currentDisplay.subtitle && (
@@ -587,7 +602,7 @@ export function EventLiveSchedulePage() {
                                   {display.title}
                                   {isCurrent && (
                                     <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
-                                      AGORA
+                                      {live.nextIsLive ? "AGORA" : "PRÓXIMA"}
                                     </span>
                                   )}
                                 </p>

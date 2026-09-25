@@ -52,6 +52,10 @@ export interface CurrentCategoryInfo {
 
 export interface EventLiveSchedule {
   next: LiveScheduleItem | null;
+  // `next` é uma apresentação que algum jurado já iniciou (primeiro
+  // TIMER_STARTED) e ninguém enviou súmula ainda — a UI mostra
+  // "Apresentando agora" em vez de "Próxima apresentação".
+  nextIsLive: boolean;
   upcoming: LiveScheduleItem[];
   completed: number;
   total: number;
@@ -222,9 +226,15 @@ function findWarmupFor(
 // pra qualquer pista que ainda não teve nenhuma apresentação
 // concluída), isso já cai naturalmente no primeiro item do cronograma
 // na ordem do plano, sem precisar de um caso especial.
+//
+// `startedEntryIds` (ScoringService.getStartedPresentations): uma
+// apresentação pendente que já foi iniciada vira o `next` (com
+// `nextIsLive`), mesmo que outro item pendente esteja antes dela no
+// horário planejado — ela é o que está acontecendo de fato.
 export function computeEventLiveSchedule(
   days: ScheduleDay[],
   completedEntryIds: Set<string> = new Set(),
+  startedEntryIds: Set<string> = new Set(),
 ): EventLiveSchedule {
   const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
     a.date.localeCompare(b.date),
@@ -307,6 +317,13 @@ export function computeEventLiveSchedule(
   const completed = presentations.filter((item) => allDoneEntryIds.has(item.entry.id)).length;
 
   const pending = allItems.filter((item) => !allDoneEntryIds.has(item.entry.id));
+  const liveIndex = pending.findIndex(
+    (item) =>
+      item.entry.type === "presentation" &&
+      startedEntryIds.has(item.entry.id) &&
+      !completedEntryIds.has(item.entry.id),
+  );
+  if (liveIndex > 0) pending.unshift(...pending.splice(liveIndex, 1));
   const [next, ...rest] = pending;
 
   const pendingPresentations = pending.filter((item) => item.entry.type === "presentation");
@@ -321,10 +338,17 @@ export function computeEventLiveSchedule(
 
   return {
     next: next ?? null,
+    nextIsLive: liveIndex >= 0,
     upcoming: rest.slice(0, 12),
     completed,
     total,
     nextWarmup,
     currentCategory,
   };
+}
+
+// Rótulo do card principal do evento ao vivo (Início e Cronograma).
+export function liveNextLabel(live: EventLiveSchedule): string {
+  if (live.nextIsLive) return "APRESENTANDO AGORA";
+  return live.next?.entry.type === "presentation" ? "PRÓXIMA APRESENTAÇÃO" : "A SEGUIR";
 }

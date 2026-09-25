@@ -39,7 +39,8 @@ import {
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatMinutes } from "@/lib/scheduleTime";
-import { computeResourceNextStatus, toIsoDate, type EventLiveSchedule } from "@/lib/eventLiveSchedule";
+import { computeResourceNextStatus, liveNextLabel, toIsoDate, type EventLiveSchedule } from "@/lib/eventLiveSchedule";
+import { LivePulseDot } from "@/components/LivePulseDot";
 import { formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
 import { cn } from "@/lib/utils";
 import type {
@@ -328,8 +329,9 @@ export function EventLiveDesktopView({
           <div className="rounded-2xl border border-border bg-card p-4">
             {live.next ? (
               <>
-                <p className="text-xs font-semibold tracking-wide text-violet-600">
-                  {live.next.entry.type === "presentation" ? "PRÓXIMA APRESENTAÇÃO" : "A SEGUIR"}
+                <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-violet-600">
+                  {live.nextIsLive && <LivePulseDot />}
+                  {liveNextLabel(live)}
                 </p>
                 <p className="mt-2 text-2xl font-bold text-violet-600">{formatMinutes(live.next.start)}</p>
                 <p className="mt-1 truncate text-base font-semibold text-foreground">{nextDisplay?.title}</p>

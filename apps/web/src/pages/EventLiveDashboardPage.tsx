@@ -44,7 +44,8 @@ import { REALTIME_FALLBACK_POLL_MS, useEventLiveSocket } from "@/lib/useEventLiv
 import { formatDate } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { computeResourceTimes, formatMinutes } from "@/lib/scheduleTime";
-import { computeEventLiveSchedule, toIsoDate } from "@/lib/eventLiveSchedule";
+import { computeEventLiveSchedule, liveNextLabel, toIsoDate } from "@/lib/eventLiveSchedule";
+import { LivePulseDot } from "@/components/LivePulseDot";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { buildJudgePresentationList } from "@/lib/judgeSchedule";
 import { NOTIFICATION_ICONS, formatNotificationRelativeTime, notificationHref } from "@/lib/notificationDisplay";
@@ -254,9 +255,13 @@ export function EventLiveDashboardPage() {
   }, []);
 
   const completedEntryIdSet = useMemo(() => new Set(completedEntryIds), [completedEntryIds]);
+  const startedEntryIdSet = useMemo(
+    () => new Set(startedPresentations.map((p) => p.scheduleEntryId)),
+    [startedPresentations],
+  );
   const live = useMemo(
-    () => (days && event ? computeEventLiveSchedule(days, completedEntryIdSet) : null),
-    [days, event, completedEntryIdSet],
+    () => (days && event ? computeEventLiveSchedule(days, completedEntryIdSet, startedEntryIdSet) : null),
+    [days, event, completedEntryIdSet, startedEntryIdSet],
   );
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const isoToday = toIsoDate(now);
@@ -535,8 +540,9 @@ export function EventLiveDashboardPage() {
 
           {live.next ? (
             <div className="mx-4 mt-4 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 text-white shadow-lg">
-              <p className="text-xs font-semibold tracking-wide text-white/70">
-                {live.next.entry.type === "presentation" ? "PRÓXIMA APRESENTAÇÃO" : "A SEGUIR"}
+              <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-white/70">
+                {live.nextIsLive && <LivePulseDot className="bg-white" />}
+                {liveNextLabel(live)}
               </p>
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="flex items-center gap-1.5 text-sm text-white/80">
@@ -549,7 +555,7 @@ export function EventLiveDashboardPage() {
                     esgotado), mostra a data em vez de "Em X min". */}
                 {live.next.dayDate === isoToday ? (
                   <span className="rounded-full bg-black/20 px-3 py-1 text-xs font-semibold">
-                    {countdownLabel(live.next.start, nowMinutes)}
+                    {live.nextIsLive ? "Em andamento" : countdownLabel(live.next.start, nowMinutes)}
                   </span>
                 ) : (
                   <span className="rounded-full bg-black/20 px-3 py-1 text-xs font-semibold">

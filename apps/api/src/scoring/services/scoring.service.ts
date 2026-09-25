@@ -1767,18 +1767,35 @@ export class ScoringService {
     return Array.from(new Set(rows.map((r) => r.scheduleEntryId)));
   }
 
-  // Ids das apresentações já 100% pontuadas — alimenta o cronograma ao
-  // vivo (painel Início: "Próxima apresentação"/"Próximo em cada
-  // pista"), que antes só comparava o horário AGENDADO contra o
-  // relógio (ver lib/eventLiveSchedule.ts) e podia mostrar uma
-  // apresentação já concluída como "próxima" quando os jurados
-  // terminam mais rápido que a duração planejada. Reaproveita
-  // getAdminOverview (que já filtra só as completas) em vez de
-  // duplicar o loop de completude.
+  // Ids das apresentações que já ACONTECERAM — alimenta o evento ao vivo
+  // (Início: "Próxima apresentação"/"Apresentando agora"; Cronograma:
+  // "Acontecendo agora"). Decisão do usuário (2026-09-25): a primeira
+  // súmula enviada por qualquer jurado já basta pra dizer que a
+  // apresentação acabou — não espera todos os jurados (isso continua
+  // sendo a regra de "100% pontuada" das súmulas/resultados, ver
+  // findCompletedEntries). Desistência também conta como passada, senão
+  // travaria a fila da pista.
   async getCompletedPresentationIds(eventId: string): Promise<string[]> {
     const days = await this.scheduleService.getDays(eventId);
-    const completed = await this.findCompletedEntries(eventId, days);
-    return completed.map(({ entry }) => entry.id);
+    const entryIds: string[] = [];
+    const withdrawnIds: string[] = [];
+    for (const day of days) {
+      for (const resource of day.resources) {
+        for (const entry of resource.entries) {
+          if (entry.type !== ScheduleEntryType.PRESENTATION) continue;
+          entryIds.push(entry.id);
+          if (entry.withdrawnAt) withdrawnIds.push(entry.id);
+        }
+      }
+    }
+    if (entryIds.length === 0) return [];
+    const submitted = await this.scoreEventsRepo
+      .createQueryBuilder('e')
+      .select('DISTINCT e.schedule_entry_id', 'id')
+      .where('e.schedule_entry_id IN (:...entryIds)', { entryIds })
+      .andWhere('e.kind = :kind', { kind: ScoreEventKind.SHEET_SUBMITTED })
+      .getRawMany<{ id: string }>();
+    return [...new Set([...withdrawnIds, ...submitted.map((r) => r.id)])];
   }
 
   // Horário real de início de cada apresentação já iniciada (primeiro
@@ -2248,10 +2265,10 @@ export class ScoringService {
   // ScoreEvent (`submitEvents`/`submitEventsAsHeadJudge`, jurado normal
   // ou Head Judge editando folha de outro jurado — os dois passam por
   // aqui igual):
-  // - "Apresentação concluída": pra cada SHEET_SUBMITTED do lote, se a
-  //   apresentação acabou de ficar 100% pontuada (todos os jurados
-  //   escalados já enviaram), notifica ALL. Dedup por scheduleEntryId —
-  //   não duplica se o gatilho rodar de novo.
+  // - "Apresentação concluída": na PRIMEIRA súmula enviada de cada
+  //   apresentação (qualquer jurado), notifica ALL — mesma regra de
+  //   getCompletedPresentationIds (2026-09-25). Dedup por
+  //   scheduleEntryId — não duplica com as súmulas dos outros jurados.
   // - "Avaliação pendente": pra cada TIMER_STARTED do lote que for o
   //   PRIMEIRO de verdade daquele scheduleEntryId (não um "Reiniciar"),
   //   busca outras apresentações do evento já iniciadas mas ainda não
@@ -2277,11 +2294,6 @@ export class ScoringService {
         scheduleEntryId,
       );
       if (alreadyNotified) continue;
-      const complete = await this.isPresentationComplete(
-        eventId,
-        scheduleEntryId,
-      ).catch(() => false);
-      if (!complete) continue;
       const entry = await this.scheduleService.findEntryInEventOrThrow(
         eventId,
         scheduleEntryId,
