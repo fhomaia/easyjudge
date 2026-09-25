@@ -1,7 +1,7 @@
 import { AlertTriangle, Scale } from "lucide-react";
 import { BandBadge } from "@/components/scoring/CurrentBandBadge";
 import { criterionBandForScore } from "@/lib/scoreBands";
-import { formatCriterionScore } from "@/lib/formatNumber";
+import { formatCriterionScore, formatDeduction } from "@/lib/formatNumber";
 import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWithSubgroups";
 import { formatElapsed } from "@/lib/deductionIcons";
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
@@ -154,6 +154,9 @@ export function PresentationNotesDetail({
                     {d.presentationElapsedMs !== null ? formatElapsed(d.presentationElapsedMs) : "--:--"}
                   </span>
                   <span className="flex-1 text-sm text-foreground">{d.label}</span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
+                    {formatDeduction(d.value)}
+                  </span>
                 </div>
               ))}
             </div>

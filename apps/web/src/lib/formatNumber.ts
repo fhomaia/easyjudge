@@ -15,3 +15,11 @@ export function formatCriterionScore(value: number | null): string {
   if (value === null) return "—";
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
+
+// Pontos subtraídos por uma dedução, sempre com sinal de menos (a API
+// guarda o valor negativo; "0" pra tipo removido do modelo, que vale 0).
+export function formatDeduction(value: number): string {
+  const abs = Math.abs(value);
+  if (abs === 0) return "0";
+  return `-${abs.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}`;
+}

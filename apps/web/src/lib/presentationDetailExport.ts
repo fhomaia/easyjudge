@@ -3,7 +3,7 @@ import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWith
 import autoTable from "jspdf-autotable";
 import JSZip from "jszip";
 import { formatElapsed } from "@/lib/deductionIcons";
-import { formatCriterionScore, formatPercent, formatPoints } from "@/lib/formatNumber";
+import { formatCriterionScore, formatDeduction, formatPercent, formatPoints } from "@/lib/formatNumber";
 import { sumMaxScores } from "@/lib/scoringSummary";
 import { isPresentationHitZero } from "@/lib/hitZero";
 import type { PresentationDetail, PresentationDetailCriterion } from "@/api/client";
@@ -324,16 +324,20 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
         ? detail.legality.deductions.map((d) => [
             d.presentationElapsedMs !== null ? formatElapsed(d.presentationElapsedMs) : "--:--",
             d.label,
+            formatDeduction(d.value),
           ])
-        : [["—", "Nenhuma dedução registrada."]];
+        : [["—", "Nenhuma dedução registrada.", ""]];
     autoTable(doc, {
       startY: cursorY,
-      head: [[{ content: "LEGALIDADE", colSpan: 2 }]],
+      head: [[{ content: "LEGALIDADE", colSpan: 3 }]],
       body,
       theme: "grid",
       styles: { fontSize: 10.5, cellPadding: 8, textColor: INK, lineColor: [225, 229, 234] },
       headStyles: { fillColor: RED, textColor: 255, fontStyle: "bold", fontSize: 11 },
-      columnStyles: { 0: { cellWidth: 70 } },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        2: { cellWidth: 60, halign: "right", fontStyle: "bold", textColor: RED },
+      },
       alternateRowStyles: { fillColor: RED_LIGHT },
       margin: { left: MARGIN, right: MARGIN },
     });

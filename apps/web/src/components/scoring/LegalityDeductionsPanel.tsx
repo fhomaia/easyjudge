@@ -1,3 +1,4 @@
+import { formatDeduction } from "@/lib/formatNumber";
 import { useState } from "react";
 import { Check, Pencil, Scale, Trash2, Undo2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -80,6 +81,9 @@ export function LegalityDeductionsPanel({
               <span className="text-[11px] leading-tight font-medium text-foreground">
                 {rule.label}
               </span>
+              <span className="text-[11px] font-semibold tabular-nums text-red-600">
+                {formatDeduction(rule.value)}
+              </span>
             </button>
           );
         })}
@@ -151,6 +155,9 @@ export function LegalityDeductionsPanel({
                     </button>
                   )}
                   <span className="flex-1 truncate text-sm text-foreground">{getDeductionLabel(d.deductionType, rules)}</span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
+                    {formatDeduction(rules.find((r) => r.type === d.deductionType)?.value ?? 0)}
+                  </span>
                   <button
                     type="button"
                     onClick={() => onUndoDeduction(d.id)}
