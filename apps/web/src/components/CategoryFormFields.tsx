@@ -145,13 +145,13 @@ export function CategoryFormFields({
         </label>
       )}
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 gap-2">
         <Label>Sistema de pontuação</Label>
         <Select
           value={form.scoringTemplateId || null}
           onValueChange={(value) => onChange("scoringTemplateId", value as string)}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="w-full min-w-0">
             {/* placeholder é ignorado pelo Base UI quando o filho é
                 função — ver PresentationDetailsDialog.tsx pro detalhe do
                 bug (2026-08-05). */}
@@ -160,7 +160,7 @@ export function CategoryFormFields({
                 value
                   ? (() => {
                       const t = scoringTemplates.find((item) => item.id === value);
-                      return t ? scoringTemplateLabel(t) : undefined;
+                      return t ? <span className="truncate">{scoringTemplateLabel(t)}</span> : undefined;
                     })()
                   : "Selecione um sistema de pontuação"
               }
