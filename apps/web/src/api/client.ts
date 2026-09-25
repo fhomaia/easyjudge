@@ -1516,6 +1516,9 @@ export interface ScoringCriterionView {
   // — buildGroups achata a árvore em 2 níveis, então isso é o único
   // jeito de recuperar essa descrição pra exibir junto do item.
   subgroupDescriptions: { name: string; description: string }[];
+  // Subgrupos entre o grupo-raiz e o item, da raiz pra baixo (ex:
+  // ["Dance"]). Opcional: API anterior não mandava.
+  subgroupPath?: string[];
   // Maior nota atribuída a este critério entre as apresentações da
   // MESMA categoria, com as equipes empatadas nesse valor (mais de uma
   // só em empate real) — `null` quando ainda não há nota pra comparar.

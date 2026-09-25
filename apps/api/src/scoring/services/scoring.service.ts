@@ -103,6 +103,11 @@ export interface ScoringCriterionView {
   // descrição do próprio grupo-raiz continua em ScoringGroupView.description,
   // não repetida aqui.
   subgroupDescriptions: { name: string; description: string }[];
+  // Nomes dos subgrupos entre o grupo-raiz e o item, da raiz pra baixo
+  // (ex: ["Dance"] pra "Overall -> Dance -> Execution"). A súmula do
+  // jurado usa pra intercalar subtítulos, como o detalhe e o PDF já
+  // fazem (PresentationDetailCriterion.subgroupPath).
+  subgroupPath: string[];
   // Maior nota atribuída a este critério entre todas as apresentações
   // da MESMA categoria (comparação só faz sentido dentro da mesma
   // categoria — mesmo sistema de pontuação, mesma faixa de comparação
@@ -2796,8 +2801,10 @@ export class ScoringService {
         groups.set(root.id, group);
       }
       const subgroupDescriptions: { name: string; description: string }[] = [];
+      const subgroupPath: string[] = [];
       let ancestor = leaf.parentId ? byId.get(leaf.parentId) : undefined;
       while (ancestor && ancestor.id !== root.id) {
+        subgroupPath.unshift(ancestor.name);
         if (ancestor.description) {
           subgroupDescriptions.push({
             name: ancestor.name,
@@ -2819,6 +2826,7 @@ export class ScoringService {
         useFixedValues: leaf.useFixedValues,
         fixedValues: leaf.fixedValues,
         subgroupDescriptions,
+        subgroupPath,
         // Placeholder — só `getSheet` (folha do próprio jurado) de
         // fato calcula isso (ver getCriterionComparisons), sobrescrevendo
         // depois desta chamada. `getSheetForJudge` (Head Judge) nunca

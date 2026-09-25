@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { CheckCircle2, Info, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { subgroupHeadingsBefore } from "@/lib/criteriaWithSubgroups";
 import { CriterionInfoPopover } from "@/components/scoring/CriterionInfoPopover";
 import { CurrentBandBadge } from "@/components/scoring/CurrentBandBadge";
 import { ScoreBandSlider } from "@/components/scoring/ScoreBandSlider";
@@ -110,7 +111,13 @@ export function ScoringCriteriaGroups({
               )}
             </div>
             <div className="divide-y divide-border border-t border-border px-4">
-              {group.criteria.map((criterion) => {
+              {group.criteria.map((criterion, criterionIndex) => {
+                // Subtítulo de subgrupo (ex: "Dance" dentro de "Overall")
+                // quando o caminho muda em relação ao item anterior.
+                const headings = subgroupHeadingsBefore(
+                  criterionIndex > 0 ? (group.criteria[criterionIndex - 1].subgroupPath ?? []) : [],
+                  criterion.subgroupPath ?? [],
+                );
                 const bands = criterion.scoreBands;
                 const hasBands = showScoreBands && criterion.useScoreBands && !!bands && bands.length > 0;
                 // Critério sem faixa também ganha o slider no desktop
@@ -127,7 +134,22 @@ export function ScoringCriteriaGroups({
                 const showSlider = showScoreBands && !isMobile && !hasFixedValues;
                 const score = scores[criterion.id] ?? 0;
                 return (
-                  <div key={criterion.id} className={cn(isMobile ? "py-4" : "py-3")}>
+                  <Fragment key={criterion.id}>
+                  {headings.map((heading) => (
+                    <p
+                      key={`${heading.depth}-${heading.label}`}
+                      className="pt-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                      style={{ paddingLeft: `${heading.depth * 12}px` }}
+                    >
+                      {heading.label}
+                    </p>
+                  ))}
+                  {/* Recuo pelo nível do subgrupo: deixa claro onde o
+                      subgrupo termina (ex: Showmanship volta ao Overall). */}
+                  <div
+                    className={cn(isMobile ? "py-4" : "py-3")}
+                    style={{ paddingLeft: `${(criterion.subgroupPath ?? []).length * 12}px` }}
+                  >
                     <div className="flex items-center gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
@@ -265,6 +287,7 @@ export function ScoringCriteriaGroups({
                       />
                     )}
                   </div>
+                  </Fragment>
                 );
               })}
             </div>

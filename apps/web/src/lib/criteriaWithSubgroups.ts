@@ -31,3 +31,22 @@ export function criteriaWithSubgroups(criteria: PresentationDetailCriterion[]): 
 export function isStandaloneCriterion(group: PresentationDetailGroup): boolean {
   return group.criteria.length === 1 && group.criteria[0].id === group.id;
 }
+
+// Subtítulos que precisam aparecer ANTES de um item, comparando o
+// caminho de subgrupos dele com o do item anterior (mesma regra de
+// criteriaWithSubgroups). Usado pela súmula do jurado, que desenha cada
+// item com o próprio layout.
+export function subgroupHeadingsBefore(
+  previousPath: string[],
+  path: string[],
+): { label: string; depth: number }[] {
+  let common = 0;
+  while (common < path.length && common < previousPath.length && path[common] === previousPath[common]) {
+    common += 1;
+  }
+  const headings: { label: string; depth: number }[] = [];
+  for (let depth = common; depth < path.length; depth += 1) {
+    headings.push({ label: path[depth], depth });
+  }
+  return headings;
+}
