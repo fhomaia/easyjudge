@@ -108,6 +108,12 @@ export function EventLiveSchedulePage() {
   const [teams, setTeams] = useState<TeamWithProgram[] | null>(null);
   const [completedEntryIds, setCompletedEntryIds] = useState<string[]>([]);
   const [startedEntryIds, setStartedEntryIds] = useState<string[]>([]);
+  // Início real de cada apresentação (ver ScoringService.
+  // getPresentationStartTimes): decide quando um evento especial com
+  // início sinalizado já passou.
+  const [presentationStarts, setPresentationStarts] = useState<
+    Array<{ scheduleEntryId: string; startedAt: string }>
+  >([]);
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[] | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<FullScheduleItem | null>(null);
@@ -176,6 +182,7 @@ export function EventLiveSchedulePage() {
       .getStartedPresentations(id)
       .then((rows) => setStartedEntryIds(rows.map((r) => r.scheduleEntryId)))
       .catch(() => {});
+    scoringApi.getPresentationStarts(id).then(setPresentationStarts).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -250,8 +257,14 @@ export function EventLiveSchedulePage() {
 
   const completedEntryIdSet = useMemo(() => new Set(completedEntryIds), [completedEntryIds]);
   const live = useMemo(
-    () => computeEventLiveSchedule(days ?? [], completedEntryIdSet, new Set(startedEntryIds)),
-    [days, completedEntryIdSet, startedEntryIds],
+    () =>
+      computeEventLiveSchedule(
+        days ?? [],
+        completedEntryIdSet,
+        new Set(startedEntryIds),
+        new Map(presentationStarts.map((p) => [p.scheduleEntryId, p.startedAt])),
+      ),
+    [days, completedEntryIdSet, startedEntryIds, presentationStarts],
   );
   const currentItem = live.next;
   const currentEntryId = currentItem?.entry.id ?? null;

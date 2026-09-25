@@ -284,9 +284,16 @@ export function EventLiveDashboardPage() {
     () => new Set(startedPresentations.map((p) => p.scheduleEntryId)),
     [startedPresentations],
   );
+  const presentationStartTimes = useMemo(
+    () => new Map(presentationStarts.map((p) => [p.scheduleEntryId, p.startedAt])),
+    [presentationStarts],
+  );
   const live = useMemo(
-    () => (days && event ? computeEventLiveSchedule(days, completedEntryIdSet, startedEntryIdSet) : null),
-    [days, event, completedEntryIdSet, startedEntryIdSet],
+    () =>
+      days && event
+        ? computeEventLiveSchedule(days, completedEntryIdSet, startedEntryIdSet, presentationStartTimes)
+        : null,
+    [days, event, completedEntryIdSet, startedEntryIdSet, presentationStartTimes],
   );
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const isoToday = toIsoDate(now);
@@ -813,6 +820,7 @@ export function EventLiveDashboardPage() {
       canViewJudges={canViewJudges}
       completedEntryIds={completedEntryIdSet}
       startedEntryIds={startedEntryIdSet}
+      presentationStartTimes={presentationStartTimes}
       notifications={notifications}
       notificationsUnreadCount={notificationsUnreadCount}
       isJudge={assignment.isJudge}

@@ -119,6 +119,7 @@ export function computeResourceNextStatus(
   live: EventLiveSchedule,
   completedEntryIds: Set<string> = new Set(),
   startedEntryIds: Set<string> = new Set(),
+  startTimes: Map<string, string> = new Map(),
 ): ResourceNextStatus[] {
   const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
     a.date.localeCompare(b.date),
@@ -128,7 +129,7 @@ export function computeResourceNextStatus(
   if (!activeDay) return [];
 
   const times = computeResourceTimes(activeDay.resources, activeDay.startMinutes);
-  const doneEntryIds = computeDoneEntryIds(activeDay, completedEntryIds, startedEntryIds);
+  const doneEntryIds = computeDoneEntryIds(activeDay, completedEntryIds, startedEntryIds, startTimes);
   return activeDay.resources
     .filter((r) => r.supportsPresentations)
     .map((resource) => {
@@ -192,10 +193,18 @@ export function toIsoDate(date: Date): string {
 // dele já foi iniciada ou concluída, ou quando outro evento especial
 // posterior foi iniciado. Assim, depois da apresentação anterior, ele
 // aparece como "A seguir" em vez de sumir.
+//
+// Com o início SINALIZADO, o que aconteceu antes não conta (a fila pode
+// ter andado fora de ordem): ele só passa quando é encerrado, ou quando
+// QUALQUER apresentação do dia começa DEPOIS do sinal, planejada antes ou
+// depois dele (`startTimes` = início real de cada apresentação, ver
+// ScoringService.getPresentationStartTimes), ou outro evento especial é
+// sinalizado depois dele.
 function computeDoneEntryIds(
   day: ScheduleDay,
   completedEntryIds: Set<string>,
   startedEntryIds: Set<string> = new Set(),
+  startTimes: Map<string, string> = new Map(),
 ): Set<string> {
   const resources = day.resources;
   const done = new Set<string>();
@@ -204,6 +213,23 @@ function computeDoneEntryIds(
   for (const entry of allEntries) {
     if (!isSpecialEntry(entry)) continue;
     const start = times.get(entry.id)?.startMinutes ?? 0;
+    const signaledAt = entry.startedAt ? new Date(entry.startedAt).getTime() : null;
+    if (signaledAt !== null) {
+      const passedAfterSignal =
+        Boolean(entry.endedAt) ||
+        allEntries.some((other) => {
+          if (other.id === entry.id) return false;
+          const otherBeganAt =
+            other.type === "presentation"
+              ? startTimes.get(other.id)
+              : isSpecialEntry(other) && other.label !== entry.label
+                ? (other.startedAt ?? undefined)
+                : undefined;
+          return otherBeganAt !== undefined && new Date(otherBeganAt).getTime() > signaledAt;
+        });
+      if (passedAfterSignal) done.add(entry.id);
+      continue;
+    }
     const passed =
       Boolean(entry.endedAt) ||
       allEntries.some((other) => {
@@ -279,6 +305,7 @@ export function computeEventLiveSchedule(
   days: ScheduleDay[],
   completedEntryIds: Set<string> = new Set(),
   startedEntryIds: Set<string> = new Set(),
+  startTimes: Map<string, string> = new Map(),
 ): EventLiveSchedule {
   const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
     a.date.localeCompare(b.date),
@@ -290,7 +317,9 @@ export function computeEventLiveSchedule(
 
   for (const day of sortedDays) {
     const times = computeResourceTimes(day.resources, day.startMinutes);
-    for (const id of computeDoneEntryIds(day, completedEntryIds, startedEntryIds)) allDoneEntryIds.add(id);
+    for (const id of computeDoneEntryIds(day, completedEntryIds, startedEntryIds, startTimes)) {
+      allDoneEntryIds.add(id);
+    }
 
     for (const resource of day.resources) {
       for (const entry of resource.entries) {
