@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/store/auth";
+import { SESSION_EXPIRED_MESSAGE, handleUnauthorized } from "@/lib/sessionExpiry";
 
 // Em dev, sem VITE_API_URL definida, cai pro proxy do Vite (`/api`,
 // ver vite.config.ts) — same-origin, sem CORS. Em produção (build
@@ -72,6 +73,20 @@ const inflightGets = new Map<string, Promise<unknown>>();
 const USERS_ME_TTL_MS = 60_000;
 const usersMeCache = new Map<string, { at: number; value: Promise<unknown> }>();
 
+// 401 de sessão (token vencido/conta desativada) encerra a sessão local
+// e manda pro login, em vez de a tela ficar carregando (ver sessionExpiry).
+function checkUnauthorized(err: unknown, accessToken: string | null): never {
+  if (
+    accessToken &&
+    err instanceof ApiError &&
+    err.status === 401 &&
+    err.message === SESSION_EXPIRED_MESSAGE
+  ) {
+    handleUnauthorized(accessToken);
+  }
+  throw err;
+}
+
 function authRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const accessToken = useAuthStore.getState().accessToken;
   const send = () =>
@@ -81,7 +96,7 @@ function authRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
         ...options.headers,
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
-    });
+    }).catch((err) => checkUnauthorized(err, accessToken));
 
   const isGet = !options.method || options.method.toUpperCase() === "GET";
   if (!isGet) {
@@ -137,7 +152,7 @@ async function authUpload<T>(path: string, formData: FormData): Promise<T> {
     const message = Array.isArray(data?.message)
       ? data.message.join(", ")
       : (data?.message ?? "Erro inesperado. Tente novamente.");
-    throw new ApiError(message, res.status);
+    checkUnauthorized(new ApiError(message, res.status), accessToken);
   }
 
   return data as T;

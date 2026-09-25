@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { consumeSessionReturnTo, wasSessionExpired } from "@/lib/sessionExpiry";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
@@ -39,7 +40,9 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    wasSessionExpired() ? "Sua sessão expirou. Entre novamente." : null,
+  );
   const [registerOpen, setRegisterOpen] = useState(false);
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   // Token fica em espera aqui até a animação do raio terminar — só
@@ -68,7 +71,7 @@ export function LoginPage() {
     if (!pendingToken) return;
     login(pendingToken);
     await joinPendingEventIfAny();
-    navigate("/");
+    navigate(consumeSessionReturnTo() ?? "/");
   }
 
   return (
