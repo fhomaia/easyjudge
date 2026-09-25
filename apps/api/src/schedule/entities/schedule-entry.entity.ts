@@ -121,6 +121,16 @@ export class ScheduleEntry {
   @Column({ name: 'removed_from_schedule', type: 'boolean', default: false })
   removedFromSchedule: boolean;
 
+  // Início/fim sinalizados por admin/assessor — só eventos especiais
+  // (intervalo de verdade, cerimônia, premiação), ver
+  // ScheduleService.setSpecialEventSignal. Vale pra todas as cópias do
+  // mesmo evento especial no dia (uma por pista/área de aquecimento).
+  @Column({ name: 'started_at', type: 'timestamptz', nullable: true })
+  startedAt: Date | null;
+
+  @Column({ name: 'ended_at', type: 'timestamptz', nullable: true })
+  endedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

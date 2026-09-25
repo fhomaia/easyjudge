@@ -11,7 +11,9 @@ import {
   FileText,
   MapPin,
   MoreVertical,
+  Play,
   Search,
+  Square,
   Trophy,
   XCircle,
 } from "lucide-react";
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MovePresentationDialog } from "@/components/MovePresentationDialog";
 import { WithdrawPresentationDialog } from "@/components/WithdrawPresentationDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -49,6 +52,7 @@ import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import {
   computeFullSchedule,
   filterFullSchedule,
+  scheduleFilterCategory,
   type ScheduleFilterCategory,
   type FullScheduleItem,
 } from "@/lib/eventFullSchedule";
@@ -108,6 +112,12 @@ export function EventLiveSchedulePage() {
   const [myTeamIds, setMyTeamIds] = useState<string[] | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<FullScheduleItem | null>(null);
   const [moveTarget, setMoveTarget] = useState<FullScheduleItem | null>(null);
+  // Evento especial: sinalizar início/fim, sempre com confirmação (sem
+  // desfazer — pedido do usuário).
+  const [signalTarget, setSignalTarget] = useState<{
+    item: FullScheduleItem;
+    action: "start" | "end";
+  } | null>(null);
 
   const [search, setSearch] = useState("");
   // "Intervalos" (só as esperas automáticas) começa oculto por padrão
@@ -323,6 +333,14 @@ export function EventLiveSchedulePage() {
   function refreshDays() {
     if (!id) return;
     scheduleApi.listDays(id).then(setDays).catch(() => {});
+  }
+
+  // Sem try/catch: o ConfirmDialog mostra o erro e mantém o popup aberto.
+  async function handleSignalConfirm() {
+    if (!id || !signalTarget) return;
+    const { item, action } = signalTarget;
+    await scheduleApi.signalSpecialEvent(id, item.dayId, item.entry.id, action);
+    refreshDays();
   }
 
   async function handleWithdrawConfirm(removeFromSchedule: boolean) {
@@ -576,6 +594,17 @@ export function EventLiveSchedulePage() {
                           // cronograma, só sinaliza desistência.
                           const canMove =
                             item.entry.type === "presentation" && !withdrawn && isAdminOrAssessor;
+                          // Evento especial (Almoço, Premiação...): admin/
+                          // assessor sinaliza início/fim com o evento iniciado.
+                          const isSpecial = scheduleFilterCategory(item.entry) === "special";
+                          const canSignalStart =
+                            isSpecial && isAdminOrAssessor && event.status === "started" && !item.entry.startedAt;
+                          const canSignalEnd =
+                            isSpecial &&
+                            isAdminOrAssessor &&
+                            event.status === "started" &&
+                            Boolean(item.entry.startedAt) &&
+                            !item.entry.endedAt;
                           const expanded = scheduleRows.isExpanded(item.entry.id);
                           return (
                             <div
@@ -652,7 +681,12 @@ export function EventLiveSchedulePage() {
                               <span className="hidden shrink-0 truncate rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary sm:block">
                                 {item.resourceName}
                               </span>
-                              {(canWithdraw || canMove) && (
+                              {isSpecial && item.entry.endedAt && (
+                                <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                                  Encerrado
+                                </span>
+                              )}
+                              {(canWithdraw || canMove || canSignalStart || canSignalEnd) && (
                                 // Menu "⋯" não abre/fecha a linha.
                                 <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                                 <DropdownMenu>
@@ -680,6 +714,18 @@ export function EventLiveSchedulePage() {
                                         Sinalizar desistência
                                       </DropdownMenuItem>
                                     )}
+                                    {canSignalStart && (
+                                      <DropdownMenuItem onClick={() => setSignalTarget({ item, action: "start" })}>
+                                        <Play data-icon="inline-start" />
+                                        Sinalizar início
+                                      </DropdownMenuItem>
+                                    )}
+                                    {canSignalEnd && (
+                                      <DropdownMenuItem onClick={() => setSignalTarget({ item, action: "end" })}>
+                                        <Square data-icon="inline-start" />
+                                        Encerrar
+                                      </DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                                 </div>
@@ -705,6 +751,24 @@ export function EventLiveSchedulePage() {
         teamName={withdrawTarget?.entry.teamName ?? "Equipe"}
         canRemoveFromSchedule={isAdminOrAssessor}
         onConfirm={handleWithdrawConfirm}
+      />
+
+      <ConfirmDialog
+        open={signalTarget !== null}
+        onOpenChange={(open) => !open && setSignalTarget(null)}
+        title={
+          signalTarget?.action === "end"
+            ? `Encerrar ${signalTarget.item.entry.label ?? "evento"}?`
+            : `Sinalizar início de ${signalTarget?.item.entry.label ?? "evento"}?`
+        }
+        description={
+          signalTarget?.action === "end"
+            ? "Todos do evento serão avisados que terminou. Não é possível desfazer."
+            : "Todos do evento serão avisados que começou, e ele passa a aparecer como acontecendo agora. Não é possível desfazer."
+        }
+        confirmLabel={signalTarget?.action === "end" ? "Encerrar" : "Sinalizar início"}
+        confirmingLabel="Salvando..."
+        onConfirm={handleSignalConfirm}
       />
 
       <MovePresentationDialog

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, QueryFailedError, Repository } from 'typeorm';
+import { In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import { ScheduleDay } from '../entities/schedule-day.entity';
 import { ScheduleResource } from '../entities/schedule-resource.entity';
 import { ScheduleEntry } from '../entities/schedule-entry.entity';
@@ -91,6 +91,13 @@ const DEFAULT_COMPONENT_DURATION_MINUTES = 15;
 // usuário (a apresentação não some junto) — só o inverso (excluir a
 // apresentação também exclui o intervalo) é automático.
 const INTERVAL_BREAK_LABEL = 'Intervalo entre apresentações';
+// Esperas/intervalos que o próprio cronograma cria (não são eventos
+// especiais) — mesmos rótulos de lib/eventFullSchedule.ts no front.
+const AUTOMATIC_BREAK_LABELS = new Set([
+  INTERVAL_BREAK_LABEL,
+  'Aguardando aquecimento',
+  'Aguardando disponibilidade da equipe',
+]);
 
 @Injectable()
 export class ScheduleService {
@@ -2679,6 +2686,81 @@ export class ScheduleService {
       NotificationType.PRESENTATION_CANCELLED,
       NotificationAudience.ALL,
       `${team?.name ?? 'Equipe'} cancelada`,
+      entry.id,
+    );
+  }
+
+  // Início/fim sinalizado de um EVENTO ESPECIAL (Almoço, Batalhas,
+  // Premiação, Abertura...) pelo menu "⋯" do Cronograma ao vivo —
+  // admin/assessor, com confirmação no front (pedido do usuário,
+  // 2026-09-25; sem "desfazer"). Vale pra todas as cópias do mesmo
+  // evento especial no dia (a geração automática cria uma por pista e
+  // área de aquecimento, mesmo tipo e rótulo). Notifica todo mundo.
+  async setSpecialEventSignal(
+    eventId: string,
+    dayId: string,
+    entryId: string,
+    action: 'start' | 'end',
+  ): Promise<void> {
+    const day = await this.findDayOrThrow(eventId, dayId);
+    const entry = await this.findEntryInDayOrThrow(day.id, entryId);
+    const isSpecial =
+      entry.type === ScheduleEntryType.CEREMONY ||
+      entry.type === ScheduleEntryType.AWARD ||
+      (entry.type === ScheduleEntryType.BREAK &&
+        !entry.linkedEntryId &&
+        !AUTOMATIC_BREAK_LABELS.has(entry.label ?? ''));
+    if (!isSpecial) {
+      throw new BadRequestException(
+        'Só é possível sinalizar início/fim de eventos especiais.',
+      );
+    }
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    if (event.status !== EventStatus.STARTED) {
+      throw new ConflictException('O evento ainda não foi iniciado.');
+    }
+    if (action === 'start' && entry.startedAt) {
+      throw new ConflictException('O início deste evento já foi sinalizado.');
+    }
+    if (action === 'end') {
+      if (!entry.startedAt) {
+        throw new ConflictException('Sinalize o início antes de encerrar.');
+      }
+      if (entry.endedAt) {
+        throw new ConflictException('Este evento já foi encerrado.');
+      }
+    }
+
+    const resources = await this.resourcesRepo.find({
+      where: { scheduleDayId: day.id },
+    });
+    const copies = await this.entriesRepo.find({
+      where: {
+        resourceId: In(resources.map((r) => r.id)),
+        type: entry.type,
+        label: entry.label ?? IsNull(),
+      },
+    });
+    const now = new Date();
+    for (const copy of copies) {
+      if (copy.linkedEntryId) continue;
+      if (action === 'start' && !copy.startedAt) copy.startedAt = now;
+      if (action === 'end' && copy.startedAt && !copy.endedAt) {
+        copy.endedAt = now;
+      }
+    }
+    await this.entriesRepo.save(copies);
+
+    const fallbackName =
+      entry.type === ScheduleEntryType.AWARD ? 'Premiação' : 'Evento especial';
+    const name = entry.label ?? fallbackName;
+    await this.notificationsService.createOncePerEntry(
+      event.aliasId,
+      action === 'start'
+        ? NotificationType.SPECIAL_EVENT_STARTED
+        : NotificationType.SPECIAL_EVENT_ENDED,
+      NotificationAudience.ALL,
+      action === 'start' ? `Começou: ${name}` : `Encerrado: ${name}`,
       entry.id,
     );
   }

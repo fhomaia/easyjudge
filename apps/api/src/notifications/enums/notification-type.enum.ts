@@ -14,4 +14,6 @@ export enum NotificationType {
   // evento não está mais "created" (fase de construção do cronograma
   // não notifica ninguém, só a partir de publicado/ao vivo).
   PRESENTATION_MOVED = 'presentation_moved',
+  SPECIAL_EVENT_STARTED = 'special_event_started',
+  SPECIAL_EVENT_ENDED = 'special_event_ended',
 }

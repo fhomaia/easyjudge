@@ -1203,6 +1203,11 @@ export interface ScheduleEntry {
   contestationResolvedAt: string | null;
   withdrawnAt: string | null;
   removedFromSchedule: boolean;
+  // Início/fim sinalizados de um evento especial (Almoço, Premiação...)
+  // pelo admin/assessor no Cronograma ao vivo. Opcionais: API anterior
+  // não mandava.
+  startedAt?: string | null;
+  endedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1412,6 +1417,13 @@ export const scheduleApi = {
         body: JSON.stringify(payload),
       },
     ),
+
+  // Evento especial: sinaliza início/fim (vale pra todas as cópias dele
+  // no dia; ver ScheduleService.setSpecialEventSignal).
+  signalSpecialEvent: (eventId: string, dayId: string, entryId: string, action: "start" | "end") =>
+    authRequest<void>(`/events/${eventId}/schedule/days/${dayId}/entries/${entryId}/${action}`, {
+      method: "POST",
+    }),
 
   moveEntry: (
     eventId: string,
@@ -2051,7 +2063,9 @@ export type NotificationType =
   | "evaluation_pending"
   | "contestation_requested"
   | "presentation_cancelled"
-  | "presentation_moved";
+  | "presentation_moved"
+  | "special_event_started"
+  | "special_event_ended";
 
 export interface NotificationView {
   id: string;

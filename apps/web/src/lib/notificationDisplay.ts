@@ -5,6 +5,7 @@ import {
   Flag,
   Gavel,
   Hourglass,
+  Megaphone,
   Play,
   Trophy,
   XCircle,
@@ -27,6 +28,8 @@ export const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   contestation_requested: Gavel,
   presentation_cancelled: XCircle,
   presentation_moved: ArrowRightLeft,
+  special_event_started: Megaphone,
+  special_event_ended: Flag,
 };
 
 export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/formatRelativeTime";
@@ -63,6 +66,8 @@ export function notificationHref(
     // Mesmo raciocínio pra "movida" — é sobre reposicionamento no
     // cronograma, não sobre pontuação.
     case "presentation_moved":
+    case "special_event_started":
+    case "special_event_ended":
       return `/events/${eventId}/live/schedule`;
     default:
       return null;

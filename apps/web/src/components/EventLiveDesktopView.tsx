@@ -79,6 +79,7 @@ interface EventLiveDesktopViewProps {
   isAdminOrAssessor: boolean;
   canViewJudges: boolean;
   completedEntryIds: Set<string>;
+  startedEntryIds: Set<string>;
   notifications: NotificationView[] | null;
   notificationsUnreadCount: number | null;
   // "Ir para agora" só aparece pra quem lança nota (ver
@@ -117,6 +118,7 @@ export function EventLiveDesktopView({
   isAdminOrAssessor,
   canViewJudges,
   completedEntryIds,
+  startedEntryIds,
   notifications,
   notificationsUnreadCount,
   isJudge,
@@ -147,8 +149,8 @@ export function EventLiveDesktopView({
     event.status === "published";
 
   const resourceStatuses = useMemo(
-    () => computeResourceNextStatus(days ?? [], live, completedEntryIds),
-    [days, live, completedEntryIds],
+    () => computeResourceNextStatus(days ?? [], live, completedEntryIds, startedEntryIds),
+    [days, live, completedEntryIds, startedEntryIds],
   );
 
   const nextDisplay = live.next ? scheduleItemTitleParts(live.next) : null;

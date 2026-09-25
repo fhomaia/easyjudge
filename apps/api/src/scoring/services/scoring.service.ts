@@ -1815,16 +1815,26 @@ export class ScoringService {
   ): Promise<Array<{ scheduleEntryId: string; startedAt: string }>> {
     const days = await this.scheduleService.getDays(eventId);
     const entryIds: string[] = [];
+    // Evento especial com início sinalizado (ver ScheduleService.
+    // setSpecialEventSignal) também conta, só a cópia da pista de
+    // apresentação (a da área de aquecimento tem outro horário planejado).
+    const specialStarts: Array<{ scheduleEntryId: string; startedAt: string }> =
+      [];
     for (const day of days) {
       for (const resource of day.resources) {
         for (const entry of resource.entries) {
           if (entry.type === ScheduleEntryType.PRESENTATION) {
             entryIds.push(entry.id);
+          } else if (resource.supportsPresentations && entry.startedAt) {
+            specialStarts.push({
+              scheduleEntryId: entry.id,
+              startedAt: new Date(entry.startedAt).toISOString(),
+            });
           }
         }
       }
     }
-    if (entryIds.length === 0) return [];
+    if (entryIds.length === 0) return specialStarts;
 
     const rows = await this.scoreEventsRepo
       .createQueryBuilder('e')
@@ -1842,10 +1852,13 @@ export class ScoringService {
         timerStartedAt: Date | null;
         firstEventAt: Date;
       }>();
-    return rows.map((r) => ({
-      scheduleEntryId: r.scheduleEntryId,
-      startedAt: new Date(r.timerStartedAt ?? r.firstEventAt).toISOString(),
-    }));
+    return [
+      ...rows.map((r) => ({
+        scheduleEntryId: r.scheduleEntryId,
+        startedAt: new Date(r.timerStartedAt ?? r.firstEventAt).toISOString(),
+      })),
+      ...specialStarts,
+    ];
   }
 
   // Horário real de início de cada apresentação já iniciada (primeiro

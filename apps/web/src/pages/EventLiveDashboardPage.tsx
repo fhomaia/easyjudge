@@ -233,10 +233,20 @@ export function EventLiveDashboardPage() {
   // tipo. `event.status_changed` recarrega o evento (badge de status/
   // "Ao vivo" some/aparece sem precisar de reload).
   useEventLiveSocket(id, {
-    onNotification: () => {
+    onNotification: (payload) => {
       refreshNotifications();
       refreshStartedPresentations();
       refreshCompletedPresentations();
+      // Início/fim de evento especial, desistência e mudança de posição
+      // ficam no próprio cronograma: recarrega ele também.
+      if (
+        payload.type === "special_event_started" ||
+        payload.type === "special_event_ended" ||
+        payload.type === "presentation_cancelled" ||
+        payload.type === "presentation_moved"
+      ) {
+        if (id) scheduleApi.listDays(id).then(setDays).catch(() => {});
+      }
     },
     onEventStatusChanged: () => {
       if (!id) return;
@@ -802,6 +812,7 @@ export function EventLiveDashboardPage() {
       isAdminOrAssessor={isAdminOrAssessor}
       canViewJudges={canViewJudges}
       completedEntryIds={completedEntryIdSet}
+      startedEntryIds={startedEntryIdSet}
       notifications={notifications}
       notificationsUnreadCount={notificationsUnreadCount}
       isJudge={assignment.isJudge}

@@ -1,8 +1,15 @@
-import type { ScheduleDay, ScheduleEntry, ScheduleEntryType, ScheduleResource } from "@/api/client";
+import type { ScheduleDay, ScheduleEntry, ScheduleEntryType } from "@/api/client";
 import { computeResourceTimes } from "@/lib/scheduleTime";
 import { INTERVAL_BREAK_LABEL, isAutoWaitBreak } from "@/lib/scheduleEntryKind";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 import { filterRemovedFromSchedule } from "@/lib/scheduleWithdrawal";
+import { scheduleFilterCategory } from "@/lib/eventFullSchedule";
+
+// Evento especial = Almoço, Batalhas, Abertura, Premiação e demais
+// componentes do dia (mesma definição do filtro "Eventos especiais").
+function isSpecialEntry(entry: ScheduleEntry): boolean {
+  return scheduleFilterCategory(entry) === "special";
+}
 
 // "Próxima apresentação"/"Depois disso"/cronograma do desktop mostram
 // qualquer componente real do cronograma (intervalo de verdade como
@@ -53,8 +60,9 @@ export interface CurrentCategoryInfo {
 export interface EventLiveSchedule {
   next: LiveScheduleItem | null;
   // `next` é uma apresentação que algum jurado já iniciou (primeiro
-  // TIMER_STARTED) e ninguém enviou súmula ainda — a UI mostra
-  // "Apresentando agora" em vez de "Próxima apresentação".
+  // TIMER_STARTED) e ninguém enviou súmula ainda, ou um evento especial
+  // com início sinalizado — a UI mostra "Apresentando/Acontecendo agora"
+  // em vez de "Próxima apresentação".
   nextIsLive: boolean;
   upcoming: LiveScheduleItem[];
   completed: number;
@@ -110,6 +118,7 @@ export function computeResourceNextStatus(
   days: ScheduleDay[],
   live: EventLiveSchedule,
   completedEntryIds: Set<string> = new Set(),
+  startedEntryIds: Set<string> = new Set(),
 ): ResourceNextStatus[] {
   const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
     a.date.localeCompare(b.date),
@@ -119,7 +128,7 @@ export function computeResourceNextStatus(
   if (!activeDay) return [];
 
   const times = computeResourceTimes(activeDay.resources, activeDay.startMinutes);
-  const doneEntryIds = computeDoneEntryIds(activeDay.resources, completedEntryIds);
+  const doneEntryIds = computeDoneEntryIds(activeDay, completedEntryIds, startedEntryIds);
   return activeDay.resources
     .filter((r) => r.supportsPresentations)
     .map((resource) => {
@@ -175,11 +184,45 @@ export function toIsoDate(date: Date): string {
 // feito por esta regra — não existe hoje um sinal real pra esse caso
 // sem recorrer ao relógio, e o pedido foi explicitamente não usar o
 // relógio.
+//
+// Exceção, evento especial (2026-09-25): tem sinal próprio (início/fim
+// sinalizados pelo admin, ver ScheduleService.setSpecialEventSignal),
+// então NÃO passa pela posição na fila. Conta como passado quando foi
+// encerrado, quando alguma apresentação planejada a partir do horário
+// dele já foi iniciada ou concluída, ou quando outro evento especial
+// posterior foi iniciado. Assim, depois da apresentação anterior, ele
+// aparece como "A seguir" em vez de sumir.
 function computeDoneEntryIds(
-  resources: ScheduleResource[],
+  day: ScheduleDay,
   completedEntryIds: Set<string>,
+  startedEntryIds: Set<string> = new Set(),
 ): Set<string> {
+  const resources = day.resources;
   const done = new Set<string>();
+  const times = computeResourceTimes(resources, day.startMinutes);
+  const allEntries = resources.flatMap((r) => r.entries);
+  for (const entry of allEntries) {
+    if (!isSpecialEntry(entry)) continue;
+    const start = times.get(entry.id)?.startMinutes ?? 0;
+    const passed =
+      Boolean(entry.endedAt) ||
+      allEntries.some((other) => {
+        const otherStart = times.get(other.id)?.startMinutes ?? 0;
+        if (other.type === "presentation") {
+          return (
+            otherStart >= start &&
+            (startedEntryIds.has(other.id) || completedEntryIds.has(other.id))
+          );
+        }
+        return (
+          other.id !== entry.id &&
+          isSpecialEntry(other) &&
+          Boolean(other.startedAt) &&
+          otherStart > start
+        );
+      });
+    if (passed) done.add(entry.id);
+  }
   for (const resource of resources) {
     const sorted = [...resource.entries].sort((a, b) => a.order - b.order);
     let hasPresentations = false;
@@ -194,6 +237,7 @@ function computeDoneEntryIds(
     }
     const resourceFullyDone = hasPresentations && pointerOrder === null;
     for (const entry of sorted) {
+      if (isSpecialEntry(entry)) continue;
       if (resourceFullyDone || (pointerOrder !== null && entry.order < pointerOrder)) {
         done.add(entry.id);
       }
@@ -246,11 +290,15 @@ export function computeEventLiveSchedule(
 
   for (const day of sortedDays) {
     const times = computeResourceTimes(day.resources, day.startMinutes);
-    for (const id of computeDoneEntryIds(day.resources, completedEntryIds)) allDoneEntryIds.add(id);
+    for (const id of computeDoneEntryIds(day, completedEntryIds, startedEntryIds)) allDoneEntryIds.add(id);
 
     for (const resource of day.resources) {
       for (const entry of resource.entries) {
         if (!isDisplayableEntry(entry)) continue;
+        // Evento especial tem uma cópia em cada pista e área de
+        // aquecimento: aqui só a da pista de apresentação, senão
+        // "Batalhas" aparecia repetido na fila.
+        if (!resource.supportsPresentations && isSpecialEntry(entry)) continue;
         const t = times.get(entry.id);
         if (!t) continue;
         const warmup = entry.type === "presentation" ? findWarmupFor(entry, day, times) : null;
@@ -317,12 +365,20 @@ export function computeEventLiveSchedule(
   const completed = presentations.filter((item) => allDoneEntryIds.has(item.entry.id)).length;
 
   const pending = allItems.filter((item) => !allDoneEntryIds.has(item.entry.id));
-  const liveIndex = pending.findIndex(
-    (item) =>
-      item.entry.type === "presentation" &&
-      startedEntryIds.has(item.entry.id) &&
-      !completedEntryIds.has(item.entry.id),
+  // Evento especial com início sinalizado (e ainda não passado) tem
+  // prioridade: ele só é iniciado quando a apresentação anterior já acabou.
+  const specialLiveIndex = pending.findIndex(
+    (item) => isSpecialEntry(item.entry) && Boolean(item.entry.startedAt),
   );
+  const liveIndex =
+    specialLiveIndex >= 0
+      ? specialLiveIndex
+      : pending.findIndex(
+          (item) =>
+            item.entry.type === "presentation" &&
+            startedEntryIds.has(item.entry.id) &&
+            !completedEntryIds.has(item.entry.id),
+        );
   if (liveIndex > 0) pending.unshift(...pending.splice(liveIndex, 1));
   const [next, ...rest] = pending;
 
@@ -349,6 +405,8 @@ export function computeEventLiveSchedule(
 
 // Rótulo do card principal do evento ao vivo (Início e Cronograma).
 export function liveNextLabel(live: EventLiveSchedule): string {
-  if (live.nextIsLive) return "APRESENTANDO AGORA";
+  if (live.nextIsLive) {
+    return live.next?.entry.type === "presentation" ? "APRESENTANDO AGORA" : "ACONTECENDO AGORA";
+  }
   return live.next?.entry.type === "presentation" ? "PRÓXIMA APRESENTAÇÃO" : "A SEGUIR";
 }

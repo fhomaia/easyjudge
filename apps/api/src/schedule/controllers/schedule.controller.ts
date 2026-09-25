@@ -155,6 +155,40 @@ export class ScheduleController {
     return this.scheduleService.createEntry(eventId, dayId, dto);
   }
 
+  // Evento ao vivo: admin/assessor (da classe) sinaliza início/fim de um
+  // evento especial (Almoço, Premiação...). Sem tipo de conta exigido.
+  @Post('days/:dayId/entries/:entryId/start')
+  @Roles()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  startSpecialEvent(
+    @Param('eventId') eventId: string,
+    @Param('dayId') dayId: string,
+    @Param('entryId') entryId: string,
+  ) {
+    return this.scheduleService.setSpecialEventSignal(
+      eventId,
+      dayId,
+      entryId,
+      'start',
+    );
+  }
+
+  @Post('days/:dayId/entries/:entryId/end')
+  @Roles()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  endSpecialEvent(
+    @Param('eventId') eventId: string,
+    @Param('dayId') dayId: string,
+    @Param('entryId') entryId: string,
+  ) {
+    return this.scheduleService.setSpecialEventSignal(
+      eventId,
+      dayId,
+      entryId,
+      'end',
+    );
+  }
+
   // Também usada pelo evento ao vivo (mover apresentação): sem tipo de
   // conta exigido, só o papel no evento (admin/assessor, da classe).
   @Patch('days/:dayId/entries/:entryId/move')
