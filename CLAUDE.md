@@ -1989,6 +1989,44 @@ não contaminar o outro. Só nota (1 a 5 estrelas) e comentário opcional.
   ids em `zz_example_ids`. Validado gerando o PDF real no Node (bundle do
   `presentationDetailExport` com rolldown) e convertendo com `pdftoppm`.
 
+## Valores fixos em itens de avaliação + modelo USS na régua Level 3-5 (2026-09-24)
+
+Pedido do usuário pro Batalha (26/09), que usa o modelo oficial USS
+"Team Cheer (Coed) — Non-Tumbling" direto (sem clone).
+
+- **Valores fixos** (`ScoringCriterion.useFixedValues`/`fixedValues`,
+  jsonb `{value, name, description}`, migration
+  `AddFixedValuesToScoringCriteria`): alternativa às faixas, exclusiva
+  com elas (ligar um desliga o outro em `ScoringCriteriaService`).
+  Validação: 2+ valores, entre 0 e `maxScore`, no máximo 1 casa decimal
+  (mesma precisão de `setScoreDirect`), sem repetir, com nome; lista
+  gravada em ordem crescente. Valor acima do máximo depois de baixar o
+  `maxScore` deixa o template incompleto (`hasStaleFixedValues`, banner
+  no builder). Ingestão de nota continua tolerante (não valida o valor
+  contra a lista, mesmo motivo das deduções).
+- **UI**: `FixedValuesEditor` no `EditCriterionPanel` (checkbox
+  "Aceitar apenas valores fixos"); na tela do jurado
+  `FixedValuePicker` troca campo +/- e slider por um botão por valor
+  (mobile, desktop e Head Judge), gravando via `onSetScore` como
+  sempre. Súmula (tela e PDF) mostra o nome do valor na coluna "Faixa"
+  (`criterionBandForScore` em `lib/scoreBands.ts`, só quando a nota bate
+  exatamente com um valor; média de vários jurados pode não bater).
+- **Modelo USS** (migration `RebaseUssNonTumblingOnLevel3To5Rubric`):
+  notas máximas de um clone do usuário (meta 58 -> 34) e régua do PDF
+  "25-26 United Scoring Rubric Level 3-4-5 Senior & Open Coed". Stunt
+  Difficulty, Stunt Max Participation, Toss e Jump Difficulty viraram
+  valores fixos, TODOS com 0 ("nenhuma habilidade realizada", pedido do
+  usuário); Pyramid Difficulty ficou com faixas Below Minimum/Below/Low/
+  Mid/High (nomes curtos de propósito: faixas de 0,5 no slider
+  sobrepunham rótulos longos). Ids dos critérios não mudam (escala de
+  jurados intacta). Rodada no Neon pelo usuário antes do push.
+- **Descartado**: permitir que a conta do dono (`IMPERSONATOR_EMAIL`)
+  edite modelos oficiais pela tela. Chegou a ser implementado e testado,
+  mas o usuário desistiu; modelos oficiais continuam só via migration.
+- **Gotcha**: `apps/web` não usa Prettier (linhas longas); rodar
+  `npx prettier --write` lá reformata o arquivo inteiro. Em `apps/api`
+  pode.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
