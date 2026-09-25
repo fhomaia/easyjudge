@@ -67,7 +67,17 @@ export function nextPresentationOnResource(
   return null;
 }
 
+// Recria a tela inteira a cada apresentação (`key`): trocar só o
+// `:entryId` da rota reaproveitava o componente e mantinha o estado da
+// apresentação anterior (cronômetro, barra de tempo, comentário e
+// rascunho, que só hidratam na primeira carga). Desmontar também roda
+// os cleanups de salvar comentário/rascunho pendentes.
 export function EventLiveScoringPage() {
+  const { entryId } = useParams<{ entryId: string }>();
+  return <EventLiveScoringSheet key={entryId} />;
+}
+
+function EventLiveScoringSheet() {
   const { id, entryId } = useParams<{ id: string; entryId: string }>();
   const navigate = useNavigate();
 
