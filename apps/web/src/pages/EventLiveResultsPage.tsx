@@ -13,6 +13,7 @@ import { formatDayTab } from "@/lib/formatDate";
 import { formatPercent, formatPoints } from "@/lib/formatNumber";
 import { FORMAT_LABELS, formatLabelFor } from "@/lib/categoryLabels";
 import { cn } from "@/lib/utils";
+import { hasEventStaffRole } from "@/lib/eventMemberRoles";
 import {
   eventsApi,
   notificationsApi,
@@ -186,20 +187,46 @@ export function EventLiveResultsPage() {
 
   const refreshResults = useCallback(() => {
     if (!id) return;
-    resultsApi.get(id).then(setResultsResponse);
+    resultsApi
+      .get(id)
+      .then(setResultsResponse)
+      .catch(() => {});
   }, [id]);
 
   useEffect(() => {
     refreshResults();
   }, [refreshResults]);
 
-  // Sinal do backend (ver CLAUDE.md "Tempo real") — uma notificação nova
-  // pode significar súmulas/resultado liberados (ou uma apresentação
-  // concluída, mudando o ranking), então recarrega os dois de uma vez.
+  // A apuração custa ~2 s de servidor e esta tela pode estar aberta por
+  // muita gente ao mesmo tempo. Programa/atleta/espectador só veem
+  // categorias com resultado LIBERADO, então só "resultado liberado" e
+  // desistência mudam o que eles veem — refazer a cada notificação
+  // (apresentação iniciada/concluída/movida…) multiplicava a carga no
+  // mesmo banco que recebe as notas dos jurados. Atraso aleatório de até
+  // 3 s pra não chegar todo mundo no mesmo segundo.
+  // Equipe (admin/assessor/jurado) vê tudo, inclusive não liberado: o
+  // ranking muda quando TODOS os jurados enviam, e isso não gera
+  // notificação própria (a de "concluída" sai na primeira súmula) — então
+  // refaz nas notificações de súmula e também a cada 30 s (pouca gente).
+  const isStaffViewer = event ? hasEventStaffRole(event.currentUserRoles) : false;
+
+  useEffect(() => {
+    if (!isStaffViewer) return;
+    const interval = setInterval(refreshResults, 30_000);
+    return () => clearInterval(interval);
+  }, [isStaffViewer, refreshResults]);
+
   useEventLiveSocket(id, {
-    onNotification: () => {
-      refreshResults();
+    onNotification: (payload) => {
       refreshUnreadCount();
+      const affectsPublic =
+        payload.type === "results_released" || payload.type === "presentation_cancelled";
+      const affectsStaff =
+        affectsPublic ||
+        payload.type === "presentation_completed" ||
+        payload.type === "scores_released";
+      if (isStaffViewer ? !affectsStaff : !affectsPublic) return;
+      setTimeout(refreshResults, isStaffViewer ? 0 : Math.random() * 3000);
     },
   });
 
