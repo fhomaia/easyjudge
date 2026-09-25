@@ -44,6 +44,7 @@ import {
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
 
 export function JudgingPage() {
   const { id } = useParams<{ id: string }>();
@@ -111,7 +112,7 @@ export function JudgingPage() {
     const map = new Map<string, string>();
     for (const category of categories) {
       if (category.scoringTemplate) {
-        map.set(category.scoringTemplate.id, category.scoringTemplate.name);
+        map.set(category.scoringTemplate.id, scoringTemplateLabel(category.scoringTemplate));
       }
     }
     return Array.from(map.entries()).map(([templateId, name]) => ({ templateId, name }));

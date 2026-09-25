@@ -20,6 +20,7 @@ import type {
   CategoryModality,
   ScoringTemplate,
 } from "@/api/client";
+import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
 
 // Campos compartilhados entre criar (em lote, por nível) e editar (uma
 // categoria por vez) — nome e nível têm tratamento própria em cada tela
@@ -157,7 +158,10 @@ export function CategoryFormFields({
             <SelectValue>
               {(value: string | null) =>
                 value
-                  ? scoringTemplates.find((t) => t.id === value)?.name
+                  ? (() => {
+                      const t = scoringTemplates.find((item) => item.id === value);
+                      return t ? scoringTemplateLabel(t) : undefined;
+                    })()
                   : "Selecione um sistema de pontuação"
               }
             </SelectValue>
@@ -166,7 +170,7 @@ export function CategoryFormFields({
             {Array.from(new Map(scoringTemplates.map((t) => [t.id, t])).values()).map(
               (template) => (
                 <SelectItem key={template.id} value={template.id}>
-                  {template.name}
+                  {scoringTemplateLabel(template)}
                 </SelectItem>
               ),
             )}

@@ -3,6 +3,7 @@ import { CategoryStatusBadge } from "@/components/CategoryStatusBadge";
 import { DIVISION_LABELS, MODALITY_LABELS, formatLabelFor } from "@/lib/categoryLabels";
 import { formatMinutesSeconds } from "@/lib/presentationTime";
 import type { Category } from "@/api/client";
+import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
 
 type TeamSortDirection = "asc" | "desc" | null;
 
@@ -94,7 +95,7 @@ export function CategoryTable({
                   : "—"}
               </td>
               <td className="px-4 py-3 text-muted-foreground">
-                {category.scoringTemplate?.name ?? "—"}
+                {category.scoringTemplate ? scoringTemplateLabel(category.scoringTemplate) : "—"}
               </td>
               <td className="px-4 py-3">
                 <button

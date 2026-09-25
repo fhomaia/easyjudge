@@ -519,7 +519,7 @@ export interface Category {
   nonTumbling: boolean;
   status: CategoryStatus;
   scoringTemplateId: string | null;
-  scoringTemplate: { id: string; name: string } | null;
+  scoringTemplate: { id: string; name: string; isSystemTemplate?: boolean; source?: string | null } | null;
   presentationTimeSeconds: number | null;
   warmupMinutes: number;
   createdAt: string;

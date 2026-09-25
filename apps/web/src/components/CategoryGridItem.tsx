@@ -5,6 +5,7 @@ import { listItemVariants } from "@/lib/motionVariants";
 import { DIVISION_LABELS, MODALITY_LABELS, formatLabelFor } from "@/lib/categoryLabels";
 import { formatMinutesSeconds } from "@/lib/presentationTime";
 import type { Category } from "@/api/client";
+import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
 
 interface CategoryGridItemProps {
   category: Category;
@@ -63,7 +64,7 @@ export function CategoryGridItem({ category, onEdit, onDelete }: CategoryGridIte
           {category.scoringTemplate && (
             <span className="flex items-center gap-1.5">
               <Calculator className="size-3.5" />
-              {category.scoringTemplate.name}
+              {scoringTemplateLabel(category.scoringTemplate)}
             </span>
           )}
         </div>

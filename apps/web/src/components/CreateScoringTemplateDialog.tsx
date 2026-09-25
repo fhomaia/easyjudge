@@ -20,6 +20,7 @@ import {
   type ScoringTemplateFormValues,
 } from "@/components/ScoringTemplateFormFields";
 import { scoringTemplatesApi, ApiError, type ScoringTemplate } from "@/api/client";
+import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
 
 interface CreateScoringTemplateDialogProps {
   open: boolean;
@@ -126,14 +127,19 @@ export function CreateScoringTemplateDialog({
                       detalhe do bug (2026-08-05). */}
                   <SelectValue>
                     {(value: string | null) =>
-                      value ? templates.find((t) => t.id === value)?.name : "Começar em branco"
+                      value
+                        ? (() => {
+                            const t = templates.find((item) => item.id === value);
+                            return t ? scoringTemplateLabel(t) : undefined;
+                          })()
+                        : "Começar em branco"
                     }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {templates.map((template) => (
                     <SelectItem key={template.id} value={template.id}>
-                      {template.name}
+                      {scoringTemplateLabel(template)}
                     </SelectItem>
                   ))}
                 </SelectContent>
