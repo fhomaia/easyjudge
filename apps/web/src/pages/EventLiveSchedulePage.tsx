@@ -226,6 +226,18 @@ export function EventLiveSchedulePage() {
 
   const fullSchedule = useMemo(() => computeFullSchedule(days ?? []), [days]);
 
+  const withdrawnPresentationIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const day of days ?? []) {
+      for (const resource of day.resources) {
+        for (const entry of resource.entries) {
+          if (entry.type === "presentation" && entry.withdrawnAt) ids.add(entry.id);
+        }
+      }
+    }
+    return ids;
+  }, [days]);
+
   const completedEntryIdSet = useMemo(() => new Set(completedEntryIds), [completedEntryIds]);
   const live = useMemo(
     () => computeEventLiveSchedule(days ?? [], completedEntryIdSet, new Set(startedEntryIds)),
@@ -406,13 +418,13 @@ export function EventLiveSchedulePage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onClick={() =>
-                    exportScheduleToPdf(event.name, filteredItems, teamProgramNameMap)
+                    exportScheduleToPdf(event.name, filteredItems, teamProgramNameMap, withdrawnPresentationIds)
                   }
                 >
                   <FileText data-icon="inline-start" />
                   Baixar como PDF
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => exportScheduleToExcel(event.name, filteredItems)}>
+                <DropdownMenuItem onClick={() => exportScheduleToExcel(event.name, filteredItems, withdrawnPresentationIds)}>
                   <FileSpreadsheet data-icon="inline-start" />
                   Baixar como Excel
                 </DropdownMenuItem>
@@ -547,7 +559,12 @@ export function EventLiveSchedulePage() {
                           const Icon = visual.icon;
                           const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
                           const isCurrent = item.entry.id === currentEntryId;
-                          const withdrawn = Boolean(item.entry.withdrawnAt);
+                          // Aquecimento de apresentação desistida segue o
+                          // mesmo visual dela (esmaecido + selo).
+                          const withdrawn =
+                            Boolean(item.entry.withdrawnAt) ||
+                            (item.entry.type === "warmup" &&
+                              withdrawnPresentationIds.has(item.entry.linkedEntryId ?? ""));
                           const canWithdraw =
                             item.entry.type === "presentation" &&
                             !withdrawn &&

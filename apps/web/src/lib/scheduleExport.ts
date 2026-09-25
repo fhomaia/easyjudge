@@ -17,6 +17,17 @@ function slugify(name: string): string {
   );
 }
 
+// Apresentação com desistência, ou aquecimento ligado a uma (mesmo
+// critério do Cronograma ao vivo). `withdrawnIds` = ids das apresentações
+// com desistência — vem de fora porque o filtro da tela pode ter tirado
+// a apresentação da lista e deixado só o aquecimento.
+function isWithdrawnItem(item: FullScheduleItem, withdrawnIds: Set<string>): boolean {
+  if (item.entry.withdrawnAt) return true;
+  return item.entry.type === "warmup" && withdrawnIds.has(item.entry.linkedEntryId ?? "");
+}
+
+const WITHDRAWN_LABEL = "Desistência";
+
 interface ExportRow {
   day: string;
   start: string;
@@ -24,12 +35,13 @@ interface ExportRow {
   resource: string;
   title: string;
   subtitle: string;
+  status: string;
 }
 
 // Mesma leitura (título/subtítulo) que a timeline/tabela/consulta ao
 // vivo mostram na tela — ver getScheduleEntryDisplay — pra o
 // arquivo baixado bater com o que o usuário já vê no navegador.
-function buildRows(items: FullScheduleItem[]): ExportRow[] {
+function buildRows(items: FullScheduleItem[], withdrawnIds: Set<string>): ExportRow[] {
   return items.map((item) => {
     const display = getScheduleEntryDisplay(item.entry, item.start, item.end, []);
     return {
@@ -39,12 +51,17 @@ function buildRows(items: FullScheduleItem[]): ExportRow[] {
       resource: item.resourceName,
       title: display.title,
       subtitle: display.subtitle ?? "",
+      status: isWithdrawnItem(item, withdrawnIds) ? WITHDRAWN_LABEL : "",
     };
   });
 }
 
-export function exportScheduleToExcel(eventName: string, items: FullScheduleItem[]): void {
-  const rows = buildRows(items);
+export function exportScheduleToExcel(
+  eventName: string,
+  items: FullScheduleItem[],
+  withdrawnIds: Set<string>,
+): void {
+  const rows = buildRows(items, withdrawnIds);
   const worksheet = XLSX.utils.json_to_sheet(
     rows.map((r) => ({
       Dia: r.day,
@@ -53,6 +70,7 @@ export function exportScheduleToExcel(eventName: string, items: FullScheduleItem
       Pista: r.resource,
       Item: r.title,
       Detalhe: r.subtitle,
+      Situação: r.status,
     })),
   );
   worksheet["!cols"] = [
@@ -62,6 +80,7 @@ export function exportScheduleToExcel(eventName: string, items: FullScheduleItem
     { wch: 18 },
     { wch: 28 },
     { wch: 24 },
+    { wch: 14 },
   ];
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Cronograma");
@@ -74,6 +93,7 @@ interface PdfRow {
   event: string;
   category: string;
   program: string;
+  withdrawn: boolean;
 }
 
 // O PDF é o material impresso/compartilhado com jurados e equipes — só
@@ -88,13 +108,19 @@ interface PdfRow {
 // `filterFullSchedule` (o `ScheduleEntry` não carrega `programId`, só
 // `teamId`/`teamName`), então o mapa vem de fora (ver
 // EventLiveSchedulePage, que já busca `teamsApi.listForEvent`).
-function buildPdfRows(items: FullScheduleItem[], teamPrograms: Map<string, string>): PdfRow[] {
+function buildPdfRows(
+  items: FullScheduleItem[],
+  teamPrograms: Map<string, string>,
+  withdrawnIds: Set<string>,
+): PdfRow[] {
   return items
     .filter((item) => !isAutoWaitBreak(item.entry))
     .map((item) => {
       const { entry } = item;
       const display = getScheduleEntryDisplay(entry, item.start, item.end, []);
-      const event = entry.type === "warmup" ? `Aquecimento — ${display.title}` : display.title;
+      const withdrawn = isWithdrawnItem(item, withdrawnIds);
+      const baseEvent = entry.type === "warmup" ? `Aquecimento — ${display.title}` : display.title;
+      const event = withdrawn ? `${baseEvent} (${WITHDRAWN_LABEL})` : baseEvent;
       const category =
         entry.type === "presentation" || entry.type === "warmup" ? (entry.categoryName ?? "") : "";
       const program = entry.teamId ? (teamPrograms.get(entry.teamId) ?? "") : "";
@@ -104,6 +130,7 @@ function buildPdfRows(items: FullScheduleItem[], teamPrograms: Map<string, strin
         event,
         category,
         program,
+        withdrawn,
       };
     });
 }
@@ -135,6 +162,7 @@ export function exportScheduleToPdf(
   eventName: string,
   items: FullScheduleItem[],
   teamPrograms: Map<string, string>,
+  withdrawnIds: Set<string>,
 ): void {
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -147,7 +175,7 @@ export function exportScheduleToPdf(
   let cursorY = margin + 20;
 
   for (const [dayDate, dayItems] of groupByDay(items)) {
-    const rows = buildPdfRows(dayItems, teamPrograms);
+    const rows = buildPdfRows(dayItems, teamPrograms, withdrawnIds);
     if (rows.length === 0) continue;
 
     // Evita título de dia "órfão" sozinho no fim da página, sem
@@ -166,7 +194,12 @@ export function exportScheduleToPdf(
     autoTable(doc, {
       startY: cursorY,
       head: [["Início", "Palco", "Evento", "Categoria", "Programa"]],
-      body: rows.map((r) => [r.start, r.stage, r.event, r.category, r.program]),
+      // Linha com desistência em cinza (o "(Desistência)" já vai no Evento).
+      body: rows.map((r) =>
+        [r.start, r.stage, r.event, r.category, r.program].map((content) =>
+          r.withdrawn ? { content, styles: { textColor: [150, 150, 150] as [number, number, number] } } : content,
+        ),
+      ),
       styles: { fontSize: 9, cellPadding: 5 },
       headStyles: { fillColor: [31, 111, 176] },
       alternateRowStyles: { fillColor: [245, 248, 251] },
