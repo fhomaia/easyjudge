@@ -870,6 +870,14 @@ export interface ScoreBand {
   max: number;
 }
 
+// Valor fixo permitido num item de avaliação (alternativa às faixas):
+// o jurado escolhe um destes valores em vez de digitar/arrastar.
+export interface FixedScoreValue {
+  value: number;
+  name: string;
+  description: string | null;
+}
+
 export interface ScoringCriterion {
   id: string;
   templateId: string;
@@ -884,6 +892,8 @@ export interface ScoringCriterion {
   isRequired: boolean;
   useScoreBands: boolean;
   scoreBands: ScoreBand[] | null;
+  useFixedValues: boolean;
+  fixedValues: FixedScoreValue[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -908,6 +918,8 @@ export interface CreateScoringCriterionPayload {
   isRequired?: boolean;
   useScoreBands?: boolean;
   scoreBands?: ScoreBand[];
+  useFixedValues?: boolean;
+  fixedValues?: FixedScoreValue[];
 }
 
 // parentId de propósito não entra aqui — reparenting só acontece via
@@ -1482,6 +1494,8 @@ export interface ScoringCriterionView {
   order: number;
   useScoreBands: boolean;
   scoreBands: ScoreBand[] | null;
+  useFixedValues: boolean;
+  fixedValues: FixedScoreValue[] | null;
   // Subgrupos intermediários (entre o item e o grupo-raiz, ex:
   // "Stunt"/"Pyramids" dentro de "Building") que têm descrição própria
   // — buildGroups achata a árvore em 2 níveis, então isso é o único

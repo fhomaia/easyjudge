@@ -113,6 +113,8 @@ export class ScoringTemplatesService {
         isRequired: source.isRequired,
         useScoreBands: source.useScoreBands,
         scoreBands: source.scoreBands,
+        useFixedValues: source.useFixedValues,
+        fixedValues: source.fixedValues,
       });
       const saved = await this.criteriaRepo.save(clone);
       idMap.set(source.id, saved.id);
@@ -219,7 +221,8 @@ export class ScoringTemplatesService {
       template.isComplete =
         distributedScore === template.targetScore &&
         !this.hasEmptyGroup(criteria) &&
-        !this.hasStaleScoreBands(criteria);
+        !this.hasStaleScoreBands(criteria) &&
+        !this.hasStaleFixedValues(criteria);
       template.isLocked = lockedTemplateIds.has(template.id);
     }
     return templates;
@@ -399,6 +402,11 @@ export class ScoringTemplatesService {
         'Este sistema de pontuação está incompleto — alguma faixa de pontuação não cobre mais a nota máxima do critério (a pontuação máxima mudou depois que as faixas foram salvas).',
       );
     }
+    if (this.hasStaleFixedValues(criteria)) {
+      throw new ConflictException(
+        'Este sistema de pontuação está incompleto: algum valor fixo ficou acima da nota máxima do critério (a pontuação máxima mudou depois que os valores foram salvos).',
+      );
+    }
     if (template.deductions.length === 0) {
       throw new ConflictException(
         'Este sistema de pontuação está incompleto — defina ao menos uma regra de dedução antes de usá-lo em uma categoria.',
@@ -474,6 +482,16 @@ export class ScoringTemplatesService {
   // `scoreBands` de fato faz parte do payload, pra não travar o
   // autosave por-campo do builder) sem que as faixas sejam revisitadas,
   // deixando um trecho de [0, maxScore] sem faixa correspondente.
+  // Mesma ideia de hasStaleScoreBands pros valores fixos: algum valor
+  // acima da nota máxima (que pode ter diminuído depois de salvar).
+  private hasStaleFixedValues(criteria: ScoringCriterion[]): boolean {
+    return criteria.some(
+      (c) =>
+        c.useFixedValues &&
+        (c.fixedValues ?? []).some((v) => v.value > c.maxScore),
+    );
+  }
+
   private hasStaleScoreBands(criteria: ScoringCriterion[]): boolean {
     return criteria.some(
       (c) =>

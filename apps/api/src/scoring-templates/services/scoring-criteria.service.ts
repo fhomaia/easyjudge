@@ -5,7 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
-import { ScoreBand, ScoringCriterion } from '../entities/scoring-criterion.entity';
+import {
+  FixedScoreValue,
+  ScoreBand,
+  ScoringCriterion,
+} from '../entities/scoring-criterion.entity';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 import { CreateScoringCriterionDto } from '../dto/create-scoring-criterion.dto';
 import { UpdateScoringCriterionDto } from '../dto/update-scoring-criterion.dto';
@@ -37,15 +41,32 @@ export class ScoringCriteriaService {
     }
 
     const order = await this.nextOrder(templateId, parentId);
-    const payload: Omit<CreateScoringCriterionDto, 'scoreBands'> & {
+    const payload: Omit<CreateScoringCriterionDto, 'scoreBands' | 'fixedValues'> & {
       scoreBands?: ScoreBand[];
-    } = { ...dto, scoreBands: this.normalizeBands(dto.scoreBands) };
+      fixedValues?: FixedScoreValue[];
+    } = {
+      ...dto,
+      scoreBands: this.normalizeBands(dto.scoreBands),
+      fixedValues: this.normalizeFixedValues(dto.fixedValues),
+    };
     if (payload.type === ScoringCriterionType.GROUP) {
-      // Grupo não recebe nota — não faz sentido ter faixas.
+      // Grupo não recebe nota — não faz sentido ter faixas nem valores fixos.
       payload.useScoreBands = false;
       payload.scoreBands = undefined;
-    } else if (payload.scoreBands) {
-      this.assertBandsCoverMaxScore(payload.scoreBands, payload.maxScore);
+      payload.useFixedValues = false;
+      payload.fixedValues = undefined;
+    } else {
+      if (payload.useFixedValues) {
+        // Valores fixos substituem as faixas.
+        payload.useScoreBands = false;
+        payload.scoreBands = undefined;
+      }
+      if (payload.scoreBands) {
+        this.assertBandsCoverMaxScore(payload.scoreBands, payload.maxScore);
+      }
+      if (payload.fixedValues) {
+        this.assertFixedValuesValid(payload.fixedValues, payload.maxScore);
+      }
     }
 
     const criterion = this.criteriaRepo.create({
@@ -65,6 +86,50 @@ export class ScoringCriteriaService {
   ): ScoreBand[] | undefined {
     if (!bands) return undefined;
     return bands.map((band) => ({ ...band, description: band.description ?? null }));
+  }
+
+  // Ordena por valor e normaliza `description` (mesmo motivo de
+  // normalizeBands).
+  private normalizeFixedValues(
+    values: { value: number; name: string; description?: string }[] | undefined,
+  ): FixedScoreValue[] | undefined {
+    if (!values) return undefined;
+    return values
+      .map((v) => ({
+        value: v.value,
+        name: v.name.trim(),
+        description: v.description?.trim() || null,
+      }))
+      .sort((a, b) => a.value - b.value);
+  }
+
+  // Cada valor entre 0 e a nota máxima, com no máximo 1 casa decimal
+  // (mesma precisão das notas lançadas pelo jurado, ver setScoreDirect
+  // no frontend) e sem repetir. Mesma regra de só validar quando a
+  // lista vem no payload (ver assertBandsCoverMaxScore) — mudar só o
+  // maxScore deixa o builder avisar visualmente.
+  private assertFixedValuesValid(values: FixedScoreValue[], maxScore: number): void {
+    if (values.length < 2) {
+      throw new ConflictException('Defina ao menos dois valores fixos.');
+    }
+    const seen = new Set<number>();
+    for (const item of values) {
+      if (!item.name) {
+        throw new ConflictException('Todo valor fixo precisa de um nome.');
+      }
+      if (item.value < 0 || item.value > maxScore) {
+        throw new ConflictException(
+          `O valor ${item.value} está fora do intervalo de 0 até a nota máxima (${maxScore}).`,
+        );
+      }
+      if (Math.abs(item.value * 10 - Math.round(item.value * 10)) > 1e-9) {
+        throw new ConflictException('Os valores fixos podem ter no máximo 1 casa decimal.');
+      }
+      if (seen.has(item.value)) {
+        throw new ConflictException(`O valor ${item.value} aparece mais de uma vez.`);
+      }
+      seen.add(item.value);
+    }
   }
 
   // As faixas, quando presentes, precisam cobrir [0, maxScore] inteiro
@@ -163,7 +228,11 @@ export class ScoringCriteriaService {
       }
     }
 
-    const { scoreBands: rawScoreBands, ...rawPatch } = stripUndefined(dto);
+    const {
+      scoreBands: rawScoreBands,
+      fixedValues: rawFixedValues,
+      ...rawPatch
+    } = stripUndefined(dto);
     // `scoreBands` só entra no patch quando o payload de fato o inclui —
     // `patch.scoreBands = this.normalizeBands(undefined)` (que dá
     // `undefined`) seria uma CHAVE presente com valor `undefined` no
@@ -174,24 +243,46 @@ export class ScoringCriteriaService {
     // `scoreBands: undefined`, que o `JSON.stringify` omite — o builder
     // interpretava a ausência da chave como "sem faixas" e mostrava a
     // lista vazia até um reload, mesmo com o banco intacto.
-    const patch: Omit<Partial<UpdateScoringCriterionDto>, 'scoreBands'> & {
+    const patch: Omit<Partial<UpdateScoringCriterionDto>, 'scoreBands' | 'fixedValues'> & {
       scoreBands?: ScoreBand[] | null;
+      fixedValues?: FixedScoreValue[] | null;
     } = { ...rawPatch };
     if (rawScoreBands !== undefined) {
       patch.scoreBands = this.normalizeBands(rawScoreBands);
     }
+    if (rawFixedValues !== undefined) {
+      patch.fixedValues = this.normalizeFixedValues(rawFixedValues);
+    }
     if (patch.type === ScoringCriterionType.GROUP) {
-      // Grupo não recebe nota — não faz sentido ter faixas.
+      // Grupo não recebe nota — não faz sentido ter faixas nem valores fixos.
       patch.useScoreBands = false;
       patch.scoreBands = null;
-    } else if (patch.useScoreBands === false) {
-      patch.scoreBands = null;
+      patch.useFixedValues = false;
+      patch.fixedValues = null;
+    } else {
+      if (patch.useScoreBands === false) patch.scoreBands = null;
+      if (patch.useFixedValues === false) patch.fixedValues = null;
+      // Faixas e valores fixos são exclusivos: ligar um desliga o outro.
+      if (patch.useFixedValues === true) {
+        patch.useScoreBands = false;
+        patch.scoreBands = null;
+      } else if (patch.useScoreBands === true) {
+        patch.useFixedValues = false;
+        patch.fixedValues = null;
+      }
     }
 
     Object.assign(criterion, patch);
 
     if (criterion.type === ScoringCriterionType.SCORE_ITEM && dto.scoreBands !== undefined) {
       this.assertBandsCoverMaxScore(criterion.scoreBands ?? [], criterion.maxScore);
+    }
+    if (
+      criterion.type === ScoringCriterionType.SCORE_ITEM &&
+      criterion.useFixedValues &&
+      dto.fixedValues !== undefined
+    ) {
+      this.assertFixedValuesValid(criterion.fixedValues ?? [], criterion.maxScore);
     }
 
     return this.criteriaRepo.save(criterion);

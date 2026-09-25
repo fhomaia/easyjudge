@@ -7,7 +7,7 @@ import { formatCriterionScore, formatPercent, formatPoints } from "@/lib/formatN
 import { sumMaxScores } from "@/lib/scoringSummary";
 import { isPresentationHitZero } from "@/lib/hitZero";
 import type { PresentationDetail, PresentationDetailCriterion } from "@/api/client";
-import { findMatchingBand } from "@/lib/scoreBands";
+import { criterionBandForScore } from "@/lib/scoreBands";
 
 // Súmula PREENCHIDA de uma apresentação (admin/assessor) — mesmo
 // conteúdo de PresentationNotesDetail.tsx (resumo, notas por critério
@@ -25,11 +25,10 @@ import { findMatchingBand } from "@/lib/scoreBands";
 // maior. autoTable cuida da paginação das tabelas de grupo/legalidade
 // sozinho (repete o cabeçalho se estourar a página).
 
-// Faixa de pontuação em que a nota do critério caiu (null quando o
-// critério não usa faixas ou está sem nota).
+// Faixa de pontuação (ou valor fixo) em que a nota do critério caiu
+// (null quando o critério não usa faixas/valores fixos ou está sem nota).
 function criterionBand(criterion: PresentationDetailCriterion) {
-  if (!criterion.useScoreBands || !criterion.scoreBands?.length || criterion.value === null) return null;
-  return findMatchingBand(criterion.scoreBands, criterion.value);
+  return criterionBandForScore(criterion, criterion.value);
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -269,7 +268,9 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
     // Coluna "Faixa" só nos grupos em que algum critério usa faixas de
     // pontuação; o nome sai na cor da faixa (mesma regra da tela do
     // jurado, findMatchingBand).
-    const hasBands = group.criteria.some((c) => c.useScoreBands && c.scoreBands?.length);
+    const hasBands = group.criteria.some(
+      (c) => (c.useScoreBands && c.scoreBands?.length) || (c.useFixedValues && c.fixedValues?.length),
+    );
     const cols = hasBands ? 3 : 2;
     autoTable(doc, {
       startY: cursorY,

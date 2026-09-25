@@ -11,10 +11,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScoreBandsEditor } from "@/components/ScoreBandsEditor";
-import { validateScoreBands } from "@/lib/scoreBands";
+import { FixedValuesEditor } from "@/components/FixedValuesEditor";
+import { validateFixedValues, validateScoreBands } from "@/lib/scoreBands";
 import { cn } from "@/lib/utils";
 import {
   scoringCriteriaApi,
+  type FixedScoreValue,
   type ScoreBand,
   type ScoringCriterion,
   type ScoringCriterionType,
@@ -51,8 +53,10 @@ export function EditCriterionPanel({
   const [maxScore, setMaxScore] = useState("");
   const [description, setDescription] = useState("");
   const [bandsDraft, setBandsDraft] = useState<ScoreBand[]>([]);
+  const [fixedDraft, setFixedDraft] = useState<FixedScoreValue[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bandsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fixedDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Acumula mudanças pendentes de vários campos — sem isso, editar
   // "nome" e depois "pontuação máxima" dentro da janela de debounce
   // cancelaria o timer do nome e só salvaria o último campo tocado.
@@ -64,6 +68,7 @@ export function EditCriterionPanel({
     setMaxScore(String(criterion.maxScore));
     setDescription(criterion.description ?? "");
     setBandsDraft(criterion.scoreBands ?? []);
+    setFixedDraft(criterion.fixedValues ?? []);
   }, [criterion]);
 
   async function persist(payload: UpdateScoringCriterionPayload) {
@@ -96,6 +101,18 @@ export function EditCriterionPanel({
     bandsDebounceRef.current = setTimeout(() => {
       if (validateScoreBands(next, Number(maxScore)) === null) {
         persist({ scoreBands: next });
+      }
+    }, DEBOUNCE_MS);
+  }
+
+  // Mesmo raciocínio de handleBandsChange: só salva quando a lista já é
+  // válida, senão fica só no rascunho local com o aviso do editor.
+  function handleFixedValuesChange(next: FixedScoreValue[]) {
+    setFixedDraft(next);
+    if (fixedDebounceRef.current) clearTimeout(fixedDebounceRef.current);
+    fixedDebounceRef.current = setTimeout(() => {
+      if (validateFixedValues(next, Number(maxScore)) === null) {
+        persist({ fixedValues: next });
       }
     }, DEBOUNCE_MS);
   }
@@ -247,6 +264,24 @@ export function EditCriterionPanel({
             Dividir pontuação em faixas
           </label>
         )}
+        {criterion.type === "score_item" && (
+          <label className="flex items-center gap-2.5 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={criterion.useFixedValues}
+              disabled={readOnly}
+              onChange={(e) => persist({ useFixedValues: e.target.checked })}
+              className="size-4 accent-primary"
+            />
+            Aceitar apenas valores fixos
+          </label>
+        )}
+        {criterion.type === "score_item" && (
+          <p className="text-xs text-muted-foreground">
+            Com valores fixos, o jurado escolhe um dos valores cadastrados em vez de digitar a nota. Não
+            dá para usar junto com as faixas.
+          </p>
+        )}
       </div>
 
       {criterion.type === "score_item" && criterion.useScoreBands && (
@@ -256,6 +291,18 @@ export function EditCriterionPanel({
             bands={bandsDraft}
             maxScore={Number(maxScore) || 0}
             onChange={handleBandsChange}
+            disabled={readOnly}
+          />
+        </div>
+      )}
+
+      {criterion.type === "score_item" && criterion.useFixedValues && (
+        <div className="grid min-w-0 gap-2">
+          <Label>Valores permitidos</Label>
+          <FixedValuesEditor
+            values={fixedDraft}
+            maxScore={Number(maxScore) || 0}
+            onChange={handleFixedValuesChange}
             disabled={readOnly}
           />
         </div>

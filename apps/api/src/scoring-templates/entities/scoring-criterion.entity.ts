@@ -26,6 +26,16 @@ export interface ScoreBand {
   max: number;
 }
 
+// Valor fixo permitido num item de avaliação (ex.: Stunt Difficulty
+// só aceita 2.5/3.0/3.5/4.0/4.5, não qualquer número do intervalo).
+// Quando ligado, substitui as faixas: cada valor já tem nome e
+// descrição próprios, e o jurado escolhe um deles em vez de digitar.
+export interface FixedScoreValue {
+  value: number;
+  name: string;
+  description: string | null;
+}
+
 // Nó da árvore de critérios de um template — pode ser um Grupo (tem
 // filhos) ou um Item de avaliação (nota, folha). Auto-referenciado via
 // parentId (lista de adjacência); null = nó raiz. Todo nó (grupo ou
@@ -95,6 +105,15 @@ export class ScoringCriterion {
 
   @Column({ name: 'score_bands', type: 'jsonb', nullable: true })
   scoreBands: ScoreBand[] | null;
+
+  // Mesmo padrão de useScoreBands/scoreBands, mutuamente exclusivo com
+  // eles (ScoringCriteriaService desliga um ao ligar o outro). Lista
+  // sempre gravada em ordem crescente de valor.
+  @Column({ name: 'use_fixed_values', default: false })
+  useFixedValues: boolean;
+
+  @Column({ name: 'fixed_values', type: 'jsonb', nullable: true })
+  fixedValues: FixedScoreValue[] | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

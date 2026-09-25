@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import { ScoringCriterionType } from '../enums/scoring-criterion-type.enum';
 import { ScoreBandDto } from './score-band.dto';
+import { FixedScoreValueDto } from './fixed-score-value.dto';
 
 // parentId de propósito não entra aqui — reparenting só acontece via
 // o endpoint /move, pra manter a renumeração de order num único lugar.
@@ -55,4 +56,14 @@ export class UpdateScoringCriterionDto {
   @ValidateNested({ each: true })
   @Type(() => ScoreBandDto)
   scoreBands?: ScoreBandDto[];
+
+  @IsOptional()
+  @IsBoolean()
+  useFixedValues?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FixedScoreValueDto)
+  fixedValues?: FixedScoreValueDto[];
 }

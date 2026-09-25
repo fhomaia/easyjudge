@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { exportScoringTemplateToExcel, exportScoringTemplateToPdf } from "@/lib/scoringTemplateExport";
-import { hasStaleScoreBands } from "@/lib/scoreBands";
+import { hasStaleFixedValues, hasStaleScoreBands } from "@/lib/scoreBands";
 import {
   ApiError,
   scoringCriteriaApi,
@@ -218,6 +218,7 @@ export function ScoringTemplateBuilderPage() {
   // existente pra isLocked.
   const readOnly = isLocked || isSystemTemplate;
   const staleScoreBands = criteria ? hasStaleScoreBands(criteria) : false;
+  const staleFixedValues = criteria ? hasStaleFixedValues(criteria) : false;
 
   return (
     <div className="flex h-dvh bg-background">
@@ -333,6 +334,17 @@ export function ScoringTemplateBuilderPage() {
                     pontuação máxima foi alterada depois que as faixas foram salvas. Revise as
                     faixas do critério afetado (veja o aviso no painel de edição) antes de usar
                     este sistema de pontuação numa categoria.
+                  </p>
+                </div>
+              )}
+
+              {step === "structure" && !readOnly && staleFixedValues && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <p>
+                    Algum valor fixo ficou acima da nota máxima do critério, porque a pontuação máxima
+                    foi alterada depois que os valores foram salvos. Revise os valores do critério
+                    afetado antes de usar este sistema de pontuação numa categoria.
                   </p>
                 </div>
               )}

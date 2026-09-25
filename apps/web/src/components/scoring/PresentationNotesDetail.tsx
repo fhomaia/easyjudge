@@ -1,5 +1,6 @@
 import { AlertTriangle, Scale } from "lucide-react";
-import { CurrentBandBadge } from "@/components/scoring/CurrentBandBadge";
+import { BandBadge } from "@/components/scoring/CurrentBandBadge";
+import { criterionBandForScore } from "@/lib/scoreBands";
 import { formatCriterionScore } from "@/lib/formatNumber";
 import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWithSubgroups";
 import { formatElapsed } from "@/lib/deductionIcons";
@@ -31,11 +32,12 @@ interface PresentationNotesDetailProps {
   celebrateHitZero?: boolean;
 }
 
-// Faixa em que a nota do critério caiu (mesma regra da tela do jurado,
-// findMatchingBand). Nada quando o critério não usa faixas ou está sem nota.
+// Faixa (ou valor fixo) em que a nota do critério caiu (mesma regra da
+// tela do jurado). Nada quando o critério não usa faixas/valores fixos
+// ou está sem nota.
 function CriterionBand({ criterion }: { criterion: PresentationDetailCriterion }) {
-  if (!criterion.useScoreBands || !criterion.scoreBands?.length || criterion.value === null) return null;
-  return <CurrentBandBadge bands={criterion.scoreBands} score={criterion.value} />;
+  const band = criterionBandForScore(criterion, criterion.value);
+  return band ? <BandBadge band={band} /> : null;
 }
 
 export function PresentationNotesDetail({

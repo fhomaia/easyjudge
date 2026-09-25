@@ -15,6 +15,7 @@ import { Category } from '../../categories/entities/category.entity';
 import { CategoryFormat } from '../../categories/enums/category-format.enum';
 import { Team } from '../../teams/entities/team.entity';
 import {
+  FixedScoreValue,
   ScoreBand,
   ScoringCriterion,
 } from '../../scoring-templates/entities/scoring-criterion.entity';
@@ -89,6 +90,10 @@ export interface ScoringCriterionView {
   // que é a única coisa que chega aqui (buildGroups só monta folhas).
   useScoreBands: boolean;
   scoreBands: ScoreBand[] | null;
+  // Valores fixos permitidos (exclusivo com as faixas): o jurado
+  // escolhe um deles em vez de digitar/arrastar.
+  useFixedValues: boolean;
+  fixedValues: FixedScoreValue[] | null;
   // Descrição dos subgrupos intermediários no caminho até o grupo-raiz
   // (ex: "Stunt"/"Pyramids" dentro de "Building"), do mais próximo do
   // item até o mais próximo da raiz — buildGroups achata a hierarquia
@@ -2461,6 +2466,8 @@ export class ScoringService {
         order: criterion.order,
         useScoreBands: criterion.useScoreBands,
         scoreBands: criterion.scoreBands,
+        useFixedValues: criterion.useFixedValues,
+        fixedValues: criterion.fixedValues,
         subgroupDescriptions,
         // Súmula de detalhe (drill-down admin/Programa) não mostra o
         // indicador de "maior nota"/marcadores por equipe — feature só
@@ -2797,6 +2804,8 @@ export class ScoringService {
         order: leaf.order,
         useScoreBands: leaf.useScoreBands,
         scoreBands: leaf.scoreBands,
+        useFixedValues: leaf.useFixedValues,
+        fixedValues: leaf.fixedValues,
         subgroupDescriptions,
         // Placeholder — só `getSheet` (folha do próprio jurado) de
         // fato calcula isso (ver getCriterionComparisons), sobrescrevendo

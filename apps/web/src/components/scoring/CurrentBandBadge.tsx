@@ -15,7 +15,12 @@ interface CurrentBandBadgeProps {
 export function CurrentBandBadge({ bands, score }: CurrentBandBadgeProps) {
   const band = findMatchingBand(bands, score);
   if (!band) return null;
+  return <BandBadge band={band} />;
+}
 
+// Mesmo visual, a partir de uma faixa já resolvida (ex. um valor fixo
+// apresentado como faixa, ver criterionBandForScore).
+export function BandBadge({ band }: { band: ScoreBand }) {
   return (
     <div className="mt-0.5 flex items-center gap-1.5">
       <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: band.color }} />

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { CriterionInfoPopover } from "@/components/scoring/CriterionInfoPopover";
 import { CurrentBandBadge } from "@/components/scoring/CurrentBandBadge";
 import { ScoreBandSlider } from "@/components/scoring/ScoreBandSlider";
+import { FixedValuePicker } from "@/components/scoring/FixedValuePicker";
 import type { ScoringCriterionView, ScoringGroupView } from "@/api/client";
 
 // Extraído de EventLiveScoringPage/EventLiveScoringDesktopView pra ser
@@ -119,7 +120,11 @@ export function ScoringCriteriaGroups({
                 // tinha faixa via slider, o resto ficava só com o
                 // input numérico +/-, pedido do usuário pra
                 // consistência visual entre critérios.
-                const showSlider = showScoreBands && !isMobile;
+                // Valores fixos trocam o campo +/- e o slider por um
+                // botão por valor (FixedValuePicker).
+                const fixedValues = criterion.useFixedValues ? (criterion.fixedValues ?? []) : [];
+                const hasFixedValues = fixedValues.length > 0;
+                const showSlider = showScoreBands && !isMobile && !hasFixedValues;
                 const score = scores[criterion.id] ?? 0;
                 return (
                   <div key={criterion.id} className={cn(isMobile ? "py-4" : "py-3")}>
@@ -181,48 +186,72 @@ export function ScoringCriteriaGroups({
                             </p>
                           )}
                       </div>
-                      <input
-                        inputMode="decimal"
-                        aria-label={`Nota de ${criterion.name}`}
-                        value={editingId === criterion.id ? editingValue : score.toFixed(1)}
-                        onFocus={() => startEditing(criterion)}
-                        onChange={(e) => setEditingValue(e.target.value)}
-                        onBlur={() => commitEditing(criterion)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") e.currentTarget.blur();
-                          if (e.key === "Escape") {
-                            skipCommitRef.current = true;
-                            e.currentTarget.blur();
-                          }
-                        }}
-                        className={cn(
-                          "w-16 shrink-0 rounded-lg border border-transparent bg-muted text-center font-bold tabular-nums text-foreground outline-none focus-visible:border-primary focus-visible:bg-background",
-                          isMobile ? "py-2 text-lg" : "py-1.5 text-base",
-                        )}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => onAdjustScore(criterion.id, criterion.maxScore, criterion.allowDecimalScoring, -1)}
-                        aria-label={`Diminuir ${criterion.name}`}
-                        className={cn(
-                          "flex shrink-0 items-center justify-center rounded-lg border border-border text-foreground hover:bg-muted",
-                          isMobile ? "size-9" : "size-8",
-                        )}
-                      >
-                        <Minus className={isMobile ? "size-4" : "size-3.5"} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onAdjustScore(criterion.id, criterion.maxScore, criterion.allowDecimalScoring, 1)}
-                        aria-label={`Aumentar ${criterion.name}`}
-                        className={cn(
-                          "flex shrink-0 items-center justify-center rounded-lg border border-primary/40 text-primary hover:bg-primary/10",
-                          isMobile ? "size-9" : "size-8",
-                        )}
-                      >
-                        <Plus className={isMobile ? "size-4" : "size-3.5"} />
-                      </button>
+                      {hasFixedValues ? (
+                        <span
+                          aria-label={`Nota de ${criterion.name}`}
+                          className={cn(
+                            "w-16 shrink-0 rounded-lg bg-muted text-center font-bold tabular-nums text-foreground",
+                            isMobile ? "py-2 text-lg" : "py-1.5 text-base",
+                          )}
+                        >
+                          {criterion.id in scores ? score.toFixed(1) : "–"}
+                        </span>
+                      ) : (
+                        <>
+                          <input
+                            inputMode="decimal"
+                            aria-label={`Nota de ${criterion.name}`}
+                            value={editingId === criterion.id ? editingValue : score.toFixed(1)}
+                            onFocus={() => startEditing(criterion)}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => commitEditing(criterion)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur();
+                              if (e.key === "Escape") {
+                                skipCommitRef.current = true;
+                                e.currentTarget.blur();
+                              }
+                            }}
+                            className={cn(
+                              "w-16 shrink-0 rounded-lg border border-transparent bg-muted text-center font-bold tabular-nums text-foreground outline-none focus-visible:border-primary focus-visible:bg-background",
+                              isMobile ? "py-2 text-lg" : "py-1.5 text-base",
+                            )}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => onAdjustScore(criterion.id, criterion.maxScore, criterion.allowDecimalScoring, -1)}
+                            aria-label={`Diminuir ${criterion.name}`}
+                            className={cn(
+                              "flex shrink-0 items-center justify-center rounded-lg border border-border text-foreground hover:bg-muted",
+                              isMobile ? "size-9" : "size-8",
+                            )}
+                          >
+                            <Minus className={isMobile ? "size-4" : "size-3.5"} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onAdjustScore(criterion.id, criterion.maxScore, criterion.allowDecimalScoring, 1)}
+                            aria-label={`Aumentar ${criterion.name}`}
+                            className={cn(
+                              "flex shrink-0 items-center justify-center rounded-lg border border-primary/40 text-primary hover:bg-primary/10",
+                              isMobile ? "size-9" : "size-8",
+                            )}
+                          >
+                            <Plus className={isMobile ? "size-4" : "size-3.5"} />
+                          </button>
+                        </>
+                      )}
                     </div>
+                    {hasFixedValues && (
+                      <FixedValuePicker
+                        values={fixedValues}
+                        score={criterion.id in scores ? score : null}
+                        onSelect={(value) => onSetScore(criterion.id, criterion.maxScore, true, value)}
+                        variant={variant}
+                        showDetails={showScoreBands}
+                        teamScores={criterion.teamScores}
+                      />
+                    )}
                     {showSlider && (
                       <ScoreBandSlider
                         bands={bands ?? []}
