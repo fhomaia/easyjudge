@@ -24,7 +24,10 @@ export function MetricColumnChart({
   }
   const max = Math.max(...items.map((item) => item.count), 1);
   return (
-    <div className="scrollbar-slim flex h-48 items-end gap-3 overflow-x-auto border-b border-border pb-0">
+    // `pb-4`: espaço pra barra de rolagem horizontal ficar ABAIXO dos
+    // nomes — em sistemas com barra sobreposta (Linux, celular) ela
+    // cobria o nome dos programas.
+    <div className="scrollbar-slim flex h-52 items-end gap-3 overflow-x-auto pb-4">
       {items.map((item, i) => (
         <div
           key={item.label}
@@ -41,7 +44,7 @@ export function MetricColumnChart({
             }}
           />
           <span
-            className="mt-1 line-clamp-2 w-full text-center text-xs leading-tight text-muted-foreground"
+            className="mt-1 line-clamp-2 h-8 w-full shrink-0 text-center text-xs leading-4 text-muted-foreground"
             title={item.label}
           >
             {item.label}

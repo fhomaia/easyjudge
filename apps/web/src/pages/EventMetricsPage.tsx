@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FeedbackOverview } from "@/components/FeedbackOverview";
 import { EVENT_MEMBER_ROLE_LABELS } from "@/lib/eventMemberRoles";
 import { useNavigate, useParams } from "react-router-dom";
@@ -20,6 +20,9 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { MetricBarList } from "@/components/MetricBarList";
 import { MetricColumnChart } from "@/components/MetricColumnChart";
 import { MetricDonutChart } from "@/components/MetricDonutChart";
+import { MetricDelayChart } from "@/components/MetricDelayChart";
+import { computeDelayTimeline } from "@/lib/delayTimeline";
+import { formatDate } from "@/lib/formatDate";
 import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 import { autoFormatKeyLabel } from "@/lib/autoFormatKey";
@@ -27,11 +30,14 @@ import {
   eventsApi,
   eventMetricsApi,
   feedbackApi,
+  scheduleApi,
+  scoringApi,
   usersApi,
   type Event,
   type EventFeedbackItem,
   type EventMetricsResponse,
   type FeedbackSummary,
+  type ScheduleDay,
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
@@ -87,6 +93,10 @@ export function EventMetricsPage() {
   const [feedback, setFeedback] = useState<{ summary: FeedbackSummary; items: EventFeedbackItem[] } | null>(
     null,
   );
+  // Gráfico de atraso: cronograma (horário planejado) + início real de
+  // cada apresentação/evento especial (ver lib/delayTimeline.ts).
+  const [days, setDays] = useState<ScheduleDay[] | null>(null);
+  const [starts, setStarts] = useState<Array<{ scheduleEntryId: string; startedAt: string }>>([]);
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -103,7 +113,11 @@ export function EventMetricsPage() {
       .listForEvent(id)
       .then(setFeedback)
       .catch(() => setFeedback(null));
+    scheduleApi.listDays(id).then(setDays).catch(() => setDays([]));
+    scoringApi.getPresentationStarts(id).then(setStarts).catch(() => setStarts([]));
   }, [id]);
+
+  const delayDays = useMemo(() => (days ? computeDelayTimeline(days, starts) : []), [days, starts]);
 
   function handleLogout() {
     logout();
@@ -162,6 +176,29 @@ export function EventMetricsPage() {
                 />
                 <StatTile icon={Eye} label="Espectadores" value={metrics.spectatorsCount} />
               </div>
+
+              <ChartCard title="Atraso ao longo do evento">
+                {delayDays.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    O gráfico aparece quando as apresentações começarem a ser iniciadas.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-6">
+                    <p className="-mt-2 text-xs text-muted-foreground">
+                      Cada ponto é uma apresentação ou evento especial, no horário em que começou de verdade.
+                      Acima de zero: atrasado; abaixo: adiantado.
+                    </p>
+                    {delayDays.map((day) => (
+                      <div key={day.dayId}>
+                        {delayDays.length > 1 && (
+                          <p className="mb-2 text-xs font-semibold text-foreground">{formatDate(day.dayDate)}</p>
+                        )}
+                        <MetricDelayChart points={day.points} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ChartCard>
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <ChartCard title="Categorias por programa">
