@@ -2375,3 +2375,657 @@ por ele antes de eu começar).
   sessão está na porta 3000 (verificado via `/proc/net/tcp`+`/proc/*/fd`).
   Nada a remover.
 
+# Movido do CLAUDE.md em 2026-09-25 (período 2026-07-31 a 2026-08-05)
+
+Mesmo motivo das outras mudanças pra cá (limite de 150k caracteres do
+`CLAUDE.md`). O `CLAUDE.md` mantém só um resumo do que continua valendo
+("Cadastro, termos, QR, animações e UX do setup (2026-07-31 a
+2026-08-05)"); abaixo está o texto original, sem alterações.
+
+## Ajustes no cadastro por papel + identidade visual do email de verificação (2026-07-31)
+
+Rodada de ajustes pedidos direto na tela de cadastro (`RegisterDialog.tsx`)
+e no email de código de verificação, um de cada vez, mesma sessão.
+
+- **Atleta não pede mais "equipe/instituição"** — `isStepApplicable`
+  (`RegisterDialog.tsx`) passou a pular a etapa `"team"` também pra
+  `role === "athlete"` (antes só pulava pra `"spectator"`, que por trás
+  já é `athlete` — ver `SIGNUP_ROLE_ORDER`). Justificativa do usuário: o
+  email do programa (etapa `"programEmail"`, que continua existindo só
+  pra atleta) já é suficiente pra iniciar o vínculo — perguntar as duas
+  coisas era redundante.
+- **Documento de atleta/espectador virou CPF-only e opcional** — antes
+  era CPF/CNPJ obrigatório pra todo papel, sem exceção. Agora, só pra
+  `role === "athlete"` (inclui espectador): a UI esconde o seletor
+  CPF/CNPJ (só mostra campo de CPF) e o passo vira pulável ("Pular",
+  mesmo padrão do passo de equipe). Documento continua obrigatório
+  (CPF ou CNPJ) pra todo o resto.
+  - **Backend, 4 camadas**: `RegisterDto.documentType`/`documentNumber`
+    viraram opcionais com `@ValidateIf` condicionado a
+    `role !== ATHLETE || <campo irmão presente>` (mesmo campo continua
+    obrigatório demais papéis). `AuthService.register` reforça "só CPF"
+    pra atleta (`400` se `documentType === CNPJ` com `role === ATHLETE`)
+    — defesa em profundidade, já que a UI só oferece CPF pra esse papel,
+    mas a API pode ser chamada direto. `User.documentType`/
+    `documentNumber` viraram `nullable: true` (índice único do
+    `document_number` continua funcionando — Postgres trata cada `NULL`
+    como distinto). `UsersService.createPendingUser` só roda a checagem
+    de documento duplicado quando `documentNumber` de fato veio
+    preenchido (senão a query bateria em qualquer linha sem documento).
+  - **Gotcha reencontrado** (já documentado antes neste arquivo, seção
+    "Gotchas"): `documentNumber: string | null` sem `type: 'varchar'`
+    explícito no `@Column()` quebrou a migration com
+    `DataTypeNotSupportedError` — TypeORM não infere o tipo via
+    reflection quando a coluna é `union | null`. Corrigido adicionando
+    `type: 'varchar'`.
+  - Migration `MakeUserDocumentOptional` (`ALTER COLUMN ... DROP NOT
+    NULL` nas duas colunas) rodada com sucesso no Postgres local.
+- **Rótulo "Programa" virou "Programa/Ginásio"** — só cosmético,
+  `ROLE_LABELS.program` em `apps/web/src/lib/roleLabels.ts` (usado tanto
+  no seletor de papel do cadastro quanto em qualquer lugar que exiba o
+  nome do papel).
+- **Cadastro de programa/ginásio simplificado**: além de "equipe/
+  instituição" (redundante — o nome do próprio programa já é
+  perguntado), a etapa "sobrenome" também não faz sentido pra uma
+  instituição. `isStepApplicable` pula `"lastName"` (além de `"team"`)
+  pra `role === "program"`; a etapa `"firstName"` muda de pergunta pra
+  esse papel ("Qual o nome do seu programa/ginásio?" em vez de "Qual é o
+  seu nome?"). Backend: `RegisterDto.lastName` ganhou o mesmo padrão de
+  `@ValidateIf` (obrigatório pra todo papel, exceto `PROGRAM`);
+  `UsersService.createPendingUser` grava `dto.lastName ?? ''` (nunca
+  `undefined`, já que a coluna `last_name` continua `NOT NULL` — não
+  precisou de migration, string vazia já satisfaz).
+  - **Efeito colateral corrigido**: com `lastName` virando `""` de
+    verdade pra programa (não só em teoria), toda concatenação direta
+    `${firstName} ${lastName}` (sem `.trim()`) passou a deixar um espaço
+    sobrando visível. Backend: `ProgramsService` ganhou
+    `buildUserDisplayName(user)` (usa só `firstName` quando `lastName`
+    é vazio), substituindo as 5 ocorrências que serviam de fallback pro
+    nome de exibição do programa quando `teamOrInstitutionName` não
+    está preenchido — o que agora é o caso de TODO programa novo, já
+    que a etapa "team" também foi removida pra esse papel (antes era só
+    um fallback de borda). Frontend: `.trim()` acrescentado nos 4 pontos
+    que já concatenavam `firstName`/`lastName` pra exibição
+    (`AppSidebar.tsx`, `MobileNavSheet.tsx`, `ImpersonateDialog.tsx`,
+    resumo do próprio `RegisterDialog.tsx`) — sem esse ajuste, um
+    programa cadastrado depois desta mudança apareceria como "Escola
+    XYZ " (espaço sobrando) na sidebar/impersonation.
+  - **Testado via curl direto** (servidor local, depois revertido — as
+    3 linhas de teste, incluindo um CPF válido gerado com
+    `cpf.generate()`, foram apagadas do Postgres local ao final):
+    atleta sem documento → criado com `document_type`/`document_number`
+    `NULL`; atleta com `documentType: cnpj` → `400` "Atletas só podem
+    informar CPF."; programa sem `lastName` no payload → criado com
+    `last_name` `''`; jurado sem documento → `400` de validação (regra
+    antiga intacta pros demais papéis).
+- **Email de verificação ganhou identidade visual** — antes era HTML
+  solto (`<p>` sem estilo nenhum), sem logo/cor. `MailService` ganhou
+  `buildVerificationEmailHtml(code, testRecipientEmail)`: layout em
+  tabela (não `<style>` em `<head>` — Outlook desktop ignora CSS fora de
+  atributo `style` inline, então todo estilo é inline de propósito),
+  logo circular no topo sobre faixa navy (`#14293d`, mesma paleta de
+  `apps/web/src/index.css`), código em destaque grande/monoespaçado
+  dentro de uma caixa amarelo-clara com borda `#f7a828`. Logo referenciado
+  por URL pública fixa (`https://cheercup.com.br/logo.png`, não uma env
+  var) — o cliente de email de quem recebe busca a imagem de fora, nunca
+  resolveria `localhost`, então não faz sentido essa URL variar por
+  ambiente como o resto do app faz. O banner de "cadastro de teste"
+  (usado só se `EMAIL_OVERRIDE_TO` estiver setado — hoje não está, ver
+  seção de deploy) ganhou o mesmo tratamento visual, dentro do mesmo
+  template.
+  - **Testado enviando um email de verdade** (servidor local, Resend de
+    produção — `RESEND_API_KEY` do `.env` local já aponta pro domínio
+    verificado) pra um alias `+` do próprio email do usuário (não uma
+    conta nova real — evita qualquer risco de mexer em cadastro
+    existente), confirmado visualmente por ele que o layout ficou bom;
+    o registro de teste foi apagado do Postgres local depois.
+
+## Data de nascimento, consentimento de Termos/Privacidade e bloqueio de menores no cadastro (2026-07-31)
+
+Rodada final de ajustes de cadastro desta sessão, encadeada com a de cima
+— fechada depois de eu ter recomendado (só em conversa, não implementado
+ainda) considerar um checkbox de aceite por LGPD.
+
+- **Campo "data de nascimento"**: novo passo `"birthDate"` no
+  `RegisterDialog`, só perguntado pra quem usa CPF (uma instituição com
+  CNPJ não tem data de nascimento) — `DatePicker.tsx` ganhou
+  `captionLayout`/`startMonth`/`endMonth`/`maxDate` (repassados pro
+  `Calendar` do shadcn/react-day-picker) especificamente pra viabilizar
+  esse caso (navegar até ~100 anos atrás mês a mês seria inviável; com
+  `captionLayout="dropdown"` dá pra pular direto pro ano). Pra
+  atleta/espectador (só aceitam CPF) o passo **sempre** aparece, mesmo
+  que o CPF em si tenha sido pulado (documento é opcional pra esse
+  papel, mas quando informado é sempre CPF — não fazia sentido
+  condicionar um ao outro). `User.birthDate` (`type: 'date'`, nullable)
+  + migration `AddBirthDateToUsers`; `RegisterDto.birthDate` obrigatório
+  via `@ValidateIf` quando `documentType === CPF` OU `role ===
+  ATHLETE`; validação de "não pode ser no futuro" em
+  `AuthService.register` (`IsDateString` só confere formato).
+- **Restrição temporária: só maiores de 18 anos — revisada pra 13 anos
+  em 2026-08-01, ver seção "Idade mínima revisada de 18 para 13 anos"
+  mais abaixo.** Texto original desta entrada mantido como histórico
+  de decisão (era 18 na época); não usar "18" como valor atual em
+  nenhum ponto do código a partir daqui. (pedido do usuário,
+  depois de eu ter perguntado sobre consentimento de responsável legal
+  pra menores — LGPD art. 14 — como parte da recomendação de checkbox
+  de Termos/Privacidade). Decisão consciente do usuário de simplificar
+  por enquanto, mesmo sabendo que atletas de cheerleading são
+  frequentemente menores de idade — **isso bloqueia esse público de
+  criar a PRÓPRIA conta** (mas não impede um programa de cadastrar um
+  atleta menor no roster via `AthleteLink`, sem conta própria — só
+  quem quer logar e ver a própria nota precisa de conta, e essa conta
+  hoje exige 18+). `DatePicker` do passo `"birthDate"` usa
+  `getMaxBirthDate()` (hoje − 18 anos) como `endMonth`/`maxDate` — o
+  calendário fisicamente não deixa selecionar uma data mais recente, é
+  a defesa principal (não precisa de mensagem de erro, a UI já
+  impede). Reforçado em `AuthService.register` com a mesma conta de
+  data (`BadRequestException` dedicado, mensagem "É necessário ter 18
+  anos ou mais para se cadastrar."). **Ponta solta consciente**: essa é
+  uma decisão de produto bem restritiva pro público real da
+  plataforma — o próprio nome do arquivo já registra "por enquanto";
+  não remover essa trava sem decisão explícita do usuário, e ela vai
+  precisar ser revisitada (com o fluxo de consentimento de responsável
+  legal implementado de verdade) antes da plataforma ser considerada
+  pronta pra atletas menores se autocadastrarem.
+- **Checkbox de aceite de Termos de Uso/Política de Privacidade**,
+  implementado depois que o usuário pediu explicitamente (eu tinha só
+  recomendado em conversa antes, sem implementar). Novo passo final:
+  checkbox obrigatório no passo `"summary"` (não um passo próprio —
+  fica junto da revisão final, antes do botão "Confirmar e criar
+  conta", que fica desabilitado até marcar). Duas páginas novas,
+  públicas (fora de `GuestRoute`/`ProtectedRoute`, mesmo raciocínio de
+  `/join/:code` — precisam abrir de dentro do popup de cadastro
+  deslogado, mas continuam acessíveis logado): `/terms`
+  (`TermsOfUsePage.tsx`) e `/privacy` (`PrivacyPolicyPage.tsx`), linkadas
+  com `target="_blank"` (não perde o progresso do cadastro no popup).
+  Conteúdo é um rascunho razoável escrito com base no que a plataforma
+  de fato coleta/trata (não é texto genérico de template) — **não é
+  revisão jurídica**, só a implementação técnica do consentimento;
+  avisei o usuário em conversa (não no texto da página) que vale
+  revisão de advogado antes de operar com dado real de menores/maiores
+  em produção de verdade.
+  - **Backend**: `RegisterDto.acceptedTerms: boolean` com `@Equals(true)`
+    (não `@IsBoolean`, de propósito — `false` explícito também precisa
+    ser rejeitado, não só ausência do campo) — `409`/`400` desde a
+    validação do DTO, nunca chega no service com valor errado.
+    `User.termsAcceptedAt` (timestamptz, nullable — nulo só pra contas
+    criadas antes desta mudança, sem backfill possível) gravado com
+    `new Date()` em `UsersService.createPendingUser`, registro de
+    auditoria do aceite. Migration `AddTermsAcceptedAtToUsers`.
+  - **`RegisterPayload.acceptedTerms`** (frontend, `client.ts`) é
+    obrigatório (não opcional) — sinaliza no tipo que o backend sempre
+    espera o campo, mesmo que o valor só possa ser `true` na prática
+    (o botão já trava disso no popup).
+- **Testado via curl + Postgres direto** (todos os registros de teste
+  apagados ao final, nenhum em cima de dado real): sem `acceptedTerms`
+  → `400`; `acceptedTerms: false` explícito → `400` (confirma que o
+  `@Equals(true)` pega os dois casos, não só ausência); `birthDate` de
+  17 anos atrás → `400` "É necessário ter 18 anos..."; maior de idade +
+  termos aceitos → `200`, com `terms_accepted_at` gravado com timestamp
+  real no banco.
+
+## Escanear QR do evento pela câmera, dentro do app (2026-07-31)
+
+Antes, quem escaneava o QR do evento precisava usar a câmera nativa do
+celular (a URL codificada no QR, `${origin}/join/${eventCode}`, abre o
+navegador direto — ver "Código + QR de evento" mais acima). Pedido do
+usuário: dar a opção de escanear sem sair do app, pra quem já está
+navegando dentro do Cheer Cup e vê o QR físico impresso/projetado no
+evento.
+
+- **Lib nova: `qr-scanner`** (não `@zxing/*` nem `jsqr` cru) — decide
+  câmera+decodificação+worker sozinha, API pequena
+  (`new QrScanner(videoEl, onDecode, options)` +
+  `.start()`/`.stop()`/`.destroy()`), TypeScript nativo. Versão 1.4.2:
+  o próprio pacote avisa no código que configurar `WORKER_PATH`
+  manualmente "não é mais necessário nem suportado" — resolve o
+  dynamic import do worker sozinho, Vite já lida com isso nativamente
+  (confirmado sem nenhuma config extra, nem no dev nem no build).
+- **`QrCodeScanner.tsx`** (novo componente, `apps/web/src/components`):
+  só liga a câmera enquanto a prop `active` é `true` — nunca eager,
+  nunca fica rodando em segundo plano. `onScan` é guardado num `ref`
+  atualizado a cada render (não como dependência direta do `useEffect`
+  que abre a câmera) — sem isso, toda vez que o componente pai
+  re-renderiza com uma closure nova de `onScan`, o efeito reiniciaria
+  câmera/scanner à toa. Ao ler QUALQUER código, chama `scanner.stop()`
+  antes de disparar `onScan` — sem isso o scanner continua decodificando
+  quadro a quadro e dispararia a mesma leitura repetidas vezes enquanto
+  o pai ainda processa a tentativa anterior (o vídeo trava no último
+  frame, dando feedback visual de "capturado"). Cleanup do `useEffect`
+  sempre chama `stop()` + `destroy()` — cobre fechar o dialog, trocar de
+  aba, ou desmontar por qualquer motivo.
+- **`JoinByCodeDialog.tsx`** ganhou abas (`Tabs` do shadcn, componente
+  novo no projeto — `npx shadcn add tabs`, Base UI por trás como o
+  resto): "Digitar código" (fluxo antigo, inalterado) e "Escanear QR"
+  (`QrCodeScanner`, com `active={open && mode === "scan"}` — câmera só
+  liga com o dialog aberto E essa aba selecionada). As duas abas
+  convergem pro mesmo `joinWithCode(code)` compartilhado — sucesso já
+  fecha o dialog e chama `onJoined` (mesmo comportamento de sempre);
+  falha mostra o mesmo `FormError` de cima e incrementa um contador
+  `scanAttempt`, usado como `key` do `QrCodeScanner` — forçar remount é
+  o jeito mais simples de fazer o scanner voltar a escanear depois de um
+  código inválido/expirado (ele já tinha parado sozinho ao ler o
+  primeiro resultado).
+- **`extractEventCode(scanned)`** (helper local, `JoinByCodeDialog.tsx`):
+  o QR de verdade codifica a URL inteira, não só o código — tenta
+  `new URL(scanned)` e extrai o segmento depois de `/join/`; se não for
+  uma URL válida (QR gerado de outra forma, ex. impresso só com o
+  código puro), usa o valor escaneado como está. Backend já normaliza
+  o código (`trim/uppercase/strip`, `EventsService.joinByCode`), então
+  não precisou duplicar essa parte no frontend.
+- **Câmera pedida sob demanda, nunca a de vídeo-chamada por padrão**:
+  `preferredCamera: "environment"` (traseira) — faz sentido pro caso de
+  uso (apontar pro QR físico), diferente da frontal que a maioria dos
+  navegadores usa por padrão.
+- **Testado**: typecheck limpo; UI verificada no navegador (abas
+  trocam, container de vídeo aparece ao selecionar "Escanear QR", sem
+  erro no console — só um aviso inofensivo da própria lib
+  ("only accessible if the page is transferred via https", dev em
+  `http://localhost`, não aparece em produção que já é HTTPS). **Não
+  testado com câmera de verdade nesta sessão** — o navegador
+  automatizado usado pra verificar a UI não tem hardware de câmera
+  disponível/permissão configurada, e o prompt nativo do Chrome pra
+  autorizar câmera é UI do próprio navegador (fora do DOM da página),
+  não dá pra clicar via automação. Vale um teste manual do usuário num
+  celular de verdade antes de considerar pronto.
+- **Política de Privacidade** (`PrivacyPolicyPage.tsx`) ganhou uma
+  seção nova ("2. Acesso à câmera (QR code)", demais seções
+  renumeradas) deixando explícito que o vídeo é processado só no
+  navegador do usuário, nunca enviado/gravado — decisão consciente de
+  não tratar isso como "coleta de dado novo" de verdade (o vídeo nunca
+  sai do dispositivo), mas documentar por transparência mesmo assim.
+
+## Animação de raio ao logar/cadastrar (2026-07-31)
+
+Pedido do usuário: reaproveitar a mesma animação de raio+clarão já usada
+em duas situações (fundo da LoginPage, variant="split", com fotos; e o
+overlay "Prontos para o show!" ao publicar evento,
+`PublishCelebrationOverlay`, variant="plain", com uma foto própria por
+trás) — só que desta vez **sem nenhuma imagem de fundo**, disparada ao
+logar com sucesso OU terminar o cadastro (`RegisterDialog`).
+`BrandBackdrop` já tinha o variant certo pra isso (`variant="plain"`,
+raio risca + clarão branco, fundo transparente do primeiro frame) —
+não precisou de nenhuma mudança nesse componente, só um novo jeito de
+dispará-lo. Passou por duas versões nesta mesma sessão — a primeira
+tinha um bug real de performance, corrigido na segunda.
+
+- **1ª versão (store global) — tinha um problema real de UX, não só de
+  arquitetura**: login bem-sucedido chamava `useAuthStore.login()`
+  IMEDIATAMENTE (setando `accessToken`), disparando a animação em
+  seguida. Só que `GuestRoute` reage ao token na hora — troca
+  `<Outlet/>` (LoginPage) por `<Navigate to="/" />" no mesmo instante,
+  ANTES da minha própria chamada explícita de `navigate("/")` sequer
+  rodar. Ou seja: a Home já começava a montar e buscar dados **ao
+  mesmo tempo** que a animação do raio tentava rodar, competindo pelo
+  mesmo thread principal — resultado: usuário relatou a animação
+  "travada"/soluçando. A solução inicial (um store `Zustand`
+  `lightningTransition.ts`, renderizado como irmão de `<Routes>` em
+  `App.tsx`, sobrevivendo à troca de rota) resolvia o problema de
+  desmontagem, mas não esse problema de concorrência de thread — nunca
+  chegou a ser a versão final.
+- **2ª versão (final) — adia `login()` até a animação acabar,
+  sem precisar de nenhum store novo**: a causa raiz era chamar
+  `login()` cedo demais, não onde a animação vive. Corrigido invertendo
+  a ordem: o token vem da API e fica em `pendingToken` (estado local,
+  `LoginPage`/`RegisterDialog`), a animação (`BrandBackdrop
+  variant="plain"`) toca ALI MESMO — ainda em `/login`, com a Home nem
+  tendo começado a montar — e só no `onDone` da animação (~900ms
+  depois) é que `login(pendingToken)` roda de verdade, seguido de
+  `navigate("/")`. Como `GuestRoute` só reage quando `login()`
+  realmente é chamado, a troca de rota (e o trabalho de montar/buscar
+  dados da Home) só começa DEPOIS da animação já ter acabado — sem
+  concorrência, sem soluço. Isso eliminou a necessidade do store global
+  (`store/lightningTransition.ts` foi deletado): já que `LoginPage`/
+  `RegisterDialog` continuam montadas durante toda a animação (o token
+  ainda não foi setado, então `GuestRoute` não redireciona), um
+  `useState` local basta.
+  - `LoginPage.handleSubmit`: `authApi.login()` → `setPendingToken()`
+    (não `login()` ainda) → `<BrandBackdrop variant="plain"
+    onDone={completeLogin} />` renderizada condicionalmente → `onDone`
+    chama `completeLogin()`, que só ENTÃO chama `login(pendingToken)` +
+    `joinPendingEventIfAny()` + `navigate("/")`.
+  - `RegisterDialog.submitPassword`: mesmo padrão
+    (`authApi.setPassword()` → `setPendingToken()` →
+    `completeRegistration()` no `onDone`, que chama `login()` +
+    `handleOpenChange(false)` + `onSuccess()`). O popup continua aberto
+    por trás enquanto o raio cobre a tela inteira — `BrandBackdrop`
+    renderizado com `z-[60]` (não `z-50`, igual ao `Dialog`) pra
+    garantir que fica por cima do popup independente da ordem de
+    portal do Base UI.
+  - De propósito NÃO dentro de `useAuthStore.login()` em si — esse
+    mesmo método também é chamado por `startImpersonation`/
+    `stopImpersonation` (ver `store/auth.ts`), onde a animação não faz
+    sentido (ação de admin trocando de conta, não um "bem-vindo" de
+    verdade).
+- **Testado via `javascript_tool`** (nunca com credencial real — ver
+  `feedback_browser_testing_real_data.md`): expondo temporariamente
+  `setPendingToken` em `window.__setPendingToken` de dentro da própria
+  `LoginPage` (revertido logo em seguida), disparado com um token falso
+  enquanto deslogado de verdade em `/login`. Confirmado que o caminho
+  fica em `/login` com o `<polyline>` do raio no DOM durante toda a
+  animação, e só troca pra `/` no exato instante em que o overlay some
+  — nunca antes. (Números absolutos de tempo do primeiro teste saíram
+  incoerentes — Chrome throttla `setTimeout` de aba em segundo plano/
+  sem foco pra ~1x/segundo, esticando os ~900ms reais; a SEQUÊNCIA
+  relativa, que é o que importa, ficou confirmada mesmo assim.)
+- **Incidente real durante esse teste**: a sessão real do usuário no
+  Chrome foi perdida — o backup de `localStorage['easyjudge-auth']`
+  feito antes de deslogar pra testar acabou não sendo restaurado
+  corretamente (o valor "restaurado" tinha o tamanho de um token de
+  teste, não da sessão real), e não havia como recuperar localmente.
+  Usuário precisou logar de novo manualmente; nenhum dado de
+  servidor foi afetado, só o token local. Lição registrada em detalhe
+  em `feedback_browser_testing_real_data.md` (novo caso, 2026-07-31) —
+  sequências de teste que chamam `login()`/`logout()` de verdade (não
+  só leem estado) são mais arriscadas de fazer save/restore do que
+  parecem à primeira vista.
+
+## Raio ao abrir evento ao vivo + celebração ao iniciar evento (2026-08-01)
+
+Duas extensões do trabalho de animação acima, pedidas na sequência.
+
+- **Abrir um evento publicado/iniciado pela listagem (Home) agora toca o
+  raio primeiro** — mesmo `BrandBackdrop variant="plain"` sem mensagem
+  do fix de login/cadastro, mesmo motivo (navegar antes faria a tela ao
+  vivo começar a montar/buscar dados ao mesmo tempo que a animação,
+  competindo pelo thread principal). `EventListItem`/`EventGridItem`
+  (clique no card inteiro, não nos pills/menu internos — esses já
+  paravam propagação) pararam de chamar `navigate()` direto pro caso
+  `isLive` (`published`/`started`) — ganharam uma prop nova
+  `onOpenLive(event)`, implementada em `HomePage` como
+  `setPendingOpenEvent(event)`; a navegação de verdade só acontece no
+  `onDone` do `BrandBackdrop`. Caso `isConfigurable` (`created` →
+  `/setup`) não mudou, continua navegando direto — o pedido era
+  especificamente sobre evento "já iniciado" (ao vivo).
+- **`EventCelebrationOverlay`** — generalização do antigo
+  `PublishCelebrationOverlay` (arquivo renomeado/substituído, mesma
+  animação/fundo `bg-publish-celebration.webp`) pra aceitar
+  `title`/`subtitle`/`actionLabel`/`onAction` como props em vez de
+  texto fixo — usado agora em **3 lugares**, cada um com texto/ação
+  própria:
+  - `EventSetupPage` (publicar): texto original "Prontos para o
+    show!", inalterado.
+  - `HomePage` (clique no pill "Iniciar evento" da listagem): "Vamos
+    começar o show!" / "O evento começou — boa competição!", botão "Ir
+    para o evento ao vivo" → navega pra `/events/:id/live`.
+  - `EventLiveDashboardPage` (botão "Iniciar evento" na própria tela ao
+    vivo, mobile E desktop — os dois compartilham o mesmo `handleStart`,
+    então um `useState` só cobre as duas visões): mesmo texto, mas
+    botão "Continuar" só fecha o overlay — já está na tela certa, não
+    precisa navegar.
+- **Testado ponta a ponta com conta e eventos descartáveis** (usuário
+  organization novo, 2 eventos publicados com `startDate` de hoje —
+  necessário pra `EventLifecycleAction.canStart` liberar o pill, que
+  exige `isEventDay`; conta/eventos deletados ao final, incluindo um
+  `DELETE FROM event_activity_logs` manual — a exclusão do `User` bateu
+  em FK de `event_activity_logs.actor_id`, que não é limpa em cascata):
+  os 3 fluxos confirmados visualmente — raio puro abrindo evento ao
+  vivo pela Home (URL já muda pra `/live` mas o frame do raio ainda
+  aparece por cima da Home, confirma que a troca de rota só ocorre
+  depois do `onDone`); celebração completa iniciando pelo pill da Home,
+  com o botão levando pro evento; celebração iniciando de dentro da
+  própria tela ao vivo, com "Continuar" só fechando no lugar.
+- **Incidente à parte, não relacionado ao código**: uma aba nova criada
+  por engano durante o teste mostrou por um instante a sessão real do
+  usuário (login feito por ele mesmo, em algum momento entre turnos,
+  já que a sessão anterior tinha sido perdida — ver incidente acima) —
+  fechada sem nenhuma ação além de um clique perdido em área vazia da
+  Home (sem efeito). O teste de verdade foi refeito só depois de
+  confirmar a aba estava deslogada.
+
+## Idade mínima revisada de 18 para 13 anos + cláusula de autodeclaração nos Termos (2026-08-01)
+
+Pedido explícito do usuário: revisitar a restrição registrada em "Data
+de nascimento, consentimento..." (2026-07-31) — não é mais 18+, é 13+.
+A mitigação de não ter fluxo de consentimento de responsável legal
+(LGPD art. 14) continua sendo só a autodeclaração no cadastro, agora
+reforçada com uma cláusula própria nos Termos de Uso (pedida pelo
+usuário com o texto já pronto). **Isso não é revisão jurídica** — o
+mesmo aviso já dado sobre `TermsOfUsePage`/`PrivacyPolicyPage` em geral
+(2026-07-31) se aplica aqui: permitir autocadastro de adolescentes
+13-17 sem verificação real de idade nem consentimento parental é uma
+decisão de produto, comunicada ao usuário em conversa, não validada
+com advogado.
+
+- **`- 18` virou `- 13`** nos 3 pontos que faziam essa conta:
+  `AuthService.register` (`apps/api/src/auth/services/auth.service.ts`),
+  `UsersService.updateProfile` (`apps/api/src/users/services/
+  users.service.ts` — preenchimento tardio de data de nascimento no
+  perfil) e `getMaxBirthDate()` (`apps/web/src/lib/birthDate.ts`, usada
+  pelo `DatePicker` tanto no cadastro quanto em "Meu perfil"). Mensagens
+  de erro (`"É necessário ter 18 anos ou mais..."`) e a copy do
+  `RegisterDialog` ("menores de 18 anos") atualizadas junto.
+- **Nova cláusula em `TermsOfUsePage.tsx`**, dentro da seção existente
+  "2. Cadastro e conta" (não virou seção própria — é sobre o mesmo
+  assunto, declaração no ato do cadastro): *"Ao criar uma conta, o
+  usuário declara que possui 13 anos ou mais e que as informações
+  fornecidas são verdadeiras. Caso seja constatado que a idade
+  informada é falsa, a Cheer Cup poderá suspender ou excluir a
+  conta."* (texto do usuário, só ajustado "o Cheer Cup" → "a Cheer
+  Cup" pra concordância com o resto da página).
+- **`PrivacyPolicyPage.tsx`, seção "6. Crianças e adolescentes"
+  revisada** (não pedida explicitamente, mas necessária pra
+  consistência — a seção antes só falava de atleta menor vinculado via
+  `AthleteLink`, como se conta própria de adolescente não existisse):
+  passou a mencionar também quem tem conta própria 13-17 anos,
+  referenciando a cláusula nova dos Termos.
+- `updatedAt` dos dois (`TermsOfUsePage`/`PrivacyPolicyPage`) bumped
+  pra "1 de agosto de 2026".
+- **Sem mudança de teste automatizado/manual nesta rodada** — a lógica
+  é idêntica à de 18 anos (só o número muda), já coberta pelos testes
+  via curl documentados em 2026-07-31; typecheck de `apps/api` e
+  `apps/web` (`npx tsc -b --force`, ver "Gotchas" — comando certo pro
+  frontend) confirmados limpos depois da mudança.
+
+## Bug no Select de mês/ano do calendário + versionamento do aceite de Termos (2026-08-01)
+
+Duas coisas pequenas e independentes, mesma sessão.
+
+- **Bug real, calendário (`captionLayout="dropdown"`) com o select de
+  mês/ano clicando no vazio ou aparecendo deslocado no topo da
+  página** — reportado pelo usuário na tela "Meu perfil"
+  (`BirthDateCard`), mas o componente é compartilhado com
+  `RegisterDialog`. Dois bugs distintos, mesma área do código
+  (`apps/web/src/components/ui/calendar.tsx`, arquivo que já estava
+  sendo mexido numa sessão anterior — trocou o `<select>` nativo do
+  react-day-picker pelo `Select` do design system, `CalendarDropdown`):
+  1. **Clique não abria o select.** `nav` (os botões de mês
+     anterior/próximo) é `position: absolute` cobrindo a LARGURA TODA
+     do cabeçalho (`inset-x-0`, só usa `justify-between` pra ancorar os
+     dois botões nas pontas) — por regra de empilhamento CSS, um
+     elemento posicionado pinta por cima de um elemento estático
+     (`month_caption`, onde vivem os selects) mesmo sem ter conteúdo
+     visível ali, então o clique nos selects de mês/ano caía no `nav`
+     invisível no meio, não nos botões do select. Confirmado via
+     `elementFromPoint`. Corrigido com `pointer-events-none` no `nav` +
+     `pointer-events-auto` nos dois botões de seta (só as pontas, onde
+     eles realmente aparecem, continuam clicáveis).
+  2. **Depois de corrigir (1), o select ATÉ abria, mas o painel
+     aparecia isolado no topo da página**, bem longe do botão.
+     Causa: `SelectContent` usa `alignItemWithTrigger` por padrão
+     (tenta alinhar o item já selecionado exatamente sobre o gatilho)
+     — esse modo do Base UI, quando o Select fica aninhado dentro de
+     OUTRO Popover (o do `DatePicker`), calcula errado (confirmado via
+     inspeção do DOM: o `Positioner` interno virava quase a altura
+     inteira da viewport, com o painel real posicionado no topo dele
+     em vez de perto da âncora). Corrigido passando
+     `alignItemWithTrigger={false}` no `SelectContent` de
+     `CalendarDropdown` — sem esse modo, cai no posicionamento padrão
+     relativo ao gatilho, que funciona certo mesmo aninhado.
+  - **Testado nos dois lugares**: `RegisterDialog` (via `127.0.0.1`,
+    sessão separada/deslogada — cadastro nunca submetido) e "Meu
+    perfil" na sessão REAL do usuário (`localhost`, só leitura — abrir
+    o calendário e trocar mês/ano não salva nada até clicar
+    "Salvar", que não foi clicado).
+- **Versionamento do aceite de Termos/Privacidade** (pedido do usuário
+  depois de eu apontar que faltava: `termsAcceptedAt` sozinho prova
+  QUANDO alguém aceitou, não O QUÊ — se o texto mudar depois, não tem
+  como provar contra qual versão o aceite foi registrado).
+  `User.termsVersion` (nova coluna, `varchar` nullable, mesmo padrão de
+  nullable de `termsAcceptedAt` — nulo só pra contas anteriores a esta
+  coluna) + migration `AddTermsVersionToUsers`. Gravado em
+  `UsersService.createPendingUser` junto com `termsAcceptedAt`, valor
+  fixo `CURRENT_TERMS_VERSION = '2026-08-01'` (constante no próprio
+  arquivo — formato `AAAA-MM-DD`, sortable, DIFERENTE da string de
+  exibição "1 de agosto de 2026" usada em `TermsOfUsePage`/
+  `PrivacyPolicyPage`; comentário no código lembra de bumpar os dois
+  juntos quando o TEXTO mudar de verdade, não a cada typo). Um único
+  checkbox no cadastro cobre os dois documentos (Termos + Privacidade)
+  — por isso uma versão só, não duas colunas separadas. Não exposto em
+  `UsersController.serializeProfile` (mesmo tratamento que
+  `termsAcceptedAt` já tinha — nenhum dos dois aparece na resposta de
+  `/users/me`, é dado de auditoria interna, não de UI).
+  - **Testado via curl** com uma conta descartável
+    (`teste.termsversion+claude@example.com`, deletada do Postgres
+    local ao final): confirmado via SQL direto que `terms_version`
+    grava `2026-08-01` corretamente. O `POST /auth/register` em si
+    devolveu `500` — mas era o envio do email de verificação real via
+    Resend falhando pro domínio fictício `example.com` (não relacionado
+    a esta mudança; o `INSERT` do usuário, incluindo `terms_version`,
+    já tinha sido persistido com sucesso ANTES desse 500, mesmo padrão
+    "escrita 1 ok, escrita 2 falha depois, sem transação cobrindo as
+    duas" já documentado antes neste arquivo pra `EventActivityAction`).
+
+## "Esqueci minha senha" (popup) + mostrar senha + rodada de correções de UX (2026-08-05)
+
+Sessão que ficou pra trás no dia anterior (PC desligou no meio) foi
+retomada do zero: todo o trabalho em andamento (não commitado) estava
+intacto no working tree, nada se perdeu. Cobre duas rodadas grandes de
+pedidos do usuário, todas já commitadas, deployadas (Render + Cloudflare
+Workers, sem migration pendente exceto a nota abaixo) e testadas com
+contas/eventos descartáveis (Postgres local, sempre apagados ao final).
+
+- **"Esqueci minha senha"**: fluxo em 3 etapas (email → código de 6
+  dígitos → nova senha), nova tabela `password_resets` (migration
+  `AddPasswordResets`, `PasswordReset` entity — sempre cria uma linha,
+  mesmo quando o email não existe, pra nunca revelar isso na resposta;
+  ver `AuthService.forgotPassword/verifyPasswordReset/resetPassword`).
+  **Decisão de UX** (pedido do usuário depois de eu ter implementado
+  como rota `/forgot-password` separada): virou `ForgotPasswordDialog`,
+  popup sobre a própria `LoginPage` (mesmo padrão do `RegisterDialog`,
+  mesmo fundo `BrandBackdrop`) — sem rota própria, sem fundo escuro
+  "flutuando sem contexto".
+- **Botão de mostrar/ocultar senha**: `PasswordInput.tsx` novo
+  (wrapper de `Input` com ícone de olho, `@/lib/passwordRules.ts`
+  extraído do `RegisterDialog` pra ser compartilhado) — usado em
+  `LoginPage`, `RegisterDialog`, `ForgotPasswordDialog` e `ProfilePage`
+  (troca de senha/desativar/excluir conta).
+- **Bug sistêmico achado e corrigido em 6 lugares**: `SelectValue` do
+  shadcn/Base UI **ignora completamente a prop `placeholder` quando o
+  filho é uma função** (só cai no placeholder quando NÃO há
+  `children`) — todo lugar que já usava o padrão
+  `<SelectValue placeholder="x">{(v) => LABELS[v]}</SelectValue>`
+  (documentado antes neste arquivo como a forma CORRETA de mostrar o
+  label em vez do value bruto) tinha o trigger vazio antes de escolher
+  algo. Corrigido tratando `!value` DENTRO da própria função em vez de
+  confiar no `placeholder`: `AddTeamCategoryPopover`,
+  `CreateScoringTemplateDialog`, `JudgingPage`, `ProgramFormFields`,
+  `CategoryFormFields`, `JudgeFormFields`. Ver gotcha correspondente
+  mais abaixo.
+- **Gerenciar acessos (`event-staff`) só lista quem administra**:
+  `EventStaffService.list` agora filtra por `STAFF_ROLES` (admin/
+  assessor/judge) — programa/atleta/espectador (concedidos
+  automaticamente, ver `EventMemberRole`) não aparecem mais no roster
+  manual, e "Espectador" saiu do `EVENT_MEMBER_ROLES_ORDER` (checkbox
+  de editar papéis / popup de adicionar pessoa) — redundante desde o
+  fluxo de compartilhamento por código/QR.
+- **Cronograma — painel de detalhes da apresentação**: clicar numa
+  apresentação (só apresentação, não aquecimento/intervalo) na timeline
+  abre `PresentationDetailsDialog` — dados completos (pista, horário,
+  duração, conflitos) + mover (início da pista / fim da pista / antes
+  de outra apresentação, com seletor) + remover, tudo num só lugar.
+  **Bug real pego testando**: `movePresentationWithWarmup` remove a
+  apresentação (e qualquer intervalo "Aguardando aquecimento" vinculado
+  a ela) ANTES de renumerar e reinserir — então o `order` de uma
+  apresentação de referência lido ANTES dessa remoção fica errado se a
+  removida estava antes dela na mesma pista (some um intervalo do
+  meio). Corrigido calculando o índice de inserção no CLIENTE já
+  simulando essa remoção (filtrando a entry sendo movida + qualquer
+  entry com `linkedEntryId` apontando pra ela, da lista COMPLETA da
+  pista de destino — não só as apresentações) antes de achar a posição
+  da referência.
+- **Gerar automaticamente**: prioriza Team Cheer > Group Stunt >
+  Coed/Elite Stunt > Partner Stunt > demais formatos, nível crescente
+  dentro do mesmo formato (`AUTO_GENERATE_FORMAT_PRIORITY` em
+  `ScheduleService`, ordena `unscheduled` antes de distribuir nos
+  buckets — vale pras duas estratégias de distribuição).
+- **Banner "Próxima etapa recomendada" sobrepondo a timeline —
+  precisou de DUAS rodadas pra resolver de vez.** 1ª rodada: reportado
+  em tablet retrato, corrigido gateando `min-h-0` do grid da coluna
+  (timeline+painel lateral) pra só valer a partir de `xl` — sem isso o
+  flexbox encolhia o grid abaixo do `min-h-[70vh]` que a coluna exige
+  em telas abaixo de `xl`, e a timeline "vazava" (`overflow: visible`)
+  por cima do banner. 2ª rodada: usuário reportou de novo em tablet
+  PAISAGEM (width cruza `xl`, então cai no caminho de 2 colunas) — o
+  MESMO tipo de bug, só que agora causado pelo `min-h-72` incondicional
+  da própria `ScheduleTimeline` (garante 4 recursos visíveis, ver
+  histórico anterior) colidindo com o `xl:min-h-0` que eu tinha
+  deixado no grid de propósito pra desktop encolher/preencher a
+  viewport. Fix final: **removido `min-h-0` do grid em QUALQUER
+  breakpoint** — sem ele, o grid nunca encolhe além do que o conteúdo
+  exige (`flex-1` ainda deixa crescer quando há espaço de sobra,
+  visual idêntico em telas confortáveis), e a página cresce/rola em
+  vez de sobrepor quando não há espaço. Testado programaticamente
+  (Puppeteer, medindo `getBoundingClientRect`) em 13 combinações de
+  largura/altura, incluindo as que reproduziam os dois bugs.
+  `ScheduleTableView` recebeu o mesmo piso `min-h-72` que a
+  `ScheduleTimeline` já tinha (também ficava "minúscula", mesma causa).
+- **Drag-and-drop do cronograma, dois bugs de UX + um bug real de
+  clipping**: (1) área de soltura evidenciada assim que QUALQUER
+  arraste começa (não só embaixo do cursor), mesmo padrão já usado em
+  `JudgingCriterionRow`/`SpecialRolesCard` — só que a primeira tentativa
+  ficou invisível porque o `style` INLINE de tonalidade do recurso
+  sempre vencia a classe Tailwind pro mesmo `background-color` (corrigido
+  limpando o inline style também quando `isDragActive`, não só quando
+  `isOver`). (2) **Bug real, reportado como "o card some quando meu
+  dedo sai da seção de equipes não agendadas"**: os 4 tipos de arraste
+  (equipe não agendada, componente do evento, apresentação já agendada,
+  reordenar pista) moviam o elemento original via CSS `transform`, mas
+  ele continuava fisicamente dentro do painel de origem — que tem
+  `overflow-y-auto`/`max-h-64` próprio. Assim que o `transform` empurra
+  o elemento além dessa borda, o `overflow` clipa, mesmo com o
+  drag ainda ativo. Corrigido adotando `DragOverlay` do dnd-kit em
+  todos os 4 (`data: {...}` em cada `useDraggable` carrega o payload
+  pro `DragOverlay`, centralizado em `SchedulePage`, desenhar uma
+  prévia fiel; elemento original só esmaece via `opacity`, não se move
+  mais) — o `DragOverlay` renderiza num portal (`document.body`),
+  imune a qualquer `overflow` de ancestral. `peerDrag` (aquecimento
+  espelhando visualmente o delta da apresentação vinculada arrastada)
+  continua usando transform manual — não é o próprio drag deste
+  elemento, é só sincronismo visual entre dois cards.
+- **Indicador de "salvando" — também precisou de duas tentativas.**
+  1ª: texto pequeno "Salvando..." perto do toggle Linha do
+  tempo/Tabela — usuário reportou que quase não via. 2ª: overlay de
+  TELA CHEIA (`fixed inset-0`, `bg-background/70 backdrop-blur-sm`,
+  `pointer-events-none`) com spinner centralizado, cobrindo mover/criar
+  (drag-and-drop) E remover uma apresentação — sem isso, o delay real
+  de rede (mais perceptível em produção, Render+Neon, que localmente)
+  entre soltar/remover e o card aparecer/desaparecer de verdade parecia
+  falha silenciosa.
+- **Ajustes menores**: mensagem de erro do cronograma movida do topo da
+  página pra logo abaixo da linha do tempo/tabela (onde o usuário
+  realmente está olhando ao montar o cronograma); intervalo padrão
+  entre apresentações de um dia novo, 0 → 5 min
+  (`ScheduleService.createDay`); scrollbar escondida (`scrollbar-none`,
+  utility já existente) na timeline do cronograma E na trilha
+  horizontal de progresso da tela de setup (`SetupProgressSummary`) —
+  dois relatos separados do usuário, mesma classe, containers
+  diferentes.
+- **Overlay de "salvando" reescopado**: depois de shippado como `fixed
+  inset-0` (tela cheia), usuário pediu pra afetar só a área da
+  timeline/tabela — trocado pra `absolute inset-0` dentro de um `div
+  relative` que envolve só o `{viewMode === "timeline" ? ... : ...}`,
+  não a coluna inteira (que também tem o toggle/rodapé/mensagem de
+  erro, esses continuam clicáveis/legíveis durante o "Salvando...").
+- **Nome padrão do primeiro recurso de um dia novo**: "Pista 1" →
+  "Palco 1" (`ScheduleService.seedDefaultResources`) — só o nome
+  sugerido, sem mudança de terminologia no resto do app ("pista"
+  continua aparecendo em labels genéricos como "Recursos (pistas)");
+  organizador renomeia livremente depois.
+- **Bug real de input numérico controlado, `AutoGenerateDialog`**:
+  campos "Intervalo entre apresentações"/"Duração do aquecimento"/
+  "Duração do almoço" não deixavam apagar o "0" pra digitar outro
+  valor (mesma causa/fix documentado na seção de Gotchas mais abaixo —
+  `value`/`onChange` number direto vs. state em string). O mesmo
+  padrão existe em outros ~6 componentes do projeto, não corrigidos
+  ainda (fora do escopo do que foi reportado).
