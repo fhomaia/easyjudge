@@ -22,6 +22,7 @@ interface HeadJudgeJudgeSheetProps {
   scheduleEntryId: string;
   judgeParticipationId: string;
   canWrite: boolean;
+  lockedMessage?: string;
   onBack: () => void;
 }
 
@@ -30,6 +31,7 @@ export function HeadJudgeJudgeSheet({
   scheduleEntryId,
   judgeParticipationId,
   canWrite,
+  lockedMessage = "O evento ainda não foi iniciado.",
   onBack,
 }: HeadJudgeJudgeSheetProps) {
   const {
@@ -109,7 +111,7 @@ export function HeadJudgeJudgeSheet({
             {!canWrite && (
               <div className="m-4 flex items-center gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
                 <AlertTriangle className="size-4 shrink-0" />
-                O evento ainda não foi iniciado.
+                {lockedMessage}
               </div>
             )}
             <div className={cn(!canWrite && "pointer-events-none opacity-50")}>
@@ -171,7 +173,7 @@ export function HeadJudgeJudgeSheet({
               disabled={submitting || !sheetComplete || !canWrite}
               title={
                 !canWrite
-                  ? "O evento ainda não foi iniciado."
+                  ? lockedMessage
                   : sheetComplete
                     ? undefined
                     : "Preencha todos os critérios antes de lançar as notas."

@@ -43,7 +43,9 @@ export function EventGridItem({
   const isStaffViewer = hasEventStaffRole(event.currentUserRoles);
   const navigate = useNavigate();
   const isConfigurable = event.status === "created";
-  const isLive = event.status === "published" || event.status === "started";
+  // Concluído também abre (só para consulta, 2026-09-27).
+  const isLive =
+    event.status === "published" || event.status === "started" || event.status === "completed";
   // Evento "criado" agora aparece na Home pra QUALQUER vínculo (não só
   // staff, ver EventsService.findAllForUser, 2026-09-23) — mas só
   // admin/assessor/judge conseguem de fato abrir antes de publicar

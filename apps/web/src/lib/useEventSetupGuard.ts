@@ -13,8 +13,16 @@ import { eventsApi } from "@/api/client";
 // Busca o evento por conta própria (mesmo que a página já tenha seu
 // próprio fetch) — mantém uma interface só, independente de como cada
 // página já busca (ou não) o evento.
-export function useEventSetupGuard(eventId: string | undefined) {
+//
+// Evento concluído é só para consulta (2026-09-27): as telas de
+// configuração mandam pro evento ao vivo. Métricas e Histórico só leem,
+// então passam `allowCompleted`.
+export function useEventSetupGuard(
+  eventId: string | undefined,
+  options?: { allowCompleted?: boolean },
+) {
   const navigate = useNavigate();
+  const allowCompleted = options?.allowCompleted ?? false;
 
   useEffect(() => {
     if (!eventId) return;
@@ -27,6 +35,9 @@ export function useEventSetupGuard(eventId: string | undefined) {
           (r) => r === "admin" || r === "assessor",
         );
         if (!allowed) navigate("/", { replace: true });
+        else if (event.status === "completed" && !allowCompleted) {
+          navigate(`/events/${event.aliasId}/live`, { replace: true });
+        }
       })
       .catch(() => {
         if (!cancelled) navigate("/", { replace: true });
@@ -34,5 +45,5 @@ export function useEventSetupGuard(eventId: string | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [eventId, navigate]);
+  }, [eventId, navigate, allowCompleted]);
 }

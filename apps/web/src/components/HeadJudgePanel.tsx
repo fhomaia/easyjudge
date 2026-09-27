@@ -15,10 +15,11 @@ interface HeadJudgePanelProps {
   eventId: string;
   scheduleEntryId: string;
   canWrite: boolean;
+  lockedMessage?: string;
   onClose: () => void;
 }
 
-export function HeadJudgePanel({ eventId, scheduleEntryId, canWrite, onClose }: HeadJudgePanelProps) {
+export function HeadJudgePanel({ eventId, scheduleEntryId, canWrite, lockedMessage, onClose }: HeadJudgePanelProps) {
   const {
     activeTab,
     setActiveTab,
@@ -59,6 +60,7 @@ export function HeadJudgePanel({ eventId, scheduleEntryId, canWrite, onClose }: 
           scheduleEntryId={scheduleEntryId}
           judgeParticipationId={selectedJudgeId}
           canWrite={canWrite}
+          lockedMessage={lockedMessage}
           onBack={closeJudgeSheet}
         />
       ) : (

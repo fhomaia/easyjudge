@@ -655,6 +655,13 @@ export class ScheduleService {
   ): Promise<ScheduleEntryView> {
     const day = await this.findDayOrThrow(eventId, dayId);
     const entry = await this.findEntryInDayOrThrow(dayId, entryId);
+    // Evento concluído é só para consulta (2026-09-27).
+    if (
+      (await this.eventsService.findEventOrThrow(eventId)).status ===
+      EventStatus.COMPLETED
+    ) {
+      throw new ConflictException('O evento já foi concluído.');
+    }
 
     // Mover a apresentação arrasta o aquecimento (e os intervalos de
     // espera vinculados) junto, recalculando a posição de tudo — sem

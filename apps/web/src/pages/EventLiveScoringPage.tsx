@@ -534,6 +534,11 @@ function EventLiveScoringSheet() {
   // iniciar o evento — a tela em si continua aberta pra consulta (ver
   // decisão do usuário), só os controles de escrita ficam desabilitados.
   const canWrite = event.status === "started";
+  // Evento concluído: súmula só para consulta (sem "Praticar").
+  const eventCompleted = event.status === "completed";
+  const lockedMessage = eventCompleted
+    ? "O evento foi concluído. As súmulas estão só para consulta."
+    : "O evento ainda não foi iniciado.";
   // Interface destravada tanto pelo evento ter começado de verdade
   // quanto pelo modo teste — emitEvent/emitScoreEvent continuam só
   // gravando quando `canWrite` for true de verdade, então modo teste
@@ -626,7 +631,14 @@ function EventLiveScoringSheet() {
           </div>
         )}
 
-        {!canWrite && !practiceMode && (
+        {eventCompleted && (
+          <div className="m-4 flex items-center gap-2 rounded-2xl border border-border bg-muted/50 p-3 text-sm font-medium text-muted-foreground">
+            <AlertTriangle className="size-4 shrink-0" />
+            {lockedMessage}
+          </div>
+        )}
+
+        {!canWrite && !practiceMode && !eventCompleted && (
           <div className="m-4 flex flex-col gap-2 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
             <div className="flex items-center gap-2">
               <AlertTriangle className="size-4 shrink-0" />
@@ -853,7 +865,7 @@ function EventLiveScoringSheet() {
           disabled={submitting || !sheetComplete || !interactionUnlocked}
           title={
             !interactionUnlocked
-              ? "O evento ainda não foi iniciado."
+              ? lockedMessage
               : sheetComplete
                 ? undefined
                 : "Preencha todos os critérios antes de lançar as notas."
@@ -874,6 +886,7 @@ function EventLiveScoringSheet() {
           eventId={id}
           scheduleEntryId={entryId}
           canWrite={canWrite}
+          lockedMessage={lockedMessage}
           onClose={() => setSupervisionOpen(false)}
         />
       )}
@@ -917,6 +930,8 @@ function EventLiveScoringSheet() {
         onGoToNextOrNotes={goToNextOrNotes}
         onOpenSupervision={() => setSupervisionOpen(true)}
         canWrite={canWrite}
+        eventCompleted={eventCompleted}
+        lockedMessage={lockedMessage}
         practiceMode={practiceMode}
         onTogglePracticeMode={togglePracticeMode}
       />
@@ -927,6 +942,7 @@ function EventLiveScoringSheet() {
             eventId={id}
             scheduleEntryId={entryId}
             canWrite={canWrite}
+            lockedMessage={lockedMessage}
             onClose={() => setSupervisionOpen(false)}
           />
         )}

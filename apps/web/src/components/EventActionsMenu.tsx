@@ -95,7 +95,7 @@ export function EventActionsMenu({
               Configurar evento
             </DropdownMenuItem>
           )}
-          {isAdmin && (
+          {isAdmin && event.status !== "completed" && (
             <DropdownMenuItem onClick={() => onEdit(event)}>
               <Pencil data-icon="inline-start" />
               Dados do evento

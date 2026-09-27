@@ -1912,8 +1912,19 @@ export class ScoringService {
   // consulta, só a escrita é que fica bloqueada.
   private async assertEventStarted(eventId: string): Promise<void> {
     const event = await this.eventsService.findEventOrThrow(eventId);
+    if (event.status === EventStatus.COMPLETED) {
+      throw new ConflictException('O evento já foi concluído.');
+    }
     if (event.status !== EventStatus.STARTED) {
       throw new ConflictException('O evento ainda não foi iniciado.');
+    }
+  }
+
+  // Evento concluído é só para consulta (2026-09-27).
+  private async assertEventNotCompleted(eventId: string): Promise<void> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    if (event.status === EventStatus.COMPLETED) {
+      throw new ConflictException('O evento já foi concluído.');
     }
   }
 
@@ -2698,6 +2709,7 @@ export class ScoringService {
     scheduleEntryId: string,
     dto: WithdrawPresentationDto,
   ): Promise<void> {
+    await this.assertEventNotCompleted(eventId);
     const entry = await this.scheduleService.findEntryInEventOrThrow(
       eventId,
       scheduleEntryId,

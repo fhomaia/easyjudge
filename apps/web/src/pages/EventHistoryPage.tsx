@@ -28,7 +28,7 @@ import { useAuthStore } from "@/store/auth";
 export function EventHistoryPage() {
   const { id } = useParams<{ id: string }>();
   const notificationsUnreadCount = useNotificationsUnreadCount(id);
-  useEventSetupGuard(id);
+  useEventSetupGuard(id, { allowCompleted: true });
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 

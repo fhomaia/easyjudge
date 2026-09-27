@@ -258,16 +258,14 @@ export function EventLiveDashboardPage() {
   // (admin/assessor) — jurado é o único outro papel que enxerga um
   // evento "criado" na Home (ver EventsService.findAllForUser/
   // STAFF_ROLES) e não tem nada pra configurar, então fica aqui mesmo
-  // vendo o evento (pedido do usuário, 2026-09-22). "completed" ainda
-  // não tem uma tela própria de resumo pós-evento, então volta pra
-  // Home por enquanto (vale pra todo mundo).
+  // vendo o evento (pedido do usuário, 2026-09-22). "completed" fica
+  // aberto só para consulta (pedido do usuário, 2026-09-27): as ações
+  // de modificação é que somem/ficam travadas em cada tela.
   useEffect(() => {
     if (!event) return;
     const canManage = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
     if (event.status === "created" && canManage) {
       navigate(`/events/${event.aliasId}/setup`, { replace: true });
-    } else if (event.status === "completed") {
-      navigate("/", { replace: true });
     }
   }, [event, navigate]);
 

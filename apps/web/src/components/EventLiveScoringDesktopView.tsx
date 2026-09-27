@@ -55,6 +55,8 @@ interface EventLiveScoringDesktopViewProps {
   onGoToNextOrNotes: () => void;
   onOpenSupervision: () => void;
   canWrite: boolean;
+  eventCompleted: boolean;
+  lockedMessage: string;
   practiceMode: boolean;
   onTogglePracticeMode: () => void;
 }
@@ -96,6 +98,8 @@ export function EventLiveScoringDesktopView({
   onGoToNextOrNotes,
   onOpenSupervision,
   canWrite,
+  eventCompleted,
+  lockedMessage,
   practiceMode,
   onTogglePracticeMode,
 }: EventLiveScoringDesktopViewProps) {
@@ -343,7 +347,14 @@ export function EventLiveScoringDesktopView({
           </div>
         )}
 
-        {!canWrite && !practiceMode && (
+        {eventCompleted && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-border bg-muted/50 p-3 text-sm font-medium text-muted-foreground">
+            <AlertTriangle className="size-4 shrink-0" />
+            {lockedMessage}
+          </div>
+        )}
+
+        {!canWrite && !practiceMode && !eventCompleted && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-400">
             <span className="flex items-center gap-2">
               <AlertTriangle className="size-4 shrink-0" />
@@ -467,7 +478,7 @@ export function EventLiveScoringDesktopView({
             disabled={submitting || !sheetComplete || !interactionUnlocked}
             title={
               !interactionUnlocked
-                ? "O evento ainda não foi iniciado."
+                ? lockedMessage
                 : sheetComplete
                   ? undefined
                   : "Preencha todos os critérios antes de lançar as notas."

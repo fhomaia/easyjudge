@@ -82,7 +82,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 export function EventMetricsPage() {
   const { id } = useParams<{ id: string }>();
   const notificationsUnreadCount = useNotificationsUnreadCount(id);
-  useEventSetupGuard(id);
+  useEventSetupGuard(id, { allowCompleted: true });
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
 

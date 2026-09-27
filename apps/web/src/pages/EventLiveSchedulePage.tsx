@@ -412,6 +412,8 @@ export function EventLiveSchedulePage() {
 
   const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
   const isProgram = event.currentUserRoles.includes("program");
+  // Concluído: só consulta, sem mover nem sinalizar desistência.
+  const isCompleted = event.status === "completed";
   const myTeamIdSet = new Set(myTeamIds ?? []);
 
   const eventNavTabs = buildEventNavTabs({
@@ -653,6 +655,7 @@ export function EventLiveSchedulePage() {
                           const canWithdraw =
                             item.entry.type === "presentation" &&
                             !withdrawn &&
+                            !isCompleted &&
                             (isAdminOrAssessor ||
                               (isProgram && myTeamIdSet.has(item.entry.teamId ?? "")));
                           // Só admin/assessor (pedido explícito do
@@ -660,7 +663,7 @@ export function EventLiveSchedulePage() {
                           // decide onde a própria apresentação entra no
                           // cronograma, só sinaliza desistência.
                           const canMove =
-                            item.entry.type === "presentation" && !withdrawn && isAdminOrAssessor;
+                            item.entry.type === "presentation" && !withdrawn && !isCompleted && isAdminOrAssessor;
                           // Evento especial (Almoço, Premiação...): admin/
                           // assessor sinaliza início/fim com o evento iniciado.
                           const isSpecial = scheduleFilterCategory(item.entry) === "special";

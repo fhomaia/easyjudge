@@ -17,10 +17,11 @@ interface HeadJudgeMobileSheetProps {
   eventId: string;
   scheduleEntryId: string;
   canWrite: boolean;
+  lockedMessage?: string;
   onClose: () => void;
 }
 
-export function HeadJudgeMobileSheet({ eventId, scheduleEntryId, canWrite, onClose }: HeadJudgeMobileSheetProps) {
+export function HeadJudgeMobileSheet({ eventId, scheduleEntryId, canWrite, lockedMessage, onClose }: HeadJudgeMobileSheetProps) {
   const {
     activeTab,
     setActiveTab,
@@ -61,6 +62,7 @@ export function HeadJudgeMobileSheet({ eventId, scheduleEntryId, canWrite, onClo
           scheduleEntryId={scheduleEntryId}
           judgeParticipationId={selectedJudgeId}
           canWrite={canWrite}
+          lockedMessage={lockedMessage}
           onBack={closeJudgeSheet}
         />
       ) : (
