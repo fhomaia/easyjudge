@@ -2734,16 +2734,28 @@ export class ScheduleService {
     const resources = await this.resourcesRepo.find({
       where: { scheduleDayId: day.id },
     });
-    const copies = await this.entriesRepo.find({
-      where: {
-        resourceId: In(resources.map((r) => r.id)),
-        type: entry.type,
-        label: entry.label ?? IsNull(),
-      },
-    });
+    const sameNamed = (
+      await this.entriesRepo.find({
+        where: {
+          resourceId: In(resources.map((r) => r.id)),
+          type: entry.type,
+          label: entry.label ?? IsNull(),
+        },
+      })
+    ).filter((e) => !e.linkedEntryId);
+    // Cada pista/área de aquecimento tem uma cópia do evento especial, e
+    // o mesmo nome pode aparecer mais de uma vez no dia (ex.: duas
+    // "Batalhas"). A ocorrência é a posição entre os de mesmo nome na
+    // pista: sinalizar a 2ª só afeta a 2ª de cada pista.
+    const occurrenceIndex = (e: ScheduleEntry) =>
+      sameNamed
+        .filter((other) => other.resourceId === e.resourceId)
+        .sort((a, b) => a.order - b.order)
+        .findIndex((other) => other.id === e.id);
+    const targetIndex = occurrenceIndex(entry);
+    const copies = sameNamed.filter((e) => occurrenceIndex(e) === targetIndex);
     const now = new Date();
     for (const copy of copies) {
-      if (copy.linkedEntryId) continue;
       if (action === 'start' && !copy.startedAt) copy.startedAt = now;
       if (action === 'end' && copy.startedAt && !copy.endedAt) {
         copy.endedAt = now;

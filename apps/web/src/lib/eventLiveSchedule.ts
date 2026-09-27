@@ -222,7 +222,9 @@ function computeDoneEntryIds(
           const otherBeganAt =
             other.type === "presentation"
               ? startTimes.get(other.id)
-              : isSpecialEntry(other) && other.label !== entry.label
+              : // Cópias da mesma ocorrência (uma por pista) têm o mesmo
+                // horário de sinal; outra "Batalhas" do dia conta.
+                isSpecialEntry(other) && other.startedAt !== entry.startedAt
                 ? (other.startedAt ?? undefined)
                 : undefined;
           return otherBeganAt !== undefined && new Date(otherBeganAt).getTime() > signaledAt;
