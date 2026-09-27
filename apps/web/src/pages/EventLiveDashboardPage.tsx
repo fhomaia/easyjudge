@@ -288,15 +288,15 @@ export function EventLiveDashboardPage() {
     () => new Map(presentationStarts.map((p) => [p.scheduleEntryId, p.startedAt])),
     [presentationStarts],
   );
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const isoToday = toIsoDate(now);
   const live = useMemo(
     () =>
       days && event
-        ? computeEventLiveSchedule(days, completedEntryIdSet, startedEntryIdSet, presentationStartTimes)
+        ? computeEventLiveSchedule(days, completedEntryIdSet, startedEntryIdSet, presentationStartTimes, isoToday)
         : null,
-    [days, event, completedEntryIdSet, startedEntryIdSet, presentationStartTimes],
+    [days, event, completedEntryIdSet, startedEntryIdSet, presentationStartTimes, isoToday],
   );
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const isoToday = toIsoDate(now);
 
   // "Ir para agora" só faz sentido pra quem lança nota (jurado de
   // verdade — `assignment.isJudge`, não só o papel "judge" no evento) —

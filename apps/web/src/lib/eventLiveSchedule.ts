@@ -301,15 +301,25 @@ function findWarmupFor(
 // apresentação pendente que já foi iniciada vira o `next` (com
 // `nextIsLive`), mesmo que outro item pendente esteja antes dela no
 // horário planejado — ela é o que está acontecendo de fato.
+//
+// Dia encerrado (2026-09-27, pedido do usuário depois do Batalha, que
+// tem dois dias): o que sobrou pendente de um dia anterior (Premiação sem
+// sinal, súmula não enviada) não segura mais o "próxima" lá. Um dia conta
+// como encerrado quando a data de hoje já passou dele. Só a DATA, nunca o
+// horário: a regra de não comparar contra o relógio continua valendo
+// dentro do dia. Atividade num dia posterior NÃO encerra o anterior (um
+// "Iniciar" por engano numa súmula do dia 2 pularia o resto do dia 1).
 export function computeEventLiveSchedule(
   days: ScheduleDay[],
   completedEntryIds: Set<string> = new Set(),
   startedEntryIds: Set<string> = new Set(),
   startTimes: Map<string, string> = new Map(),
+  today: string = toIsoDate(new Date()),
 ): EventLiveSchedule {
   const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
+  const closedDayDates = new Set(sortedDays.filter((d) => d.date < today).map((d) => d.date));
 
   const allItems: LiveScheduleItem[] = [];
   const allWarmups: (NextWarmup & { dayDate: string; linkedEntryId: string | null })[] = [];
@@ -382,7 +392,10 @@ export function computeEventLiveSchedule(
   // um aquecimento não tem conclusão própria, só faz sentido dizer que
   // passou quando a apresentação ligada a ele já foi pontuada.
   const nextWarmup =
-    allWarmups.find((w) => !(w.linkedEntryId && completedEntryIds.has(w.linkedEntryId))) ?? null;
+    allWarmups.find(
+      (w) =>
+        !closedDayDates.has(w.dayDate) && !(w.linkedEntryId && completedEntryIds.has(w.linkedEntryId)),
+    ) ?? null;
 
   allItems.sort((a, b) => (a.dayDate === b.dayDate ? a.start - b.start : a.dayDate < b.dayDate ? -1 : 1));
 
@@ -393,7 +406,9 @@ export function computeEventLiveSchedule(
   const total = presentations.length;
   const completed = presentations.filter((item) => allDoneEntryIds.has(item.entry.id)).length;
 
-  const pending = allItems.filter((item) => !allDoneEntryIds.has(item.entry.id));
+  const pending = allItems.filter(
+    (item) => !closedDayDates.has(item.dayDate) && !allDoneEntryIds.has(item.entry.id),
+  );
   // Evento especial com início sinalizado (e ainda não passado) tem
   // prioridade: ele só é iniciado quando a apresentação anterior já acabou.
   const specialLiveIndex = pending.findIndex(
@@ -430,6 +445,13 @@ export function computeEventLiveSchedule(
     nextWarmup,
     currentCategory,
   };
+}
+
+// Dia que o Cronograma mostra por padrão: o de hoje (pedido do usuário).
+// Fora dos dias do evento: antes dele, o primeiro dia; depois, o último.
+export function defaultScheduleDayDate(dayDates: string[], today: string): string | null {
+  const sorted = [...dayDates].sort();
+  return sorted.find((d) => d >= today) ?? sorted[sorted.length - 1] ?? null;
 }
 
 // Rótulo do card principal do evento ao vivo (Início e Cronograma).

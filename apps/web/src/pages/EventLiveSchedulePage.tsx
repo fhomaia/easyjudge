@@ -45,7 +45,7 @@ import {
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { REALTIME_FALLBACK_POLL_MS, useEventLiveSocket } from "@/lib/useEventLiveSocket";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatDayTab } from "@/lib/formatDate";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatMinutes } from "@/lib/scheduleTime";
 import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
@@ -56,7 +56,12 @@ import {
   type ScheduleFilterCategory,
   type FullScheduleItem,
 } from "@/lib/eventFullSchedule";
-import { computeEventLiveSchedule, liveNextLabel } from "@/lib/eventLiveSchedule";
+import {
+  computeEventLiveSchedule,
+  defaultScheduleDayDate,
+  liveNextLabel,
+  toIsoDate,
+} from "@/lib/eventLiveSchedule";
 import { LivePulseDot } from "@/components/LivePulseDot";
 import { exportScheduleToExcel, exportScheduleToPdf } from "@/lib/scheduleExport";
 import { cn } from "@/lib/utils";
@@ -135,6 +140,16 @@ export function EventLiveSchedulePage() {
   );
   const [teamId, setTeamId] = useState("all");
   const [programId, setProgramId] = useState("all");
+  // Aba de dia escolhida à mão; `null` = segue o dia de hoje (ver
+  // defaultScheduleDayDate), que vira sozinho na troca de data.
+  const [pickedDayDate, setPickedDayDate] = useState<string | null>(null);
+  // Data de hoje, conferida a cada minuto: o dia anterior se encerra na
+  // virada da data mesmo com a tela aberta.
+  const [today, setToday] = useState(() => toIsoDate(new Date()));
+  useEffect(() => {
+    const interval = setInterval(() => setToday(toIsoDate(new Date())), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -263,8 +278,9 @@ export function EventLiveSchedulePage() {
         completedEntryIdSet,
         new Set(startedEntryIds),
         new Map(presentationStarts.map((p) => [p.scheduleEntryId, p.startedAt])),
+        today,
       ),
-    [days, completedEntryIdSet, startedEntryIds, presentationStarts],
+    [days, completedEntryIdSet, startedEntryIds, presentationStarts, today],
   );
   const currentItem = live.next;
   const currentEntryId = currentItem?.entry.id ?? null;
@@ -315,15 +331,33 @@ export function EventLiveSchedulePage() {
     [fullSchedule, selectedTypes, teamId, programId, search, teamProgramMap],
   );
 
+  // Abas por dia (só com mais de um dia no cronograma): mostra só a
+  // programação do dia selecionado, o de hoje por padrão.
+  const dayDates = useMemo(
+    () => Array.from(new Set(fullSchedule.map((item) => item.dayDate))).sort(),
+    [fullSchedule],
+  );
+  const selectedDayDate =
+    pickedDayDate && dayDates.includes(pickedDayDate)
+      ? pickedDayDate
+      : defaultScheduleDayDate(dayDates, today);
+  const visibleItems = useMemo(
+    () =>
+      dayDates.length > 1
+        ? filteredItems.filter((item) => item.dayDate === selectedDayDate)
+        : filteredItems,
+    [filteredItems, dayDates, selectedDayDate],
+  );
+
   const groupedByDay = useMemo(() => {
     const map = new Map<string, FullScheduleItem[]>();
-    for (const item of filteredItems) {
+    for (const item of visibleItems) {
       const list = map.get(item.dayDate) ?? [];
       list.push(item);
       map.set(item.dayDate, list);
     }
     return Array.from(map.entries());
-  }, [filteredItems]);
+  }, [visibleItems]);
 
   function handleLogout() {
     logout();
@@ -449,19 +483,39 @@ export function EventLiveSchedulePage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onClick={() =>
-                    exportScheduleToPdf(event.name, filteredItems, teamProgramNameMap, withdrawnPresentationIds)
+                    exportScheduleToPdf(event.name, visibleItems, teamProgramNameMap, withdrawnPresentationIds)
                   }
                 >
                   <FileText data-icon="inline-start" />
                   Baixar como PDF
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => exportScheduleToExcel(event.name, filteredItems, withdrawnPresentationIds)}>
+                <DropdownMenuItem onClick={() => exportScheduleToExcel(event.name, visibleItems, withdrawnPresentationIds)}>
                   <FileSpreadsheet data-icon="inline-start" />
                   Baixar como Excel
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {dayDates.length > 1 && (
+            <div className="scrollbar-none mt-4 flex items-center gap-2 overflow-x-auto">
+              {dayDates.map((dayDate) => (
+                <button
+                  key={dayDate}
+                  type="button"
+                  onClick={() => setPickedDayDate(dayDate)}
+                  className={cn(
+                    "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+                    dayDate === selectedDayDate
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {formatDayTab(dayDate)}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="mt-5 flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4">
             <div className="relative">
