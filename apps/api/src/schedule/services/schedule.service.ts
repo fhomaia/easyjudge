@@ -5,13 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, QueryFailedError, Repository } from 'typeorm';
+import { In, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 import { ScheduleDay } from '../entities/schedule-day.entity';
 import { ScheduleResource } from '../entities/schedule-resource.entity';
 import { ScheduleEntry } from '../entities/schedule-entry.entity';
 import { ScheduleEntryType } from '../enums/schedule-entry-type.enum';
 import { ScheduleAutoSettings } from '../entities/schedule-auto-settings.entity';
 import { ScoreEvent } from '../../scoring/entities/score-event.entity';
+import { ScoreEventKind } from '../../scoring/enums/score-event-kind.enum';
 import {
   findSpecialEventsProblem,
   planSpecialEvents,
@@ -176,7 +177,10 @@ export class ScheduleService {
         // na constraint única (alias_id, day_index) e virava 500. Se
         // foi exatamente essa corrida (outra requisição já semeou com
         // sucesso), só relê do banco em vez de propagar o erro.
-        if (!(err instanceof QueryFailedError) || (err.driverError as { code?: string })?.code !== '23505') {
+        if (
+          !(err instanceof QueryFailedError) ||
+          (err.driverError as { code?: string })?.code !== '23505'
+        ) {
           throw err;
         }
         days = await this.daysRepo.find({
@@ -623,9 +627,17 @@ export class ScheduleService {
   // mais e a súmula passaria a enxergar zero notas ("notas nunca podem
   // ser perdidas"). Por isso, depois que alguma nota existe, a
   // apresentação fica travada (mesmo critério da desistência).
+  //
+  // Exceção (2026-09-27, Batalha): só cronômetro (jurado deu "Iniciar" e
+  // a apresentação foi pulada) não trava. Não há nota a perder, e a
+  // ingestão descarta cronômetro de id que não existe mais (ver
+  // ScoringService.buildScoreEventRows), então a fila do jurado não trava.
   private async assertPresentationHasNoScores(entryId: string): Promise<void> {
     const scores = await this.scoreEventsRepo.countBy({
       scheduleEntryId: entryId,
+      kind: Not(
+        In([ScoreEventKind.TIMER_STARTED, ScoreEventKind.TIMER_STOPPED]),
+      ),
     });
     if (scores > 0) {
       throw new ConflictException(
@@ -1793,7 +1805,13 @@ export class ScheduleService {
     const allEntries = resourceIds.length
       ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
       : [];
-    return this.computeTeamBusyWindows(resources, allEntries, day, teamId, excludeEntryIds);
+    return this.computeTeamBusyWindows(
+      resources,
+      allEntries,
+      day,
+      teamId,
+      excludeEntryIds,
+    );
   }
 
   // Mesmo cálculo de getTeamBusyWindows, mas a partir de dados JÁ
@@ -1868,7 +1886,9 @@ export class ScheduleService {
         // pras entries deste recurso quanto por computeTeamBusyWindows
         // logo abaixo (ver comentário lá pra motivo/data do fix).
         const allEntries = resourceIds.length
-          ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
+          ? await this.entriesRepo.find({
+              where: { resourceId: In(resourceIds) },
+            })
           : [];
         const entries = allEntries
           .filter((e) => e.resourceId === resource.id)
@@ -2047,7 +2067,9 @@ export class ScheduleService {
         // (antes era uma query por apresentação, ver comentário no
         // trecho abaixo que a substituiu).
         const allEntries = resourceIds.length
-          ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
+          ? await this.entriesRepo.find({
+              where: { resourceId: In(resourceIds) },
+            })
           : [];
         const entries = allEntries
           .filter((e) => e.resourceId === resource.id)
@@ -2183,7 +2205,9 @@ export class ScheduleService {
       });
       const resourceIds = resources.map((r) => r.id);
       const allEntries = resourceIds.length
-        ? await this.entriesRepo.find({ where: { resourceId: In(resourceIds) } })
+        ? await this.entriesRepo.find({
+            where: { resourceId: In(resourceIds) },
+          })
         : [];
       const timesByResource = new Map<
         string,
@@ -2388,7 +2412,9 @@ export class ScheduleService {
           )
           .map((e) => e.resourceId),
       );
-      const preferred = candidates.filter((c) => preferredResourceIds.has(c.id));
+      const preferred = candidates.filter((c) =>
+        preferredResourceIds.has(c.id),
+      );
       if (preferred.length > 0) {
         return this.pickLeastElapsedResource(preferred);
       }

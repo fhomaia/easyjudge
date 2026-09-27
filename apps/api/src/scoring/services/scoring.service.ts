@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
@@ -2070,12 +2071,25 @@ export class ScoringService {
 
     const rows: ScoreEvent[] = [];
     for (const input of events) {
+      const isTimerEvent =
+        input.kind === ScoreEventKind.TIMER_STARTED ||
+        input.kind === ScoreEventKind.TIMER_STOPPED;
       let resourceId = resourceCache.get(input.scheduleEntryId);
       if (!resourceId) {
-        const entry = await this.scheduleService.findEntryInEventOrThrow(
-          eventId,
-          input.scheduleEntryId,
-        );
+        const entry = await this.scheduleService
+          .findEntryInEventOrThrow(eventId, input.scheduleEntryId)
+          .catch((err: unknown) => {
+            // Cronômetro de uma apresentação que não existe mais (movida
+            // depois de só ter "Iniciar", o que a recria com outro id, ver
+            // ScheduleService.assertPresentationHasNoScores): descarta o
+            // registro. Recusar travaria o lote inteiro na fila do jurado,
+            // junto com as notas de verdade que vierem depois.
+            if (isTimerEvent && err instanceof NotFoundException) return null;
+            throw err;
+          });
+        if (!entry) continue;
+        // Mesmo raciocínio pro cronômetro de apresentação desistida.
+        if (entry.withdrawnAt && isTimerEvent) continue;
         // Apresentação desistida não aceita mais nenhum ScoreEvent —
         // ver ScoringService.withdrawPresentation, que só permite
         // sinalizar desistência enquanto não existe nenhum evento ainda.

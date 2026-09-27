@@ -253,12 +253,22 @@ function computeDoneEntryIds(
   }
   for (const resource of resources) {
     const sorted = [...resource.entries].sort((a, b) => a.order - b.order);
+    // Apresentação pulada (2026-09-27, Batalha): se uma apresentação
+    // POSTERIOR já teve súmula enviada, as anteriores sem súmula ficam
+    // para trás, então o ponteiro começa depois da última com súmula.
+    // Desistência não conta (pode estar lá na frente da fila).
+    let lastSubmittedOrder = -Infinity;
+    for (const entry of sorted) {
+      if (entry.type === "presentation" && !entry.withdrawnAt && completedEntryIds.has(entry.id)) {
+        lastSubmittedOrder = entry.order;
+      }
+    }
     let hasPresentations = false;
     let pointerOrder: number | null = null;
     for (const entry of sorted) {
       if (entry.type !== "presentation") continue;
       hasPresentations = true;
-      if (!completedEntryIds.has(entry.id)) {
+      if (entry.order > lastSubmittedOrder && !completedEntryIds.has(entry.id)) {
         pointerOrder = entry.order;
         break;
       }
@@ -408,8 +418,29 @@ export function computeEventLiveSchedule(
   const total = presentations.length;
   const completed = presentations.filter((item) => allDoneEntryIds.has(item.entry.id)).length;
 
+  // Apresentação ao vivo: em cada pista, a iniciada MAIS RECENTE, se
+  // ainda sem súmula. Uma iniciada e depois pulada (outra foi iniciada
+  // depois dela na mesma pista) não volta a aparecer como ao vivo.
+  const latestStartedByResource = new Map<string, { id: string; at: number }>();
+  for (const day of sortedDays) {
+    for (const resource of day.resources) {
+      for (const entry of resource.entries) {
+        if (entry.type !== "presentation" || !startedEntryIds.has(entry.id)) continue;
+        const at = new Date(startTimes.get(entry.id) ?? 0).getTime();
+        const current = latestStartedByResource.get(resource.id);
+        if (!current || at > current.at) latestStartedByResource.set(resource.id, { id: entry.id, at });
+      }
+    }
+  }
+  const livePresentationIds = new Set(
+    [...latestStartedByResource.values()].map((v) => v.id).filter((id) => !completedEntryIds.has(id)),
+  );
+  // Uma apresentação pulada que é iniciada depois volta pra fila, mesmo
+  // tendo ficado para trás do ponteiro (ver computeDoneEntryIds).
   const pending = allItems.filter(
-    (item) => !closedDayDates.has(item.dayDate) && !allDoneEntryIds.has(item.entry.id),
+    (item) =>
+      !closedDayDates.has(item.dayDate) &&
+      (!allDoneEntryIds.has(item.entry.id) || livePresentationIds.has(item.entry.id)),
   );
   // Evento especial com início sinalizado (e ainda não passado) tem
   // prioridade: ele só é iniciado quando a apresentação anterior já acabou.
@@ -420,10 +451,7 @@ export function computeEventLiveSchedule(
     specialLiveIndex >= 0
       ? specialLiveIndex
       : pending.findIndex(
-          (item) =>
-            item.entry.type === "presentation" &&
-            startedEntryIds.has(item.entry.id) &&
-            !completedEntryIds.has(item.entry.id),
+          (item) => item.entry.type === "presentation" && livePresentationIds.has(item.entry.id),
         );
   if (liveIndex > 0) pending.unshift(...pending.splice(liveIndex, 1));
   const [next, ...rest] = pending;
