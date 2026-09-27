@@ -131,7 +131,10 @@ export function EventLiveNotesPage() {
   const nextIndex = myPresentations.findIndex(
     (item) => !item.submitted && !item.entry.withdrawnAt,
   );
-  const completedCount = myPresentations.filter((item) => item.submitted).length;
+  // Desistência conta como concluída (o total inclui as desistências).
+  const completedCount = myPresentations.filter(
+    (item) => item.submitted || Boolean(item.entry.withdrawnAt),
+  ).length;
   // Contestações pendentes (a resolvida some da lista — deixou de
   // precisar de atenção), na ordem em que a equipe solicitou —
   // "ordem de chegada", não a ordem do cronograma.

@@ -179,7 +179,9 @@ export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewPro
               {activeDay.categories.map((category) => {
                 const groupEntries =
                   entriesByGroup.get(`${activeDay.dayId}|${category.categoryId}`) ?? [];
-                const completeCount = groupEntries.filter((e) => !e.withdrawn).length;
+                // Desistência conta como completa: o total
+                // (presentationCount) já inclui as desistências.
+                const completeCount = groupEntries.length;
                 return (
                   <div key={category.categoryId} className="rounded-2xl border border-border bg-card p-4">
                     <p className="text-sm font-semibold break-words text-foreground">{category.categoryName}</p>
