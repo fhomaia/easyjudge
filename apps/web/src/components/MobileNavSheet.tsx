@@ -4,9 +4,12 @@ import {
   Calculator,
   CalendarDays,
   CircleHelp,
+  Eye,
   Inbox,
   LogOut,
   MessageSquareHeart,
+  MoreVertical,
+  UserCog,
   Users,
   X,
 } from "lucide-react";
@@ -16,7 +19,15 @@ import { getAccountLabel } from "@/lib/roleLabels";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { HelpDialog } from "@/components/HelpDialog";
 import { PlatformFeedbackDialog } from "@/components/PlatformFeedbackDialog";
+import { ImpersonateDialog } from "@/components/ImpersonateDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
+import { useAuthStore } from "@/store/auth";
 import type { UserProfile, UserRole } from "@/api/client";
 
 // `mobile: false` tira o item do menu hambúrguer sem afetar a sidebar de
@@ -140,10 +151,21 @@ export function MobileNavSheet({
   const location = useLocation();
   const [helpOpen, setHelpOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [impersonateOpen, setImpersonateOpen] = useState(false);
+  const isPlatformOwner = profile?.email.toLowerCase() === IMPERSONATOR_EMAIL;
+  const impersonatorToken = useAuthStore((s) => s.impersonatorToken);
+  const impersonatingLabel = useAuthStore((s) => s.impersonatingLabel);
+  const stopImpersonation = useAuthStore((s) => s.stopImpersonation);
 
   function goTo(href: string) {
     onNavigate(href);
     onOpenChange(false);
+  }
+
+  // Mesmo comportamento do "Voltar" da sidebar de desktop (AppSidebar).
+  function handleStopImpersonation() {
+    stopImpersonation();
+    window.location.href = "/";
   }
 
   return (
@@ -230,6 +252,24 @@ export function MobileNavSheet({
             ))}
           </nav>
 
+          {impersonatorToken && (
+            <div className="mx-3 mt-3 flex items-center justify-between gap-2 rounded-lg bg-amber-500/15 px-2.5 py-2">
+              <div className="flex min-w-0 items-center gap-1.5 text-xs text-amber-300">
+                <Eye className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  Vendo como{" "}
+                  <span className="font-semibold">{impersonatingLabel}</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleStopImpersonation}
+                className="shrink-0 text-xs font-medium text-amber-200 hover:underline"
+              >
+                Voltar
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2 border-t border-white/10 p-3">
             <button
               type="button"
@@ -279,16 +319,38 @@ export function MobileNavSheet({
               >
                 <MessageSquareHeart className="size-4" />
               </button>
-              {profile?.email.toLowerCase() === IMPERSONATOR_EMAIL && (
-                <button
-                  type="button"
-                  onClick={() => goTo("/admin/feedback")}
-                  aria-label="Avaliações da Cheer Cup"
-                  title="Avaliações da Cheer Cup"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-                >
-                  <Inbox className="size-4" />
-                </button>
+              {/* Só o dono da plataforma: avaliações da plataforma e
+                  "ver como" ficam num menu, pra caber no celular. */}
+              {isPlatformOwner && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label="Mais opções"
+                        title="Mais opções"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                      />
+                    }
+                  >
+                    <MoreVertical className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" side="top" className="w-auto">
+                    <DropdownMenuItem onClick={() => goTo("/admin/feedback")}>
+                      <Inbox data-icon="inline-start" />
+                      Avaliações da Cheer Cup
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onOpenChange(false);
+                        setImpersonateOpen(true);
+                      }}
+                    >
+                      <UserCog data-icon="inline-start" />
+                      Entrar como outro usuário
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               <button
                 type="button"
@@ -304,6 +366,9 @@ export function MobileNavSheet({
       </Sheet>
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <PlatformFeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+      {isPlatformOwner && (
+        <ImpersonateDialog open={impersonateOpen} onOpenChange={setImpersonateOpen} />
+      )}
     </>
   );
 }
