@@ -1608,6 +1608,22 @@ antes do push).
   mover com só "Iniciar" funciona; lote com cronômetro de id inexistente
   ou desistido é aceito e as notas junto são gravadas; nota nesses casos
   continua recusada. A ação "Pular" foi descartada pelo usuário.
+- **Situação das súmulas** (`GET .../scoring/sheet-status`,
+  `ScoringService.getSheetStatus`, sobre `loadSheetProgress`, que agora
+  também alimenta `findCompletedEntries`): por dia e categoria, total,
+  feitas e, das pendentes, quais jurados faltam enviar ("Ainda não
+  começou" quando nenhum jurado teve atividade). Admin/assessor: todas
+  as pistas; Head Judge: só as pistas em que é Head Judge (só leitura,
+  `HeadJudgeSheetStatus`); jurado comum: 403. Front recarrega a cada
+  30 s (o envio de cada jurado não gera notificação). Aba renomeada pra
+  "Todas as súmulas" e agora também aparece pro Head Judge que não é
+  admin. Categoria fechada mostra a etiqueta verde "Todas as súmulas
+  enviadas".
+- **Desistência fica FORA das contagens de súmula** (decisão do
+  usuário, 2026-09-28): 2 enviadas + 1 desistência = "2 de 2", tanto na
+  situação das súmulas quanto no "Apresentações x / y" e no "Progresso
+  do dia" do jurado. Substitui a regra de `0aa955d` (desistência contava
+  como concluída). Continua aparecendo na lista, com o selo.
 - **Gotcha de teste**: `bulk-assign` da escala só funciona em GRUPO de
   critérios; num critério folha não faz nada e responde 201. Pra
   escalar folha, `PUT .../criteria/:id/resources/:rid/judges`.
