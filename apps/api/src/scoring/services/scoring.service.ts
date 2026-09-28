@@ -213,6 +213,36 @@ export interface HeadJudgeLogEntryView {
 // critério com o nome do jurado responsável (ver
 // ScoringService.buildPresentationDetail).
 
+// Situação das súmulas (2026-09-28): por dia e categoria, quantas
+// apresentações já têm todas as súmulas (desistência fica fora da conta) e,
+// das que faltam, quais jurados ainda não enviaram. Admin/assessor veem
+// todas as pistas; Head Judge só as pistas em que é Head Judge.
+export interface SheetStatusPendingView {
+  scheduleEntryId: string;
+  teamName: string;
+  resourceName: string;
+  // Algum jurado já teve atividade (ver START_SIGNAL_KINDS).
+  started: boolean;
+  missingJudges: string[];
+  submittedCount: number;
+  requiredCount: number;
+}
+
+export interface SheetStatusCategoryView {
+  categoryId: string;
+  categoryName: string;
+  total: number;
+  doneCount: number;
+  pending: SheetStatusPendingView[];
+}
+
+export interface SheetStatusDayView {
+  dayId: string;
+  date: string;
+  dayIndex: number;
+  categories: SheetStatusCategoryView[];
+}
+
 export interface AdminOverviewEntryView {
   scheduleEntryId: string;
   teamName: string;
@@ -749,7 +779,27 @@ export class ScoringService {
   // precisa dos ids (alimenta o cronograma ao vivo) e antes pagava o
   // cálculo completo da súmula de cada apresentação por isso (~2s medido
   // em produção, o endpoint mais lento das telas do evento ao vivo).
+  // Apresentações com súmula 100% enviada (todos os jurados exigidos) e
+  // as desistências — ver loadSheetProgress.
   private async findCompletedEntries(
+    eventId: string,
+    days: Awaited<ReturnType<ScheduleService['getDays']>>,
+  ) {
+    const progress = await this.loadSheetProgress(eventId, days);
+    return progress
+      .filter((p) => p.complete || p.entry.withdrawnAt)
+      .map(({ day, resource, entry, category }) => ({
+        day,
+        resource,
+        entry,
+        category,
+      }));
+  }
+
+  // Pra cada apresentação com categoria e sistema de pontuação: quais
+  // jurados precisam enviar súmula (escala da pista + funções especiais)
+  // e quais já enviaram.
+  private async loadSheetProgress(
     eventId: string,
     days: Awaited<ReturnType<ScheduleService['getDays']>>,
   ) {
@@ -839,32 +889,120 @@ export class ScoringService {
       set.add(e.judgeParticipationId);
     }
 
-    const completed: Array<{
-      day: Day;
-      resource: Resource;
-      entry: Entry;
-      category: Category;
-    }> = [];
-    for (const { day, resource, entry } of withTemplate) {
+    // Desistida nunca fica completa (ninguém pode mais lançar nota pra
+    // ela), mas quem chama trata como feita (ver withdrawPresentation).
+    return withTemplate.map(({ day, resource, entry }) => {
       const category = categoryById.get(entry.categoryId!)!;
-      const judgeIds = this.requiredJudgeIds(
+      const specialRoles = specialRolesByResource.get(entry.resourceId)!;
+      const requiredJudgeIds = this.requiredJudgeIds(
         entry.resourceId,
         assignmentsByTemplate.get(category.scoringTemplateId!)!,
-        specialRolesByResource.get(entry.resourceId)!,
+        specialRoles,
       );
-      const submitted = submittedByEntry.get(entry.id);
+      const submittedJudgeIds = submittedByEntry.get(entry.id) ?? new Set();
       const complete =
-        judgeIds.size > 0 &&
-        [...judgeIds].every((judgeId) => submitted?.has(judgeId));
-      // Desistida é a única exceção ao "só entra se 100%
-      // pontuada" — nunca vai ficar completa (ninguém pode mais
-      // lançar nota pra ela), mas precisa aparecer marcada nas
-      // súmulas mesmo assim (ver ScoringService.withdrawPresentation).
-      if (!complete && !entry.withdrawnAt) continue;
+        requiredJudgeIds.size > 0 &&
+        [...requiredJudgeIds].every((id) => submittedJudgeIds.has(id));
+      return {
+        day,
+        resource,
+        entry,
+        category,
+        specialRoles,
+        requiredJudgeIds,
+        submittedJudgeIds,
+        complete,
+      };
+    });
+  }
 
-      completed.push({ day, resource, entry, category });
+  async getSheetStatus(
+    eventId: string,
+    userId: string,
+  ): Promise<SheetStatusDayView[]> {
+    const { member } = await this.eventsService.getMemberForEventId(
+      eventId,
+      userId,
+    );
+    const isStaff = !!member?.roles.some(
+      (r) => r === EventMemberRole.ADMIN || r === EventMemberRole.ASSESSOR,
+    );
+    const participation = isStaff
+      ? null
+      : await this.assertJudgeParticipation(eventId, userId);
+
+    const days = await this.scheduleService.getDays(eventId);
+    const allProgress = await this.loadSheetProgress(eventId, days);
+    const progress = participation
+      ? allProgress.filter((p) =>
+          p.specialRoles.some(
+            (r) =>
+              r.role === SpecialJudgeRole.HEAD_JUDGE &&
+              r.judgeIds.includes(participation.id),
+          ),
+        )
+      : allProgress;
+    if (participation && progress.length === 0) {
+      throw new ForbiddenException('Você não é Head Judge em nenhuma pista.');
     }
-    return completed;
+
+    const pendingIds = progress
+      .filter((p) => !p.complete && !p.entry.withdrawnAt)
+      .map((p) => p.entry.id);
+    const [firstActivity, judges] = await Promise.all([
+      this.getFirstActivityByEntry(pendingIds),
+      this.judgesService.findAllForEvent(eventId),
+    ]);
+    const judgeName = new Map(judges.map((j) => [j.id, j.name]));
+
+    const result: SheetStatusDayView[] = [];
+    for (const day of days) {
+      const byCategory = new Map<string, SheetStatusCategoryView>();
+      for (const p of progress) {
+        if (p.day.id !== day.id) continue;
+        let view = byCategory.get(p.category.id);
+        if (!view) {
+          view = {
+            categoryId: p.category.id,
+            categoryName: p.entry.categoryName ?? p.category.name,
+            total: 0,
+            doneCount: 0,
+            pending: [],
+          };
+          byCategory.set(p.category.id, view);
+        }
+        // Desistência não é súmula a enviar: fica fora do total (decisão
+        // do usuário, 2026-09-28: 2 enviadas + 1 desistência = "2 de 2").
+        if (p.entry.withdrawnAt) continue;
+        view.total += 1;
+        if (p.complete) {
+          view.doneCount += 1;
+          continue;
+        }
+        view.pending.push({
+          scheduleEntryId: p.entry.id,
+          teamName: p.entry.teamName ?? 'Equipe',
+          resourceName: p.resource.name,
+          started: firstActivity.has(p.entry.id),
+          missingJudges: [...p.requiredJudgeIds]
+            .filter((id) => !p.submittedJudgeIds.has(id))
+            .map((id) => judgeName.get(id) ?? 'Jurado'),
+          submittedCount: [...p.requiredJudgeIds].filter((id) =>
+            p.submittedJudgeIds.has(id),
+          ).length,
+          requiredCount: p.requiredJudgeIds.size,
+        });
+      }
+      if (byCategory.size > 0) {
+        result.push({
+          dayId: day.id,
+          date: day.date,
+          dayIndex: day.dayIndex,
+          categories: [...byCategory.values()],
+        });
+      }
+    }
+    return result;
   }
 
   async getAdminOverview(eventId: string): Promise<AdminOverviewEntryView[]> {

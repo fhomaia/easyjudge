@@ -1952,7 +1952,37 @@ export const athleteScoringApi = {
     ),
 };
 
+// Situação das súmulas (ver ScoringService.getSheetStatus): o que falta e
+// quem falta enviar, por dia e categoria. Admin/assessor: todas as pistas;
+// Head Judge: só as dele.
+export interface SheetStatusPending {
+  scheduleEntryId: string;
+  teamName: string;
+  resourceName: string;
+  started: boolean;
+  missingJudges: string[];
+  submittedCount: number;
+  requiredCount: number;
+}
+
+export interface SheetStatusCategory {
+  categoryId: string;
+  categoryName: string;
+  total: number;
+  doneCount: number;
+  pending: SheetStatusPending[];
+}
+
+export interface SheetStatusDay {
+  dayId: string;
+  date: string;
+  dayIndex: number;
+  categories: SheetStatusCategory[];
+}
+
 export const scoringApi = {
+  getSheetStatus: (eventId: string) =>
+    authRequest<SheetStatusDay[]>(`/events/${eventId}/scoring/sheet-status`),
   getSheet: (eventId: string, scheduleEntryId: string) =>
     authRequest<ScoringSheet>(
       `/events/${eventId}/scoring/sheet/${scheduleEntryId}`,

@@ -3,6 +3,7 @@ import { Download, Loader2 } from "lucide-react";
 import { AdminNotesOverviewList, findTiedEntryIds } from "@/components/scoring/AdminNotesOverviewList";
 import { AdminPresentationDetailPanel } from "@/components/scoring/AdminPresentationDetailPanel";
 import { ReleaseToggles } from "@/components/scoring/ReleaseToggles";
+import { CategorySheetProgress, SheetStatusPendingList, useSheetStatus } from "@/components/scoring/SheetStatus";
 import { Button } from "@/components/ui/button";
 import { downloadPresentationDetailsAsZip, slugify } from "@/lib/presentationDetailExport";
 import { formatDayTab } from "@/lib/formatDate";
@@ -42,6 +43,15 @@ export function AdminNotesOverview({ eventId, eventName, eventCompleted = false 
     adminScoringApi.getOverview(eventId).then(setEntries);
     adminScoringApi.getRelease(eventId).then(setDays);
   }, [eventId]);
+  // O que falta e quem falta enviar (atualiza sozinho a cada 30 s).
+  const { status: sheetStatus } = useSheetStatus(eventId);
+  const statusByGroup = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof sheetStatus>[number]["categories"][number]>();
+    for (const day of sheetStatus ?? []) {
+      for (const category of day.categories) map.set(`${day.dayId}|${category.categoryId}`, category);
+    }
+    return map;
+  }, [sheetStatus]);
 
   const activeDay = days?.find((d) => d.dayId === activeDayId) ?? days?.[0] ?? null;
 
@@ -184,17 +194,17 @@ export function AdminNotesOverview({ eventId, eventName, eventCompleted = false 
               {activeDay.categories.map((category) => {
                 const groupEntries =
                   entriesByGroup.get(`${activeDay.dayId}|${category.categoryId}`) ?? [];
-                // Desistência conta como completa: o total
-                // (presentationCount) já inclui as desistências.
-                const completeCount = groupEntries.length;
+                const groupStatus = statusByGroup.get(`${activeDay.dayId}|${category.categoryId}`);
+                // Contagem do servidor quando já carregou (mesma regra das
+                // pendências); senão, a lista local. Desistência fica fora da
+                // conta (não é súmula a enviar): a lista local traz todas.
+                const withdrawnCount = groupEntries.filter((e) => e.withdrawn).length;
+                const total = groupStatus?.total ?? category.presentationCount - withdrawnCount;
+                const doneCount = groupStatus?.doneCount ?? groupEntries.length - withdrawnCount;
                 return (
                   <div key={category.categoryId} className="rounded-2xl border border-border bg-card p-4">
                     <p className="text-sm font-semibold break-words text-foreground">{category.categoryName}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {completeCount} de {category.presentationCount} súmula
-                      {category.presentationCount === 1 ? "" : "s"} completa
-                      {completeCount === 1 ? "" : "s"}
-                    </p>
+                    <CategorySheetProgress total={total} doneCount={doneCount} />
                     <ReleaseToggles
                       className="mt-3"
                       scoresReleased={category.scoresReleased}
@@ -221,6 +231,11 @@ export function AdminNotesOverview({ eventId, eventName, eventCompleted = false 
                         />
                       )}
                     </div>
+                    {groupStatus && groupStatus.pending.length > 0 && (
+                      <div className="mt-3">
+                        <SheetStatusPendingList pending={groupStatus.pending} />
+                      </div>
+                    )}
                   </div>
                 );
               })}

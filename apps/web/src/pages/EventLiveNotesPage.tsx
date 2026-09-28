@@ -23,6 +23,7 @@ import { MobileNavSheet } from "@/components/MobileNavSheet";
 import { FunctionsSummaryDialog } from "@/components/FunctionsSummaryDialog";
 import { EventLiveNotesDesktopView } from "@/components/EventLiveNotesDesktopView";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
+import { HeadJudgeSheetStatus } from "@/components/scoring/SheetStatus";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
 import { Button } from "@/components/ui/button";
 import { EventLiveBottomNav, MetricTile, buildEventNavTabs } from "@/components/EventLiveShared";
@@ -131,10 +132,12 @@ export function EventLiveNotesPage() {
   const nextIndex = myPresentations.findIndex(
     (item) => !item.submitted && !item.entry.withdrawnAt,
   );
-  // Desistência conta como concluída (o total inclui as desistências).
-  const completedCount = myPresentations.filter(
-    (item) => item.submitted || Boolean(item.entry.withdrawnAt),
-  ).length;
+  // Desistência fica fora da conta (não é súmula a enviar): 2 enviadas +
+  // 1 desistência = "2 / 2" (decisão do usuário, 2026-09-28, mesma regra
+  // da situação das súmulas do admin).
+  const countable = myPresentations.filter((item) => !item.entry.withdrawnAt);
+  const completedCount = countable.filter((item) => item.submitted).length;
+  const totalCount = countable.length;
   // Contestações pendentes (a resolvida some da lista — deixou de
   // precisar de atenção), na ordem em que a equipe solicitou —
   // "ordem de chegada", não a ordem do cronograma.
@@ -149,7 +152,7 @@ export function EventLiveNotesPage() {
         ),
     [myPresentations],
   );
-  const todayItems = myPresentations.filter((item) => item.dayDate === isoToday);
+  const todayItems = countable.filter((item) => item.dayDate === isoToday);
   const todayCompleted = todayItems.filter((item) => item.submitted).length;
   const todayPercent = todayItems.length > 0 ? Math.round((todayCompleted / todayItems.length) * 100) : 0;
 
@@ -179,6 +182,9 @@ export function EventLiveNotesPage() {
   const nextDisplay = nextItem ? getScheduleEntryDisplay(nextItem.entry, nextItem.start, nextItem.end, []) : null;
 
   const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
+  // Head Judge (de alguma pista) vê a situação das súmulas das pistas
+  // dele, só leitura (HeadJudgeSheetStatus), na aba "Todas as súmulas".
+  const isHeadJudge = assignment.specialRoles.includes("head_judge");
   const isAthlete = event.currentUserRoles.includes("athlete");
   const isSpectator = event.currentUserRoles.includes("spectator");
   const functionLines = functionLabelsFor(assignment);
@@ -206,7 +212,7 @@ export function EventLiveNotesPage() {
           icon={CalendarDays}
           iconClassName="bg-blue-500/10 text-blue-600"
           label="Apresentações"
-          value={`${completedCount} / ${myPresentations.length}`}
+          value={`${completedCount} / ${totalCount}`}
           sub="Concluídas"
         />
         <MetricTile
@@ -433,7 +439,7 @@ export function EventLiveNotesPage() {
       />
 
       <main className="relative flex-1 overflow-y-auto">
-          {isAdminOrAssessor && assignment.isJudge ? (
+          {(isAdminOrAssessor || isHeadJudge) && assignment.isJudge ? (
             <>
               <div className="mx-4 mt-4 flex items-center gap-1 self-start rounded-2xl border border-border bg-card p-1.5">
                 <Button
@@ -454,18 +460,22 @@ export function EventLiveNotesPage() {
                   onClick={() => setNotesTab("all")}
                 >
                   <ClipboardCheck className="size-4" />
-                  Súmulas finalizadas
+                  Todas as súmulas
                 </Button>
               </div>
               {notesTab === "mine" ? (
                 judgeQueueContent
               ) : (
                 <div className="p-4">
-                  <AdminNotesOverview
-                  eventId={event.aliasId}
-                  eventName={event.name}
-                  eventCompleted={event.status === "completed"}
-                />
+                  {isAdminOrAssessor ? (
+                    <AdminNotesOverview
+                      eventId={event.aliasId}
+                      eventName={event.name}
+                      eventCompleted={event.status === "completed"}
+                    />
+                  ) : (
+                    <HeadJudgeSheetStatus eventId={event.aliasId} />
+                  )}
                 </div>
               )}
             </>
@@ -502,12 +512,14 @@ export function EventLiveNotesPage() {
       eventNavItems={eventNavTabs}
       assignment={assignment}
       isAdminOrAssessor={isAdminOrAssessor}
+      isHeadJudge={isHeadJudge}
       isAthlete={isAthlete}
       functionLines={functionLines}
       myPresentations={myPresentations}
       contestedItems={contestedItems}
       nextIndex={nextIndex}
       completedCount={completedCount}
+      totalCount={totalCount}
       isoToday={isoToday}
       nowLabel={nowLabel}
       todayPercent={todayPercent}

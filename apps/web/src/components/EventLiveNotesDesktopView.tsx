@@ -17,6 +17,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AdminNotesOverview } from "@/components/scoring/AdminNotesOverview";
+import { HeadJudgeSheetStatus } from "@/components/scoring/SheetStatus";
 import { AthleteNotesOverview } from "@/components/scoring/AthleteNotesOverview";
 import { Button } from "@/components/ui/button";
 import { MetricTile, type EventNavTab } from "@/components/EventLiveShared";
@@ -35,12 +36,14 @@ interface EventLiveNotesDesktopViewProps {
   eventNavItems: EventNavTab[];
   assignment: JudgeAssignmentsSummary;
   isAdminOrAssessor: boolean;
+  isHeadJudge: boolean;
   isAthlete: boolean;
   functionLines: string[];
   myPresentations: JudgePresentationItem[];
   contestedItems: JudgePresentationItem[];
   nextIndex: number;
   completedCount: number;
+  totalCount: number;
   isoToday: string;
   nowLabel: string;
   todayPercent: number;
@@ -54,12 +57,14 @@ export function EventLiveNotesDesktopView({
   eventNavItems,
   assignment,
   isAdminOrAssessor,
+  isHeadJudge,
   isAthlete,
   functionLines,
   myPresentations,
   contestedItems,
   nextIndex,
   completedCount,
+  totalCount,
   isoToday,
   nowLabel,
   todayPercent,
@@ -289,7 +294,7 @@ export function EventLiveNotesDesktopView({
                     icon={CalendarDays}
                     iconClassName="bg-blue-500/10 text-blue-600"
                     label="Apresentações"
-                    value={`${completedCount} / ${myPresentations.length}`}
+                    value={`${completedCount} / ${totalCount}`}
                     sub="Concluídas"
                   />
                   <MetricTile
@@ -313,7 +318,7 @@ export function EventLiveNotesDesktopView({
         </header>
 
         <main className="relative flex-1 overflow-y-auto p-6">
-          {isAdminOrAssessor && assignment.isJudge ? (
+          {(isAdminOrAssessor || isHeadJudge) && assignment.isJudge ? (
             <>
               <div className="mb-6 flex w-fit items-center gap-1 self-start rounded-2xl border border-border bg-card p-1.5">
                 <Button
@@ -332,17 +337,19 @@ export function EventLiveNotesDesktopView({
                   onClick={() => setNotesTab("all")}
                 >
                   <ClipboardCheck className="size-4" />
-                  Súmulas finalizadas
+                  Todas as súmulas
                 </Button>
               </div>
               {notesTab === "mine" ? (
                 judgeQueueContent
-              ) : (
+              ) : isAdminOrAssessor ? (
                 <AdminNotesOverview
                   eventId={event.aliasId}
                   eventName={event.name}
                   eventCompleted={event.status === "completed"}
                 />
+              ) : (
+                <HeadJudgeSheetStatus eventId={event.aliasId} />
               )}
             </>
           ) : isAdminOrAssessor ? (

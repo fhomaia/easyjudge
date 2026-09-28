@@ -48,6 +48,21 @@ export class ScoringController {
     return this.scoringService.getMySubmittedEntryIds(eventId, req.user.userId);
   }
 
+  // Situação das súmulas: o que falta e quem falta enviar. Admin/assessor
+  // veem todas as pistas; Head Judge só as dele (o service confere).
+  @Get('sheet-status')
+  @EventRoles(
+    EventMemberRole.ADMIN,
+    EventMemberRole.ASSESSOR,
+    EventMemberRole.JUDGE,
+  )
+  getSheetStatus(
+    @Param('eventId') eventId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.scoringService.getSheetStatus(eventId, req.user.userId);
+  }
+
   // Alimenta o card "Atraso atual" do painel Início — todo mundo que
   // enxerga essa tela precisa ler isso (não é uma ação de jurado), não
   // só admin/assessor/jurado — programa, atleta e (desde 2026-08-01,
