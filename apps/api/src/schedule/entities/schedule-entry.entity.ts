@@ -106,6 +106,18 @@ export class ScheduleEntry {
   })
   contestationResolvedAt: Date | null;
 
+  // Descrição e imagens enviadas pela equipe ao solicitar a contestação
+  // (2026-09-28). Imagens são URLs públicas do storage (R2 em produção).
+  @Column({ name: 'contestation_description', type: 'text', nullable: true })
+  contestationDescription: string | null;
+
+  @Column({
+    name: 'contestation_attachments',
+    type: 'jsonb',
+    default: () => "'[]'",
+  })
+  contestationAttachments: string[];
+
   // Quando a desistência foi sinalizada (ver ScoringService.
   // withdrawPresentation) — nunca é limpo de volta pra null (mesmo
   // espírito de contestationRequestedAt: uma vez desistida, é

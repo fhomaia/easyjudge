@@ -1566,6 +1566,9 @@ export interface ScoringSheet {
   events: ScoreEvent[];
   contestationRequested: boolean;
   contestationResolved: boolean;
+  // Enviados pela equipe ao contestar (2026-09-28).
+  contestationDescription: string | null;
+  contestationAttachments: string[];
 }
 
 // Painel Head Judge (Modo Supervisão) — ver ScoringService no backend
@@ -1674,6 +1677,8 @@ export interface PresentationDetailLegality {
     value: number;
     presentationElapsedMs: number | null;
     clientCreatedAt: string;
+    // Especificação da ilegalidade (tipos com requiresCode), null se não há.
+    code: string | null;
   }>;
 }
 
@@ -1695,6 +1700,9 @@ export interface PresentationDetail {
   scoresReleased: boolean;
   contestationReleased: boolean;
   contestationRequested: boolean;
+  // Enviados pela equipe ao contestar (2026-09-28).
+  contestationDescription: string | null;
+  contestationAttachments: string[];
 }
 
 // Sem `categoryId` = todas as categorias do dia (a chave do dia).
@@ -1920,13 +1928,18 @@ export const teamScoringApi = {
       `/events/${eventId}/scoring/team/${scheduleEntryId}`,
     ),
 
-  contest: (eventId: string, scheduleEntryId: string) =>
-    authRequest<void>(
-      `/events/${eventId}/scoring/team/${scheduleEntryId}/contest`,
-      {
-        method: "POST",
-      },
-    ),
+  // Descrição e imagens opcionais (multipart). Só imagens: o backend
+  // recusa vídeo e outros formatos (ver contestationImageUploadOptions).
+  contest: (
+    eventId: string,
+    scheduleEntryId: string,
+    input: { description: string; images: File[] } = { description: "", images: [] },
+  ) => {
+    const formData = new FormData();
+    if (input.description.trim()) formData.append("description", input.description.trim());
+    for (const image of input.images) formData.append("images", image);
+    return authUpload<void>(`/events/${eventId}/scoring/team/${scheduleEntryId}/contest`, formData);
+  },
 
   // Ids das próprias equipes neste evento — usado pelo cronograma
   // (EventLiveSchedulePage) pra decidir em quais linhas mostrar

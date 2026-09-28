@@ -1,4 +1,5 @@
 import type { PresentationDetail } from "@/api/client";
+import { WARNING_DEDUCTION_TYPE } from "@/lib/deductionIcons";
 
 // "Hit zero" (termo do cheer): a apresentação teve legalidade
 // acompanhada (existe jurado de legalidade atribuído à pista) E
@@ -7,6 +8,10 @@ import type { PresentationDetail } from "@/api/client";
 // havia jurado de legalidade pra essa apresentação). Compartilhado
 // entre a celebração na tela (PresentationNotesDetail) e o selo no PDF
 // (presentationDetailExport), pra não duplicar a regra nos dois.
+// Warning não conta: não tira pontos nem impede o Hit Zero (2026-09-28).
 export function isPresentationHitZero(detail: PresentationDetail): boolean {
-  return detail.legality !== null && detail.legality.deductions.length === 0;
+  return (
+    detail.legality !== null &&
+    detail.legality.deductions.every((d) => d.type === WARNING_DEDUCTION_TYPE)
+  );
 }

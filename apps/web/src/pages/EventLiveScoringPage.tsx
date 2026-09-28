@@ -27,6 +27,7 @@ import {
   type ScoreEventInput,
   type ScoringSheet,
 } from "@/api/client";
+import { ContestationDetails } from "@/components/scoring/ContestationDetails";
 
 // Tela usada PELO JURADO DURANTE a apresentação — prioridade absoluta
 // é velocidade/eficiência, não é uma tela de administração (ver
@@ -160,12 +161,18 @@ function EventLiveScoringSheet() {
 
     async function refresh() {
       if (!id || !entryId) return;
+      // Fila local lida antes E depois da busca: um registro enviado no
+      // meio dela (ex.: editar o tempo de uma dedução) sai da fila antes
+      // de a resposta chegar e não estaria em lugar nenhum, a tela voltava
+      // pro valor antigo por uns segundos (2026-09-28). Repetido não
+      // atrapalha: o redutor usa o id de cada registro.
+      const pendingBefore = await getPendingEvents(id, entryId);
       const data = await scoringApi.getSheet(id, entryId);
       if (cancelled) return;
       setSheet(data);
       const pending = await getPendingEvents(id, entryId);
       if (cancelled) return;
-      const reduced = reduceScoreEvents([...data.events, ...pending]);
+      const reduced = reduceScoreEvents([...data.events, ...pendingBefore, ...pending]);
       realScoresRef.current = reduced.scores;
       realDeductionsRef.current = reduced.deductions;
       // Enquanto o modo teste está ligado, o jurado pode ter notas/
@@ -272,7 +279,10 @@ function EventLiveScoringSheet() {
   // saber o próprio id ANTES de enviar (pra "Remover" referenciar via
   // undoesEventId — ver addDeduction), então quem chama pode fixar.
   async function emitEvent(
-    partial: Omit<ScoreEventInput, "id" | "clientCreatedAt" | "scheduleEntryId"> & { id?: string },
+    partial: Omit<ScoreEventInput, "id" | "clientCreatedAt" | "scheduleEntryId"> & {
+      id?: string;
+      clientCreatedAt?: string;
+    },
   ) {
     // Jurado só pode escrever na súmula depois que o produtor iniciar o
     // evento (ver ScoringService.assertEventStarted no backend, mesma
@@ -409,12 +419,20 @@ function EventLiveScoringSheet() {
     const replacement: DeductionLogEntry = { ...target, id: crypto.randomUUID(), presentationElapsedMs };
     setDeductions((prev) => prev.map((d) => (d.id === deductionId ? replacement : d)));
     void emitEvent({ kind: "deduction_remove", undoesEventId: deductionId });
+    // Mesmo horário de registro da original: a dedução não pula pro topo
+    // da lista depois da próxima atualização (a lista é ordenada por ele).
     void emitEvent({
       id: replacement.id,
       kind: "deduction_add",
       deductionType: replacement.deductionType,
       presentationElapsedMs,
+      clientCreatedAt: target.clientCreatedAt,
     });
+    // A especificação é gravada presa ao id da dedução: sem reenviar, ela
+    // se perdia no servidor ao editar o tempo (2026-09-28).
+    if (target.code) {
+      void emitEvent({ kind: "deduction_code_set", undoesEventId: replacement.id, text: target.code });
+    }
   }
 
   // Código extra de uma dedução (só nos tipos com `requiresCode: true`
@@ -628,6 +646,12 @@ function EventLiveScoringSheet() {
                 {resolvingContestation ? "Enviando..." : "Marcar como resolvida"}
               </button>
             )}
+            <div className="basis-full">
+              <ContestationDetails
+                description={sheet.contestationDescription}
+                attachments={sheet.contestationAttachments}
+              />
+            </div>
           </div>
         )}
 

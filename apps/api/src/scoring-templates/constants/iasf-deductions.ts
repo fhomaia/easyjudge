@@ -11,12 +11,12 @@ export const IASF_DEFAULT_DEDUCTIONS: TemplateDeduction[] = [
   { id: DeductionType.BUILDING_BOBBLE, label: 'Building Bobble', value: -2.0, requiresCode: false },
   { id: DeductionType.BUILDING_FALL, label: 'Building Fall', value: -3.0, requiresCode: false },
   { id: DeductionType.MAJOR_BUILDING_FALL, label: 'Major Building Fall', value: -4.0, requiresCode: false },
-  // Única regra padrão que já nasce exigindo especificação — a única
-  // com esse comportamento hoje, mas deixou de ser hardcoded: o usuário
+  // As duas regras padrão de ilegalidade já nascem exigindo especificação
+  // (Skill Out of Level desde 2026-09-28). Não é hardcoded: o usuário
   // pode marcar/desmarcar isso em QUALQUER regra (padrão ou
   // personalizada) na tela de Deduções do template.
   { id: DeductionType.LEGALITY_INFRACTIONS, label: 'Legality Infractions', value: -4.0, requiresCode: true },
-  { id: DeductionType.SKILL_OUT_OF_LEVEL, label: 'Skill Performed Out of Level', value: -1.0, requiresCode: false },
+  { id: DeductionType.SKILL_OUT_OF_LEVEL, label: 'Skill Performed Out of Level', value: -1.0, requiresCode: true },
   { id: DeductionType.TIME_LIMIT_VIOLATIONS, label: 'Time Limit Violations', value: -1.0, requiresCode: false },
   { id: DeductionType.BOUNDARY_VIOLATIONS, label: 'Boundary Violations', value: -1.0, requiresCode: false },
 ];

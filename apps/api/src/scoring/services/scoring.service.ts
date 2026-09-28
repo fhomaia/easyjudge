@@ -46,6 +46,11 @@ import {
   type ReleaseChanges,
   type ReleaseDayView,
 } from './releases.service';
+import {
+  CONTESTATION_MAX_IMAGES,
+  CONTESTATION_MAX_IMAGE_BYTES,
+} from '../../common/config/contestation-image-upload.config';
+import { StorageService } from '../../common/services/storage.service';
 import type { ScheduleDayView } from '../../schedule/services/schedule.service';
 import { NotificationType } from '../../notifications/enums/notification-type.enum';
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
@@ -57,6 +62,19 @@ import { NotificationAudience } from '../../notifications/enums/notification-aud
 // constante de 4 itens (mesmo racional de outros módulos deste
 // projeto). CUSTOM fica de fora de propósito: entra sempre por último,
 // ordenado por customFormatLabel (ver getEventResults).
+// Descrição da contestação (2026-09-28).
+const CONTESTATION_DESCRIPTION_MAX = 1000;
+
+// "Warning" (2026-09-28): último botão do painel de legalidade de todo
+// sistema, sem estar na lista de deduções do template. Vale 0 (não tira
+// pontos) e não conta pra regra de Hit Zero (ver web/lib/hitZero.ts).
+export const WARNING_DEDUCTION: DeductionRuleView = {
+  type: 'warning',
+  label: 'Warning',
+  value: 0,
+  requiresCode: false,
+};
+
 // O que conta como "a apresentação começou" (2026-09-28): a primeira
 // atividade de QUALQUER jurado, não só o "Iniciar". No Batalha, um
 // jurado lançava as notas sem apertar "Iniciar" e o outro, atrasado,
@@ -165,6 +183,9 @@ export interface ScoringSheetView {
   events: ScoreEvent[];
   contestationRequested: boolean;
   contestationResolved: boolean;
+  // Enviados pela equipe ao contestar (vazio/null quando não há).
+  contestationDescription: string | null;
+  contestationAttachments: string[];
 }
 
 // Painel Head Judge (Modo Supervisão) — visão do Head Judge sobre TODOS
@@ -301,6 +322,10 @@ export interface PresentationDetailLegalityView {
     value: number;
     presentationElapsedMs: number | null;
     clientCreatedAt: Date;
+    // Especificação (DEDUCTION_CODE_SET mais recente) — só nos tipos com
+    // `requiresCode`, null quando não há (2026-09-28: não chegava na
+    // súmula nem no PDF de programa/atleta).
+    code: string | null;
   }>;
 }
 
@@ -322,6 +347,9 @@ export interface PresentationDetailView {
   scoresReleased: boolean;
   contestationReleased: boolean;
   contestationRequested: boolean;
+  // Enviados pela equipe ao contestar (vazio/null quando não há).
+  contestationDescription: string | null;
+  contestationAttachments: string[];
 }
 
 // Página de Resultados (produtor/admin) — agregação read-only sobre as
@@ -472,6 +500,7 @@ export class ScoringService {
     private readonly athletesService: AthletesService,
     private readonly notificationsService: NotificationsService,
     private readonly releasesService: ReleasesService,
+    private readonly storageService: StorageService,
   ) {}
 
   // Monta a folha de pontuação de UMA apresentação pro jurado logado —
@@ -542,6 +571,8 @@ export class ScoringService {
       events,
       contestationRequested: !!entry.contestationRequestedAt,
       contestationResolved: !!entry.contestationResolvedAt,
+      contestationDescription: entry.contestationDescription ?? null,
+      contestationAttachments: entry.contestationAttachments ?? [],
     };
   }
 
@@ -701,6 +732,8 @@ export class ScoringService {
       events,
       contestationRequested: !!entry.contestationRequestedAt,
       contestationResolved: !!entry.contestationResolvedAt,
+      contestationDescription: entry.contestationDescription ?? null,
+      contestationAttachments: entry.contestationAttachments ?? [],
       judge: { id: target.id, name: target.name },
     };
   }
@@ -1847,7 +1880,25 @@ export class ScoringService {
     eventId: string,
     scheduleEntryId: string,
     userId: string,
+    input: {
+      description?: string;
+      images: Express.Multer.File[];
+    } = { images: [] },
   ): Promise<void> {
+    if (input.images.length > CONTESTATION_MAX_IMAGES) {
+      throw new BadRequestException(
+        `Dá pra anexar no máximo ${CONTESTATION_MAX_IMAGES} imagens.`,
+      );
+    }
+    if (input.images.some((f) => f.size > CONTESTATION_MAX_IMAGE_BYTES)) {
+      throw new BadRequestException('Cada imagem pode ter no máximo 10 MB.');
+    }
+    const description = input.description?.trim() || null;
+    if (description && description.length > CONTESTATION_DESCRIPTION_MAX) {
+      throw new BadRequestException(
+        `A descrição pode ter no máximo ${CONTESTATION_DESCRIPTION_MAX} caracteres.`,
+      );
+    }
     const entry = await this.scheduleService.findEntryInEventOrThrow(
       eventId,
       scheduleEntryId,
@@ -1874,9 +1925,17 @@ export class ScoringService {
         'A contestação não está liberada para esta apresentação.',
       );
     }
+    // Imagens só sobem depois de todas as checagens (não deixa arquivo
+    // órfão no storage quando a contestação é recusada).
+    const attachments = await Promise.all(
+      input.images.map((file) =>
+        this.storageService.upload(file, 'contestations'),
+      ),
+    );
     await this.scheduleService.setContestationRequested(
       eventId,
       scheduleEntryId,
+      { description, attachments },
     );
   }
 
@@ -2186,6 +2245,9 @@ export class ScoringService {
         requiresCode: d.requiresCode ?? false,
       }),
     );
+    if (!rules.some((r) => r.type === WARNING_DEDUCTION.type)) {
+      rules.push(WARNING_DEDUCTION);
+    }
     cache?.set(templateId, rules);
     return rules;
   }
@@ -2634,12 +2696,21 @@ export class ScoringService {
     const deductionAdds = new Map<string, ScoreEvent>();
     const undoneDeductionIds = new Set<string>();
     const lastCommentByJudge = new Map<string, string>();
+    const lastCodeByDeduction = new Map<string, ScoreEvent>();
 
     for (const event of events) {
       switch (event.kind) {
         case ScoreEventKind.DEDUCTION_ADD:
           deductionAdds.set(event.id, event);
           break;
+        case ScoreEventKind.DEDUCTION_CODE_SET: {
+          if (!event.undoesEventId) break;
+          const current = lastCodeByDeduction.get(event.undoesEventId);
+          if (!current || event.clientCreatedAt >= current.clientCreatedAt) {
+            lastCodeByDeduction.set(event.undoesEventId, event);
+          }
+          break;
+        }
         case ScoreEventKind.DEDUCTION_REMOVE:
           if (event.undoesEventId) undoneDeductionIds.add(event.undoesEventId);
           break;
@@ -2734,6 +2805,7 @@ export class ScoringService {
               value: deductionValueByType.get(d.deductionType!) ?? 0,
               presentationElapsedMs: d.presentationElapsedMs,
               clientCreatedAt: d.clientCreatedAt,
+              code: lastCodeByDeduction.get(d.id)?.text?.trim() || null,
             })),
         }
       : null;
@@ -2770,6 +2842,8 @@ export class ScoringService {
         'contestation',
       ),
       contestationRequested: !!entry.contestationRequestedAt,
+      contestationDescription: entry.contestationDescription ?? null,
+      contestationAttachments: entry.contestationAttachments ?? [],
     };
   }
 

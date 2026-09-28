@@ -3,12 +3,13 @@ import { BandBadge } from "@/components/scoring/CurrentBandBadge";
 import { criterionBandForScore } from "@/lib/scoreBands";
 import { formatCriterionScore, formatDeduction } from "@/lib/formatNumber";
 import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWithSubgroups";
-import { formatElapsed } from "@/lib/deductionIcons";
+import { WARNING_DEDUCTION_TYPE, formatElapsed } from "@/lib/deductionIcons";
 import { ScoringSummary } from "@/components/scoring/ScoringSummary";
 import { HitZeroCelebration } from "@/components/scoring/HitZeroCelebration";
 import { sumMaxScores } from "@/lib/scoringSummary";
 import { isPresentationHitZero } from "@/lib/hitZero";
 import type { PresentationDetail, PresentationDetailCriterion } from "@/api/client";
+import { ContestationDetails } from "@/components/scoring/ContestationDetails";
 
 // Visão somente-leitura de UMA apresentação — todos os grupos do
 // sistema de pontuação + legalidade JUNTOS. Quando um critério tem mais
@@ -82,6 +83,17 @@ export function PresentationNotesDetail({
         )}
       </div>
 
+      {detail.contestationRequested &&
+        (detail.contestationDescription || detail.contestationAttachments.length > 0) && (
+          <div className="rounded-2xl border border-red-300/50 bg-red-500/5 p-4">
+            <p className="text-xs font-semibold tracking-wide text-red-600">CONTESTAÇÃO DA EQUIPE</p>
+            <ContestationDetails
+              description={detail.contestationDescription}
+              attachments={detail.contestationAttachments}
+            />
+          </div>
+        )}
+
       <ScoringSummary
         totalScore={totalScore}
         hasCriteria={detail.groups.length > 0}
@@ -149,14 +161,21 @@ export function PresentationNotesDetail({
           ) : (
             <div className="mt-3 divide-y divide-border">
               {detail.legality.deductions.map((d, i) => (
-                <div key={i} className="flex items-center gap-3 py-2">
-                  <span className="w-14 shrink-0 text-xs font-medium text-red-600">
+                <div key={i} className="flex items-start gap-3 py-2">
+                  <span className="w-14 shrink-0 pt-0.5 text-xs font-medium text-red-600">
                     {d.presentationElapsedMs !== null ? formatElapsed(d.presentationElapsedMs) : "--:--"}
                   </span>
-                  <span className="flex-1 text-sm text-foreground">{d.label}</span>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
-                    {formatDeduction(d.value)}
+                  <span className="min-w-0 flex-1 text-sm text-foreground">
+                    {d.label}
+                    {d.code && <span className="mt-0.5 block text-xs break-words text-muted-foreground">{d.code}</span>}
                   </span>
+                  {d.type === WARNING_DEDUCTION_TYPE ? (
+                    <span className="shrink-0 text-xs font-semibold text-amber-700 dark:text-amber-400">Sem desconto</span>
+                  ) : (
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
+                      {formatDeduction(d.value)}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

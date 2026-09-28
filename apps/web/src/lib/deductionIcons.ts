@@ -23,7 +23,13 @@ export const DEDUCTION_ICONS: Record<DeductionType, LucideIcon> = {
   skill_out_of_level: TrendingDown,
   time_limit_violations: Clock,
   boundary_violations: MoveDiagonal,
+  warning: AlertTriangle,
 };
+
+// "Warning" (2026-09-28): último botão do painel de legalidade de todo
+// sistema (a API acrescenta, ver WARNING_DEDUCTION no backend). Vale 0
+// e não conta pro Hit Zero.
+export const WARNING_DEDUCTION_TYPE = "warning";
 
 export const DEDUCTION_FALLBACK_ICON: LucideIcon = AlertTriangle;
 export const DEDUCTION_LOG_ICON: LucideIcon = Flag;
@@ -39,13 +45,26 @@ export function formatElapsed(elapsedMs: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-// Inverso de formatElapsed — aceita só "MM:SS". `null` se o texto não
-// bater no formato ou os segundos passarem de 59.
+// Inverso de formatElapsed. Aceita "MM:SS" e também o que é fácil de
+// digitar no celular (2026-09-28, jurada não conseguia editar o tempo):
+// "1:30", "1.30", "1,30", "1 30" ou só dígitos ("130" = 1:30, "45" =
+// 0:45; os dois últimos dígitos são os segundos). `null` se não der pra
+// entender ou os segundos passarem de 59.
 export function parseElapsed(text: string): number | null {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
-  if (!match) return null;
-  const minutes = Number(match[1]);
-  const seconds = Number(match[2]);
+  const trimmed = text.trim();
+  let minutes: number;
+  let seconds: number;
+  const separated = /^(\d{1,3})\s*[:.,\s]\s*(\d{1,2})$/.exec(trimmed);
+  if (separated) {
+    minutes = Number(separated[1]);
+    seconds = Number(separated[2]);
+  } else if (/^\d{1,5}$/.test(trimmed)) {
+    const digits = Number(trimmed);
+    minutes = Math.floor(digits / 100);
+    seconds = digits % 100;
+  } else {
+    return null;
+  }
   if (seconds > 59) return null;
   return minutes * 60_000 + seconds * 1000;
 }

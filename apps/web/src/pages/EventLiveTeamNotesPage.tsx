@@ -20,6 +20,7 @@ import {
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+import { ContestationDialog } from "@/components/scoring/ContestationDialog";
 
 // Visão do Programa (dono da equipe) sobre as notas das próprias
 // equipes — as notas de cada apresentação aparecem quando a categoria
@@ -45,6 +46,7 @@ export function EventLiveTeamNotesPage() {
   const [detail, setDetail] = useState<PresentationDetail | null>(null);
   const [detailError, setDetailError] = useState(false);
   const [contesting, setContesting] = useState(false);
+  const [contestDialogOpen, setContestDialogOpen] = useState(false);
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -74,20 +76,25 @@ export function EventLiveTeamNotesPage() {
     };
   }, [id, selectedId]);
 
-  async function handleContest() {
+  // Chamado pelo ContestationDialog (descrição e imagens opcionais). Erro
+  // no envio sobe pro popup, que mostra a mensagem e continua aberto.
+  async function handleContest(input: { description: string; images: File[] }) {
     if (!id || !selectedId) return;
     setContesting(true);
-    await teamScoringApi.contest(id, selectedId);
-    // Também recarrega a lista (não só o detalhe aberto) — senão o
-    // badge "Contestação" na lista fica desatualizado até um reload
-    // manual da página.
-    const [refreshedDetail, refreshedEntries] = await Promise.all([
-      teamScoringApi.getDetail(id, selectedId),
-      teamScoringApi.getOverview(id),
-    ]);
-    setDetail(refreshedDetail);
-    setEntries(refreshedEntries);
-    setContesting(false);
+    try {
+      await teamScoringApi.contest(id, selectedId, input);
+      // Também recarrega a lista (não só o detalhe aberto) — senão o
+      // badge "Contestação" na lista fica desatualizado até um reload
+      // manual da página.
+      const [refreshedDetail, refreshedEntries] = await Promise.all([
+        teamScoringApi.getDetail(id, selectedId),
+        teamScoringApi.getOverview(id),
+      ]);
+      setDetail(refreshedDetail);
+      setEntries(refreshedEntries);
+    } finally {
+      setContesting(false);
+    }
   }
 
   function handleLogout() {
@@ -118,7 +125,7 @@ export function EventLiveTeamNotesPage() {
     detail && detail.contestationReleased && !detail.contestationRequested ? (
       <button
         type="button"
-        onClick={() => void handleContest()}
+        onClick={() => setContestDialogOpen(true)}
         disabled={contesting}
         className="shrink-0 rounded-xl border border-red-300 bg-red-500/5 px-4 py-2 text-sm font-semibold whitespace-nowrap text-red-600 hover:bg-red-500/10 disabled:opacity-60"
       >
@@ -215,6 +222,13 @@ export function EventLiveTeamNotesPage() {
           </main>
         </div>
       </div>
+
+      <ContestationDialog
+        open={contestDialogOpen}
+        onOpenChange={setContestDialogOpen}
+        teamName={detail?.presentation.teamName ?? ""}
+        onConfirm={handleContest}
+      />
     </>
   );
 }

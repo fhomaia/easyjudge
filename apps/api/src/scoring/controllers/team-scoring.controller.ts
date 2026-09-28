@@ -1,4 +1,19 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  CONTESTATION_UPLOAD_HARD_MAX_FILES,
+  contestationImageUploadOptions,
+} from '../../common/config/contestation-image-upload.config';
 import { ScoringService } from '../services/scoring.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -54,16 +69,27 @@ export class TeamScoringController {
     );
   }
 
+  // Multipart opcional: `description` (texto) e até 5 `images`.
   @Post(':scheduleEntryId/contest')
+  @UseInterceptors(
+    FilesInterceptor(
+      'images',
+      CONTESTATION_UPLOAD_HARD_MAX_FILES,
+      contestationImageUploadOptions,
+    ),
+  )
   contest(
     @Param('eventId') eventId: string,
     @Param('scheduleEntryId') scheduleEntryId: string,
+    @Body('description') description: string | undefined,
+    @UploadedFiles() images: Express.Multer.File[] | undefined,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.scoringService.requestContestation(
       eventId,
       scheduleEntryId,
       req.user.userId,
+      { description, images: images ?? [] },
     );
   }
 }

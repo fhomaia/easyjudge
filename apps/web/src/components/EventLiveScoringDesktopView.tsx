@@ -9,6 +9,7 @@ import type { DeductionLogEntry } from "@/lib/scoreEventsReducer";
 import { sumCriteriaScores, sumDeductions, sumMaxScores } from "@/lib/scoringSummary";
 import { cn } from "@/lib/utils";
 import type { DeductionType, ScoringSheet } from "@/api/client";
+import { ContestationDetails } from "@/components/scoring/ContestationDetails";
 
 function formatTimer(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -318,7 +319,7 @@ export function EventLiveScoringDesktopView({
         {sheet.contestationRequested && (
           <div
             className={cn(
-              "mb-4 flex items-center justify-between gap-3 rounded-2xl border p-3 text-sm font-medium",
+              "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3 text-sm font-medium",
               sheet.contestationResolved
                 ? "border-emerald-300/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                 : "border-red-300/50 bg-red-500/10 text-red-600",
@@ -344,6 +345,12 @@ export function EventLiveScoringDesktopView({
                 {resolvingContestation ? "Enviando..." : "Marcar como resolvida"}
               </button>
             )}
+            <div className="basis-full">
+              <ContestationDetails
+                description={sheet.contestationDescription}
+                attachments={sheet.contestationAttachments}
+              />
+            </div>
           </div>
         )}
 

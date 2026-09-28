@@ -58,7 +58,10 @@ export function useHeadJudgeSheet(
   }, [eventId, scheduleEntryId, judgeParticipationId]);
 
   async function emitEvent(
-    partial: Omit<ScoreEventInput, "id" | "clientCreatedAt" | "scheduleEntryId"> & { id?: string },
+    partial: Omit<ScoreEventInput, "id" | "clientCreatedAt" | "scheduleEntryId"> & {
+      id?: string;
+      clientCreatedAt?: string;
+    },
   ) {
     // Mesma regra de EventLiveScoringPage.emitEvent — Head Judge também
     // só escreve depois que o evento for iniciado (ver
@@ -126,12 +129,20 @@ export function useHeadJudgeSheet(
     const replacement: DeductionLogEntry = { ...target, id: crypto.randomUUID(), presentationElapsedMs };
     setDeductions((prev) => prev.map((d) => (d.id === deductionId ? replacement : d)));
     void emitEvent({ kind: "deduction_remove", undoesEventId: deductionId });
+    // Mesmo horário de registro da original: a dedução não pula pro topo
+    // da lista depois da próxima atualização (a lista é ordenada por ele).
     void emitEvent({
       id: replacement.id,
       kind: "deduction_add",
       deductionType: replacement.deductionType,
       presentationElapsedMs,
+      clientCreatedAt: target.clientCreatedAt,
     });
+    // A especificação é gravada presa ao id da dedução: sem reenviar, ela
+    // se perdia no servidor ao editar o tempo (2026-09-28).
+    if (target.code) {
+      void emitEvent({ kind: "deduction_code_set", undoesEventId: replacement.id, text: target.code });
+    }
   }
 
   function setDeductionCode(deductionId: string, code: string) {

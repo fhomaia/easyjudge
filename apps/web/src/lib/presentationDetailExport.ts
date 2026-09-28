@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWithSubgroups";
 import autoTable from "jspdf-autotable";
 import JSZip from "jszip";
-import { formatElapsed } from "@/lib/deductionIcons";
+import { WARNING_DEDUCTION_TYPE, formatElapsed } from "@/lib/deductionIcons";
 import { formatCriterionScore, formatDeduction, formatPercent, formatPoints } from "@/lib/formatNumber";
 import { sumMaxScores } from "@/lib/scoringSummary";
 import { isPresentationHitZero } from "@/lib/hitZero";
@@ -323,8 +323,9 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
       detail.legality.deductions.length > 0
         ? detail.legality.deductions.map((d) => [
             d.presentationElapsedMs !== null ? formatElapsed(d.presentationElapsedMs) : "--:--",
-            d.label,
-            formatDeduction(d.value),
+            // Especificação na linha de baixo da mesma célula.
+            d.code ? `${d.label}\n${d.code}` : d.label,
+            d.type === WARNING_DEDUCTION_TYPE ? "Sem desconto" : formatDeduction(d.value),
           ])
         : [["—", "Nenhuma dedução registrada.", ""]];
     autoTable(doc, {

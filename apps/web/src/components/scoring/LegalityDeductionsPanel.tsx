@@ -1,9 +1,15 @@
 import { formatDeduction } from "@/lib/formatNumber";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Pencil, Scale, Trash2, Undo2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DeductionLogEntry } from "@/lib/scoreEventsReducer";
-import { DEDUCTION_ICONS, DEDUCTION_FALLBACK_ICON, formatElapsed, parseElapsed } from "@/lib/deductionIcons";
+import {
+  DEDUCTION_ICONS,
+  DEDUCTION_FALLBACK_ICON,
+  WARNING_DEDUCTION_TYPE,
+  formatElapsed,
+  parseElapsed,
+} from "@/lib/deductionIcons";
 import { getDeductionLabel } from "@/lib/deductionLabels";
 import type { DeductionRuleView, DeductionType } from "@/api/client";
 
@@ -38,18 +44,39 @@ export function LegalityDeductionsPanel({
   const [showAll, setShowAll] = useState(false);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [editingTimeValue, setEditingTimeValue] = useState("");
+  const [editingTimeInvalid, setEditingTimeInvalid] = useState(false);
+  // Cancelar (Esc/✕) tira o campo da tela; o blur que o navegador pode
+  // disparar nessa hora não deve salvar.
+  const cancelledEditRef = useRef(false);
   const isMobile = variant === "mobile";
   const previewCount = isMobile ? 3 : 5;
   const visibleDeductions = showAll ? deductions : deductions.slice(0, previewCount);
 
   function startEditingTime(d: DeductionLogEntry) {
+    cancelledEditRef.current = false;
     setEditingTimeId(d.id);
+    setEditingTimeInvalid(false);
     setEditingTimeValue(d.presentationElapsedMs !== null ? formatElapsed(d.presentationElapsedMs) : "00:00");
   }
 
-  function commitEditingTime(deductionId: string) {
+  // Salva no Enter, no ✓ e ao sair do campo (tocar fora, comum no
+  // celular). Texto que não dá pra entender NÃO fecha em silêncio (antes
+  // voltava pro tempo antigo sem aviso): o campo fica aberto e vermelho.
+  function cancelEditingTime() {
+    cancelledEditRef.current = true;
+    setEditingTimeId(null);
+  }
+
+  function commitEditingTime(d: DeductionLogEntry) {
+    if (cancelledEditRef.current) return;
     const parsed = parseElapsed(editingTimeValue);
-    if (parsed !== null) onEditDeductionTime(deductionId, parsed);
+    if (parsed === null) {
+      setEditingTimeInvalid(true);
+      return;
+    }
+    if (parsed !== d.presentationElapsedMs) onEditDeductionTime(d.id, parsed);
+    // Mesmo motivo do cancelar: o blur ao sair da tela não salva de novo.
+    cancelledEditRef.current = true;
     setEditingTimeId(null);
   }
 
@@ -70,19 +97,30 @@ export function LegalityDeductionsPanel({
       <div className={cn("mt-2 grid gap-2", isMobile ? "grid-cols-3" : "grid-cols-2")}>
         {rules.map((rule) => {
           const Icon = DEDUCTION_ICONS[rule.type] ?? DEDUCTION_FALLBACK_ICON;
+          const isWarning = rule.type === WARNING_DEDUCTION_TYPE;
           return (
             <button
               key={rule.type}
               type="button"
               onClick={() => onAddDeduction(rule.type)}
-              className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-center hover:border-red-300 hover:bg-red-500/5"
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-xl border bg-card p-2.5 text-center",
+                isWarning
+                  ? "border-amber-300 hover:bg-amber-500/10"
+                  : "border-border hover:border-red-300 hover:bg-red-500/5",
+              )}
             >
-              <Icon className="size-4 text-red-500" />
+              <Icon className={cn("size-4", isWarning ? "text-amber-500" : "text-red-500")} />
               <span className="text-[11px] leading-tight font-medium text-foreground">
                 {rule.label}
               </span>
-              <span className="text-[11px] font-semibold tabular-nums text-red-600">
-                {formatDeduction(rule.value)}
+              <span
+                className={cn(
+                  "text-[11px] font-semibold tabular-nums",
+                  isWarning ? "text-amber-700 dark:text-amber-400" : "text-red-600",
+                )}
+              >
+                {isWarning ? "Sem desconto" : formatDeduction(rule.value)}
               </span>
             </button>
           );
@@ -119,29 +157,45 @@ export function LegalityDeductionsPanel({
                       <input
                         autoFocus
                         value={editingTimeValue}
-                        onChange={(e) => setEditingTimeValue(e.target.value)}
+                        inputMode="numeric"
+                        aria-label="Tempo da dedução (minutos e segundos)"
+                        aria-invalid={editingTimeInvalid}
+                        title={editingTimeInvalid ? "Digite minutos e segundos, ex.: 1:30 ou 130" : undefined}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          setEditingTimeValue(e.target.value);
+                          setEditingTimeInvalid(false);
+                        }}
+                        onBlur={() => commitEditingTime(d)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") commitEditingTime(d.id);
-                          if (e.key === "Escape") setEditingTimeId(null);
+                          if (e.key === "Enter") commitEditingTime(d);
+                          if (e.key === "Escape") cancelEditingTime();
                         }}
                         placeholder="MM:SS"
-                        className="w-16 rounded border border-border bg-background px-1 py-0.5 text-xs font-medium text-foreground outline-none focus-visible:border-primary"
+                        className={cn(
+                          "w-16 rounded border bg-background px-1 py-0.5 text-xs font-medium text-foreground outline-none",
+                          editingTimeInvalid ? "border-red-500" : "border-border focus-visible:border-primary",
+                        )}
                       />
+                      {/* preventDefault no pointerdown: o campo não perde o
+                          foco antes do clique (o blur já salvaria). */}
                       <button
                         type="button"
-                        onClick={() => commitEditingTime(d.id)}
+                        onPointerDown={(e) => e.preventDefault()}
+                        onClick={() => commitEditingTime(d)}
                         aria-label="Salvar horário"
-                        className="text-emerald-600 hover:text-emerald-700"
+                        className="rounded p-1.5 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
                       >
-                        <Check className="size-3.5" />
+                        <Check className="size-4" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditingTimeId(null)}
+                        onPointerDown={(e) => e.preventDefault()}
+                        onClick={cancelEditingTime}
                         aria-label="Cancelar"
-                        className="text-muted-foreground hover:text-foreground"
+                        className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
-                        <X className="size-3.5" />
+                        <X className="size-4" />
                       </button>
                     </div>
                   ) : (
@@ -155,9 +209,13 @@ export function LegalityDeductionsPanel({
                     </button>
                   )}
                   <span className="flex-1 truncate text-sm text-foreground">{getDeductionLabel(d.deductionType, rules)}</span>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
-                    {formatDeduction(rules.find((r) => r.type === d.deductionType)?.value ?? 0)}
-                  </span>
+                  {d.deductionType === WARNING_DEDUCTION_TYPE ? (
+                    <span className="shrink-0 text-xs font-semibold text-amber-700 dark:text-amber-400">Warning</span>
+                  ) : (
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
+                      {formatDeduction(rules.find((r) => r.type === d.deductionType)?.value ?? 0)}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => onUndoDeduction(d.id)}
@@ -167,7 +225,7 @@ export function LegalityDeductionsPanel({
                     Remover
                   </button>
                 </div>
-                {rules.find((r) => r.type === d.deductionType)?.requiresCode && (
+                {rules.find((r) => r.type === d.deductionType)?.requiresCode ? (
                   <input
                     key={d.id}
                     defaultValue={d.code ?? ""}
@@ -178,6 +236,19 @@ export function LegalityDeductionsPanel({
                       d.code ? "border-border" : "border-amber-400",
                     )}
                   />
+                ) : (
+                  d.deductionType === WARNING_DEDUCTION_TYPE && (
+                    // Descrição opcional do warning (não bloqueia o envio).
+                    <input
+                      key={d.id}
+                      defaultValue={d.code ?? ""}
+                      onBlur={(e) => {
+                        if (e.target.value !== (d.code ?? "")) onSetDeductionCode(d.id, e.target.value);
+                      }}
+                      placeholder="Descrição (opcional)"
+                      className="mt-1.5 w-full rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus-visible:border-primary"
+                    />
+                  )
                 )}
               </div>
             ))}

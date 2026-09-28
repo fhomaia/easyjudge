@@ -2675,10 +2675,16 @@ export class ScheduleService {
   async setContestationRequested(
     eventId: string,
     entryId: string,
+    details: { description: string | null; attachments: string[] } = {
+      description: null,
+      attachments: [],
+    },
   ): Promise<void> {
     const entry = await this.findEntryInEventOrThrow(eventId, entryId);
     if (entry.contestationRequestedAt) return;
     entry.contestationRequestedAt = new Date();
+    entry.contestationDescription = details.description;
+    entry.contestationAttachments = details.attachments;
     await this.entriesRepo.save(entry);
 
     const event = await this.eventsService.findEventOrThrow(eventId);
