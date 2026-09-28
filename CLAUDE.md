@@ -1656,6 +1656,23 @@ antes do push).
   `ContestationDetails` (súmula do jurado e detalhe). Pra testar upload
   local sem mandar pro R2 de produção, subir a API com as variáveis
   `R2_*` vazias (o `.env` local tem as credenciais reais).
+- **Mover evento especial no Cronograma ao vivo** (menu ⋯, admin/
+  assessor, antes de sinalizar início, só na cópia da pista de
+  apresentação): `MovePresentationDialog` manda `moveCopies: true`;
+  `ScheduleService.moveSpecialEventCopies` põe as outras cópias (outras
+  pistas e áreas de aquecimento) antes do primeiro grupo que começaria
+  depois do novo horário (grupo = item + esperas ligadas). Cópias via
+  `findSpecialEventCopies` (mesmo tipo+nome+ocorrência, a mesma regra da
+  sinalização). Passar por outro evento de mesmo nome dá 400 (trocaria as
+  ocorrências). Início/fim no popup = pista inteira pra evento especial.
+  Arraste do Setup continua movendo uma cópia só.
+- **Sinalizar início de evento especial depois que uma apresentação
+  posterior começou** é permitido de propósito (decisão do usuário,
+  2026-09-28): ele volta como "Acontecendo agora" até o fim ou até algo
+  começar depois do sinal.
+- **Súmulas do programa (`/live/team`) no celular** tinham cabeçalho
+  próprio só com "Sair" (deslogava); agora usam o mesmo cabeçalho, menu e
+  barra inferior das outras telas ao vivo.
 - **Gotcha de teste**: `bulk-assign` da escala só funciona em GRUPO de
   critérios; num critério folha não faz nada e responde 201. Pra
   escalar folha, `PUT .../criteria/:id/resources/:rid/judges`.
