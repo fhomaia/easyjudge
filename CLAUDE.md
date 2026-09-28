@@ -1677,6 +1677,50 @@ antes do push).
   critérios; num critério folha não faz nada e responde 201. Pra
   escalar folha, `PUT .../criteria/:id/resources/:rid/judges`.
 
+## Cronograma em memória: mover, remover e gerar (2026-09-28)
+
+Medido em produção no Cheer Cup: mover apresentação levava 8,2 s, mover
+evento especial 5 a 6 s, desistência e sinalizar evento especial ~2 s.
+Causa: cada consulta ao banco custa ~40 a 50 ms entre Render e Neon (os
+dois em Oregon; motivo do valor alto não investigado), e o mover fazia
+~150 consultas em sequência (máx. 350), gerar o dia 300 a 400. O commit
+`b82c4d6` (N+1 das reconciliações) já estava incluído nesses números.
+
+- **`DayWorkspace`** (`schedule/services/day-workspace.ts`): carrega o
+  dia numa transação, com as linhas de `schedule_entries` travadas
+  (`FOR UPDATE`, em ordem de id), e implementa em memória só o que as
+  reconciliações usam dos repositórios (find/findOneBy/save/remove/
+  create/update/delete, com igualdade, `In`, `IsNull` e `Not`; o resto
+  lança erro). Imita o `ON DELETE SET NULL` de `linkedEntryId`. No fim
+  grava a diferença em até 3 comandos (DELETE, INSERT e UPDATE em lote
+  via `jsonb_populate_recordset`).
+- **`ScheduleService`**: `daysRepo`/`resourcesRepo`/`entriesRepo`
+  viraram getters que apontam pro workspace ativo (`AsyncLocalStorage`,
+  `withDayWorkspace`); os repositórios do banco são os `*RepoDb`. Usam o
+  workspace: `moveEntry`, `removeEntry` e `autoGenerate`
+  (`generateDay`). `getUnscheduled` e `validateSchedulablePair` leem os
+  pares agendados do workspace quando ele está ativo. `createEntry` e o
+  resto do setup continuam pelo caminho antigo.
+- **Recursos carregados SEM ORDER BY, de propósito**: quando a mesma
+  equipe se apresenta em duas pistas, a ordem em que as reconciliações
+  percorrem os recursos decide de que lado entra a espera, e o código
+  antigo usava a ordem física do banco. Ordenar mudava o resultado em
+  82 de 810 movimentos testados.
+- Efeitos colaterais bons: a operação ficou atômica (erro no meio não
+  grava nada; antes o cronograma podia ficar pela metade) e uma escrita
+  simultânea na mesma linha (desistência, sinalizar evento) espera o
+  commit em vez de ser sobrescrita.
+- **Validado localmente** (evento "Teste", comparando build antigo e
+  novo, com backup e restauro): 810 movimentos, 54 remoções e 6
+  variações de geração, 0 diferenças no cronograma resultante nem nas
+  mensagens de erro. Consultas: mover 149 → 17, remover até ~65 → até
+  16, gerar 312 a 414 → 16. Contagem via preload que intercepta
+  `pg.Client.prototype.query` + contexto Nest standalone chamando o
+  service direto.
+- Achados menores não corrigidos: o menu ⋯ oferece "Mover apresentação"
+  mesmo com nota lançada (o 409 só vem depois); ao fechar alguns popups
+  de confirmação o título troca por um genérico durante a animação.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
