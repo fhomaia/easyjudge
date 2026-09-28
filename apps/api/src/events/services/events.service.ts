@@ -28,6 +28,10 @@ import { Regulation } from '../../regulations/entities/regulation.entity';
 import { StorageService } from '../../common/services/storage.service';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
 import { SpecialRoleAssignment } from '../../judging/entities/special-role-assignment.entity';
+import { Notification } from '../../notifications/entities/notification.entity';
+import { EventScoringTemplate } from '../../scoring-templates/entities/event-scoring-template.entity';
+import { EventFeedback } from '../../feedback/entities/event-feedback.entity';
+import { ScoreEvent } from '../../scoring/entities/score-event.entity';
 import { EVENT_STAFF_ROLES } from '../constants/event-staff-roles';
 
 // Entidades filhas endereçadas pelo `aliasId` do evento (estável entre
@@ -52,6 +56,10 @@ const EVENT_SCOPED_ENTITIES = [
   Regulation,
   JudgeParticipation,
   SpecialRoleAssignment,
+  // Estas 3 ficavam órfãs ao excluir o evento até 2026-09-28.
+  Notification,
+  EventScoringTemplate,
+  EventFeedback,
 ];
 
 // Status em que o evento fica ACESSÍVEL (não só visível na lista, ver
@@ -545,6 +553,21 @@ export class EventsService {
     }
 
     await this.dataSource.transaction(async (manager) => {
+      // Registros de nota (score_events) não têm aliasId nem FK: saem
+      // pelos jurados do evento, ANTES de apagá-los. Pelo jurado, e não
+      // pela apresentação, pega também registro de apresentação que foi
+      // movida (recriada com outro id). Ficavam órfãos até 2026-09-28.
+      // Excluir é deliberado (só o dono, com confirmação), diferente da
+      // perda acidental que o event sourcing protege.
+      const judges = await manager.find(JudgeParticipation, {
+        where: { aliasId: event.aliasId },
+        select: ['id'],
+      });
+      if (judges.length > 0) {
+        await manager.delete(ScoreEvent, {
+          judgeParticipationId: In(judges.map((j) => j.id)),
+        });
+      }
       for (const entity of EVENT_SCOPED_ENTITIES) {
         await manager.delete(entity, { aliasId: event.aliasId });
       }
