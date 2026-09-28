@@ -399,7 +399,13 @@ export function EventLiveSchedulePage() {
 
   async function handleMoveConfirm(resourceId: string, order: number) {
     if (!id || !moveTarget) return;
-    await scheduleApi.moveEntry(id, moveTarget.dayId, moveTarget.entry.id, { resourceId, order });
+    await scheduleApi.moveEntry(id, moveTarget.dayId, moveTarget.entry.id, {
+      resourceId,
+      order,
+      // Evento especial leva junto as cópias das outras pistas/áreas de
+      // aquecimento (a apresentação já leva o próprio aquecimento).
+      moveCopies: moveTarget.entry.type !== "presentation",
+    });
     refreshDays();
   }
 
@@ -663,11 +669,23 @@ export function EventLiveSchedulePage() {
                           // usuário) — mudar equipe de programa não
                           // decide onde a própria apresentação entra no
                           // cronograma, só sinaliza desistência.
-                          const canMove =
-                            item.entry.type === "presentation" && !withdrawn && !isCompleted && isAdminOrAssessor;
                           // Evento especial (Almoço, Premiação...): admin/
                           // assessor sinaliza início/fim com o evento iniciado.
                           const isSpecial = scheduleFilterCategory(item.entry) === "special";
+                          // Evento especial também pode ser movido (2026-09-28),
+                          // enquanto não foi sinalizado como iniciado. Move só
+                          // a cópia desta pista, igual ao arraste do Setup.
+                          // Só a cópia da pista de apresentação: a das áreas de
+                          // aquecimento acompanha sozinha.
+                          const onPresentationResource =
+                            days
+                              .find((d) => d.id === item.dayId)
+                              ?.resources.find((r) => r.id === item.resourceId)?.supportsPresentations ?? false;
+                          const canMove =
+                            !isCompleted &&
+                            isAdminOrAssessor &&
+                            ((item.entry.type === "presentation" && !withdrawn) ||
+                              (isSpecial && !item.entry.startedAt && onPresentationResource));
                           const canSignalStart =
                             isSpecial && isAdminOrAssessor && event.status === "started" && !item.entry.startedAt;
                           const canSignalEnd =
@@ -776,7 +794,7 @@ export function EventLiveSchedulePage() {
                                     {canMove && (
                                       <DropdownMenuItem onClick={() => setMoveTarget(item)}>
                                         <ArrowRightLeft data-icon="inline-start" />
-                                        Mover apresentação
+                                        {isSpecial ? "Mover evento especial" : "Mover apresentação"}
                                       </DropdownMenuItem>
                                     )}
                                     {canWithdraw && (

@@ -2,16 +2,20 @@ import { useEffect, useState } from "react";
 import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
-import { Building2, CalendarDays, ChevronLeft, Loader2, MapPin, Trophy } from "lucide-react";
+import { Bell, Building2, CalendarDays, ChevronLeft, Loader2, MapPin, Menu, Trophy } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AdminNotesOverviewList } from "@/components/scoring/AdminNotesOverviewList";
 import { PresentationNotesDetail } from "@/components/scoring/PresentationNotesDetail";
-import { buildEventNavTabs } from "@/components/EventLiveShared";
+import { EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
+import { MobileNavSheet } from "@/components/MobileNavSheet";
+import { EventFeedbackHeaderButton } from "@/components/EventFeedbackHeaderButton";
+import { formatDate } from "@/lib/formatDate";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import {
   eventsApi,
+  notificationsApi,
   teamScoringApi,
   usersApi,
   type AdminOverviewEntry,
@@ -47,6 +51,8 @@ export function EventLiveTeamNotesPage() {
   const [detailError, setDetailError] = useState(false);
   const [contesting, setContesting] = useState(false);
   const [contestDialogOpen, setContestDialogOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -56,6 +62,10 @@ export function EventLiveTeamNotesPage() {
     if (!id) return;
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
     teamScoringApi.getOverview(id).then(setEntries).catch(() => setEntries([]));
+    notificationsApi
+      .list(id)
+      .then((res) => setNotificationsUnreadCount(res.unreadCount))
+      .catch(() => setNotificationsUnreadCount(null));
   }, [id]);
 
   useEffect(() => {
@@ -119,6 +129,7 @@ export function EventLiveTeamNotesPage() {
     onNavigateResults: () => navigate(`/events/${event.aliasId}/live/results`),
     onNavigateNotifications: () => navigate(`/events/${event.aliasId}/live/notifications`),
     centerTab: resolveCenterTab(event.currentUserRoles),
+    notificationsUnreadCount: notificationsUnreadCount ?? undefined,
   });
 
   const contestButton =
@@ -167,24 +178,58 @@ export function EventLiveTeamNotesPage() {
 
   return (
     <>
+      {/* Mesmo cabeçalho/menu/barra inferior das outras telas ao vivo
+          (2026-09-28): antes era só "Sair", que deslogava, sem como
+          navegar pro resto do evento. */}
       <div className="flex h-dvh flex-col bg-background lg:hidden">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-card px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-base font-bold text-foreground">{event.name}</p>
-            <p className="truncate text-xs text-muted-foreground">Notas das minhas equipes</p>
-          </div>
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/10 bg-brand-navy px-4 py-3 text-white">
           <button
             type="button"
-            onClick={handleLogout}
-            className="shrink-0 text-sm text-muted-foreground hover:text-foreground"
+            onClick={() => setNavOpen(true)}
+            aria-label="Abrir menu"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           >
-            Sair
+            <Menu className="size-5" />
+          </button>
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600">
+            <Trophy className="size-5 text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-bold">{event.name}</p>
+            <p className="truncate text-xs text-white/60">
+              {formatDate(event.startDate)} · {event.location}
+            </p>
+          </div>
+          <EventFeedbackHeaderButton event={event} />
+          <button
+            type="button"
+            aria-label="Notificações"
+            onClick={() => navigate(`/events/${event.aliasId}/live/notifications`)}
+            className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <Bell className="size-5" />
+            {!!notificationsUnreadCount && (
+              <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
+                {notificationsUnreadCount}
+              </span>
+            )}
           </button>
         </header>
+
+        <MobileNavSheet
+          open={navOpen}
+          onOpenChange={setNavOpen}
+          profile={profile}
+          onLogout={handleLogout}
+          onNavigate={navigate}
+          eventNavItems={eventNavTabs}
+        />
 
         <main className="relative mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-4">
           {notesContent}
         </main>
+
+        <EventLiveBottomNav tabs={eventNavTabs} className="sticky bottom-0 z-20" />
       </div>
 
       <div className="hidden h-dvh lg:flex">

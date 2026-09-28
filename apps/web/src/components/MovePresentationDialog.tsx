@@ -17,6 +17,7 @@ import { isRealEntry, presentationEndIndex, presentationStartIndex } from "@/lib
 import type { SchedulePositionType } from "@/lib/useSchedulePosition";
 import type { FullScheduleItem } from "@/lib/eventFullSchedule";
 import { ApiError, type ScheduleDay, type ScheduleEntry } from "@/api/client";
+import { getScheduleEntryDisplay } from "@/lib/scheduleEntryDisplay";
 
 type PositionType = SchedulePositionType;
 
@@ -64,9 +65,15 @@ export function MovePresentationDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Evento especial tem uma cópia em cada pista: move dentro da própria
+  // pista (as outras cópias acompanham o horário, ver moveCopies).
+  const isSpecialItem = !!item && item.entry.type !== "presentation";
   const presentationResources = useMemo(
-    () => (day?.resources ?? []).filter((r) => r.supportsPresentations),
-    [day],
+    () =>
+      (day?.resources ?? []).filter(
+        (r) => r.supportsPresentations && (!isSpecialItem || r.id === item?.entry.resourceId),
+      ),
+    [day, isSpecialItem, item],
   );
 
   useEffect(() => {
@@ -150,6 +157,10 @@ export function MovePresentationDialog({
   }
 
   function computeOrder(): number | null {
+    // Evento especial: início/fim são da pista inteira (a apresentação
+    // fica entre as apresentações, sem passar de eventos do fim do dia).
+    if (isSpecialItem && positionType === "start") return 0;
+    if (isSpecialItem && positionType === "end") return siblingsAfterRemoval.length;
     if (positionType === "start") return presentationStartIndex(siblingsAfterRemoval);
     if (positionType === "end") return presentationEndIndex(siblingsAfterRemoval);
     const anchor = anchorEntries.find(({ entry }) => entry.id === referenceEntryId);
@@ -178,9 +189,13 @@ export function MovePresentationDialog({
     <Dialog open={item !== null} onOpenChange={handleOpenChange}>
       <DialogContent className="gap-6 p-8 sm:max-w-md">
         <div className="grid gap-1.5">
-          <DialogTitle className="text-xl font-medium">Mover apresentação</DialogTitle>
+          <DialogTitle className="text-xl font-medium">
+            {item && item.entry.type !== "presentation" ? "Mover evento especial" : "Mover apresentação"}
+          </DialogTitle>
           <DialogDescription>
-            {item?.entry.teamName ?? "Equipe"}
+            {item && item.entry.type !== "presentation"
+              ? getScheduleEntryDisplay(item.entry, 0, 0, []).title
+              : (item?.entry.teamName ?? "Equipe")}
             {day && ` · ${formatDate(day.date)}`}
           </DialogDescription>
         </div>

@@ -1313,6 +1313,9 @@ export interface CreateScheduleEntryPayload {
 export interface MoveScheduleEntryPayload {
   resourceId: string;
   order: number;
+  // Evento especial no Cronograma ao vivo: leva junto as cópias das outras
+  // pistas e áreas de aquecimento (mesma pista só).
+  moveCopies?: boolean;
 }
 
 export interface UpdateScheduleEntryPayload {

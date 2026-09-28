@@ -684,6 +684,14 @@ export class ScheduleService {
 
     await this.findResourceOrThrow(dayId, dto.resourceId);
     const oldResourceId = entry.resourceId;
+    // Cópias levantadas ANTES de mover: a ocorrência depende da posição
+    // atual entre os de mesmo nome na pista.
+    const copies =
+      dto.moveCopies &&
+      dto.resourceId === oldResourceId &&
+      this.isSpecialEventEntry(entry)
+        ? await this.findSpecialEventCopies(dayId, entry)
+        : [];
 
     const siblings = await this.entriesRepo.find({
       where: { resourceId: dto.resourceId },
@@ -691,6 +699,25 @@ export class ScheduleService {
     });
     const filtered = siblings.filter((s) => s.id !== entryId);
     const insertAt = Math.max(0, Math.min(dto.order, filtered.length));
+    // Cada cópia é identificada pela ordem entre os eventos de mesmo nome
+    // na pista (ver findSpecialEventCopies). Passar por cima de outro com
+    // o mesmo nome trocaria as ocorrências e as cópias das outras pistas
+    // ficariam pareadas com o evento errado.
+    if (copies.length > 0) {
+      const sameName = (e: ScheduleEntry) =>
+        e.type === entry.type &&
+        (e.label ?? null) === (entry.label ?? null) &&
+        !e.linkedEntryId;
+      const rankBefore = siblings
+        .filter(sameName)
+        .findIndex((e) => e.id === entry.id);
+      const rankAfter = filtered.slice(0, insertAt).filter(sameName).length;
+      if (rankBefore !== rankAfter) {
+        throw new BadRequestException(
+          'Não dá pra passar por outro evento com o mesmo nome. Mova o outro no lugar.',
+        );
+      }
+    }
     entry.resourceId = dto.resourceId;
     filtered.splice(insertAt, 0, entry);
     filtered.forEach((e, idx) => {
@@ -700,6 +727,11 @@ export class ScheduleService {
 
     if (oldResourceId !== dto.resourceId) {
       await this.renumberResource(oldResourceId);
+    }
+    if (copies.length > 1) {
+      await this.reconcileWarmupDelays(dayId);
+      await this.reconcileMatGaps(dayId);
+      await this.moveSpecialEventCopies(day, entry, copies);
     }
     // Mesma causa/fix do bug de removeEntry (2026-08-16): reordenar
     // qualquer item (intervalo, componente, aquecimento) numa pista ou
@@ -2735,6 +2767,108 @@ export class ScheduleService {
   // 2026-09-25; sem "desfazer"). Vale pra todas as cópias do mesmo
   // evento especial no dia (a geração automática cria uma por pista e
   // área de aquecimento, mesmo tipo e rótulo). Notifica todo mundo.
+  // Cópias do MESMO evento especial no dia (uma por pista/área de
+  // aquecimento), incluindo o próprio `entry`. O mesmo nome pode aparecer
+  // mais de uma vez no dia (ex.: duas "Batalhas"): a ocorrência é a
+  // posição entre os de mesmo tipo+nome na pista, então a 2ª de uma
+  // pista só casa com a 2ª das outras.
+  private async findSpecialEventCopies(
+    dayId: string,
+    entry: ScheduleEntry,
+  ): Promise<ScheduleEntry[]> {
+    const resources = await this.resourcesRepo.find({
+      where: { scheduleDayId: dayId },
+    });
+    const sameNamed = (
+      await this.entriesRepo.find({
+        where: {
+          resourceId: In(resources.map((r) => r.id)),
+          type: entry.type,
+          label: entry.label ?? IsNull(),
+        },
+      })
+    ).filter((e) => !e.linkedEntryId);
+    const occurrenceIndex = (e: ScheduleEntry) =>
+      sameNamed
+        .filter((other) => other.resourceId === e.resourceId)
+        .sort((a, b) => a.order - b.order)
+        .findIndex((other) => other.id === e.id);
+    const targetIndex = occurrenceIndex(entry);
+    return sameNamed.filter((e) => occurrenceIndex(e) === targetIndex);
+  }
+
+  private isSpecialEventEntry(entry: ScheduleEntry): boolean {
+    return (
+      entry.type === ScheduleEntryType.CEREMONY ||
+      entry.type === ScheduleEntryType.AWARD ||
+      (entry.type === ScheduleEntryType.BREAK &&
+        !entry.linkedEntryId &&
+        !AUTOMATIC_BREAK_LABELS.has(entry.label ?? ''))
+    );
+  }
+
+  // Depois de mover a cópia de uma pista (Cronograma ao vivo), leva as
+  // outras cópias pro mesmo horário: em cada outra pista/área de
+  // aquecimento, a cópia entra antes do primeiro grupo que começaria
+  // depois do novo início (grupo = item + as esperas ligadas a ele, que
+  // ficam logo antes e nunca são separadas). Mesma regra dos eventos de
+  // horário fixo da geração automática.
+  private async moveSpecialEventCopies(
+    day: ScheduleDay,
+    moved: ScheduleEntry,
+    copies: ScheduleEntry[],
+  ): Promise<void> {
+    const movedStart = (
+      await this.getResourceEntryTimes(moved.resourceId, day.startMinutes)
+    ).get(moved.id)?.start;
+    if (movedStart === undefined) return;
+
+    for (const copy of copies) {
+      if (copy.id === moved.id || copy.resourceId === moved.resourceId) {
+        continue;
+      }
+      const siblings = (
+        await this.entriesRepo.find({
+          where: { resourceId: copy.resourceId },
+          order: { order: 'ASC' },
+        })
+      ).filter((e) => e.id !== copy.id);
+      const times = this.computeResourceEntryTimes(
+        siblings,
+        copy.resourceId,
+        day.startMinutes,
+      );
+      let insertAt = siblings.length;
+      for (let i = 0; i < siblings.length; i++) {
+        const entry = siblings[i];
+        const previous = siblings[i - 1];
+        // Espera ligada ao item seguinte faz parte do grupo dele: só é
+        // ponto de inserção o começo do grupo.
+        if (
+          previous?.linkedEntryId &&
+          previous.type === ScheduleEntryType.BREAK
+        ) {
+          const linkedTo = previous.linkedEntryId;
+          if (
+            linkedTo === entry.id ||
+            siblings.slice(i).some((e) => e.id === linkedTo)
+          ) {
+            continue;
+          }
+        }
+        if ((times.get(entry.id)?.start ?? 0) >= movedStart) {
+          insertAt = i;
+          break;
+        }
+      }
+      siblings.splice(insertAt, 0, copy);
+      siblings.forEach((e, idx) => {
+        e.order = idx;
+      });
+      await this.entriesRepo.save(siblings);
+    }
+  }
+
   async setSpecialEventSignal(
     eventId: string,
     dayId: string,
@@ -2743,13 +2877,7 @@ export class ScheduleService {
   ): Promise<void> {
     const day = await this.findDayOrThrow(eventId, dayId);
     const entry = await this.findEntryInDayOrThrow(day.id, entryId);
-    const isSpecial =
-      entry.type === ScheduleEntryType.CEREMONY ||
-      entry.type === ScheduleEntryType.AWARD ||
-      (entry.type === ScheduleEntryType.BREAK &&
-        !entry.linkedEntryId &&
-        !AUTOMATIC_BREAK_LABELS.has(entry.label ?? ''));
-    if (!isSpecial) {
+    if (!this.isSpecialEventEntry(entry)) {
       throw new BadRequestException(
         'Só é possível sinalizar início/fim de eventos especiais.',
       );
@@ -2770,29 +2898,7 @@ export class ScheduleService {
       }
     }
 
-    const resources = await this.resourcesRepo.find({
-      where: { scheduleDayId: day.id },
-    });
-    const sameNamed = (
-      await this.entriesRepo.find({
-        where: {
-          resourceId: In(resources.map((r) => r.id)),
-          type: entry.type,
-          label: entry.label ?? IsNull(),
-        },
-      })
-    ).filter((e) => !e.linkedEntryId);
-    // Cada pista/área de aquecimento tem uma cópia do evento especial, e
-    // o mesmo nome pode aparecer mais de uma vez no dia (ex.: duas
-    // "Batalhas"). A ocorrência é a posição entre os de mesmo nome na
-    // pista: sinalizar a 2ª só afeta a 2ª de cada pista.
-    const occurrenceIndex = (e: ScheduleEntry) =>
-      sameNamed
-        .filter((other) => other.resourceId === e.resourceId)
-        .sort((a, b) => a.order - b.order)
-        .findIndex((other) => other.id === e.id);
-    const targetIndex = occurrenceIndex(entry);
-    const copies = sameNamed.filter((e) => occurrenceIndex(e) === targetIndex);
+    const copies = await this.findSpecialEventCopies(day.id, entry);
     const now = new Date();
     for (const copy of copies) {
       if (action === 'start' && !copy.startedAt) copy.startedAt = now;
