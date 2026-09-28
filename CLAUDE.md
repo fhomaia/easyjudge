@@ -1717,6 +1717,14 @@ dois em Oregon; motivo do valor alto não investigado), e o mover fazia
   16, gerar 312 a 414 → 16. Contagem via preload que intercepta
   `pg.Client.prototype.query` + contexto Nest standalone chamando o
   service direto.
+- **Medido em produção depois do deploy** (`a92cd64`, Cheer Cup,
+  servidor aquecido, via API): mover apresentação 1,9 a 3,0 s (quase
+  sempre ~2 s), era 8,2 s. A estimativa era ~1 s (17 consultas × ~45
+  ms); a diferença deve vir dos guards da rota (evento, vínculo, trava
+  de concluído) e da notificação/registro de atividade, não
+  investigado. Remover e gerar não foram medidos em produção. Logo
+  depois de um deploy as primeiras chamadas são mais lentas
+  (`GET /schedule/days` 2,1 s em vez de ~0,7 s) até o servidor aquecer.
 - Achados menores não corrigidos: o menu ⋯ oferece "Mover apresentação"
   mesmo com nota lançada (o 409 só vem depois); ao fechar alguns popups
   de confirmação o título troca por um genérico durante a animação.
@@ -1758,6 +1766,13 @@ fato pendente:
    exige buscar a súmula no servidor. Ideia: guardar as súmulas do
    jurado ao abrir a tela de Súmulas. Mexe na tela mais sensível; não
    fazer em véspera de evento.
+5. **Latência por consulta entre Render e Neon (~40 a 50 ms).** Medida
+   em 2026-09-28: rota sem banco ~230 ms, `/users/me` +100 ms,
+   `/schedule/days` +470 ms. Os dois estão em Oregon, onde o esperado
+   seria 1 a 3 ms por consulta. Causa não investigada (endpoint com
+   pooler? rede do Render?). Resolver isso aceleraria o app inteiro,
+   não só o cronograma. `createEntry` (arrastar equipe não agendada pra
+   timeline) também continua fora do `DayWorkspace`.
 
 ## Gotchas / decisões técnicas já resolvidas (não repetir o troubleshooting)
 
