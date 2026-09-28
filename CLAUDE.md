@@ -1562,6 +1562,56 @@ antes do push).
   como" outra pessoa; conferir `impersonatorToken` antes de qualquer
   chamada e nunca usar o token guardado do "ver como".
 
+## Depois do Batalha: evento concluído, início da apresentação e exclusão (2026-09-27/28)
+
+- **Evento concluído é só para consulta** (`b71aaaf`, testado no
+  navegador em 28/09): card da Home abre o ao vivo, Início não
+  redireciona, telas de configuração mandam pro ao vivo (Métricas e
+  Histórico abertas, `allowCompleted` em `useEventSetupGuard`; a tela de
+  Programas não tinha o guard e ganhou), súmula e Head Judge travados.
+- **Concluir finaliza** (decisão do usuário): `completeEvent` chama
+  `emitAsync('event.completing')` ANTES de mudar o status;
+  `ReleasesService.finalizeForCompletion` libera notas e resultado de
+  todas as categorias em todos os dias, fecha a contestação e
+  `ScheduleService.resolveAllOpenContestations` resolve as abertas. Se
+  falhar, o evento continua iniciado. Precisa de
+  `suppressErrors: false` no `@OnEvent` (o padrão engole o erro).
+- **Trava geral**: `CompletedEventLockGuard` (APP_GUARD em
+  `EventsModule`) recusa com 409 qualquer método de escrita em rota
+  `/events/:id` ou `/events/:eventId/...` de evento concluído. Exceções
+  (`ALLOWED_WHEN_COMPLETED`, por `MÉTODO /rota` do Nest): avaliação do
+  evento, `notifications/seen` e `DELETE /events/:id`. Rota nova de
+  escrita que precise funcionar depois de concluir entra nessa lista.
+  Chaves de liberação aparecem travadas (`AdminNotesOverview
+  eventCompleted`).
+- **Início da apresentação = primeira atividade de qualquer jurado**
+  (`START_SIGNAL_KINDS` em `ScoringService`: `timer_started`,
+  `score_set`, `deduction_add`, `sheet_submitted`; rascunho e comentário
+  não contam). Vale pra `getStartedPresentations`,
+  `getPresentationStartTimes` (atraso) e as notificações "iniciada" e
+  "avaliação pendente". Causa, confirmada com os dados do Batalha no
+  Neon: um jurado lançava sem "Iniciar" e o outro, ~30 min atrás,
+  apertava depois; esse "Iniciar" virava o primeiro (notificação,
+  apresentação de volta ao vivo, atraso recalculado). Relógios dos
+  celulares estavam certos (1 a 2 s entre `client_created_at` e
+  `created_at`).
+- **Card "Aquecendo"** usava só "súmula enviada" e ficava preso no
+  aquecimento de apresentação pulada; agora segue a regra da fila
+  (`allDoneEntryIds` + `livePresentationIds`). Evento concluído encerra
+  todos os dias (`eventCompleted` em `computeEventLiveSchedule`).
+- **Excluir evento apaga tudo**: `deleteEvent` também apaga
+  `score_events` (pelos `judge_participations` do evento, o que pega
+  registro de apresentação movida), notificações, `event_scoring_templates`
+  e `event_feedbacks` — antes ficavam órfãos. Órfãos antigos só foram
+  limpos no banco local, não em produção.
+- **Apresentação pulada** (`b64c00a`) testada ponta a ponta em 28/09:
+  mover com só "Iniciar" funciona; lote com cronômetro de id inexistente
+  ou desistido é aceito e as notas junto são gravadas; nota nesses casos
+  continua recusada. A ação "Pular" foi descartada pelo usuário.
+- **Gotcha de teste**: `bulk-assign` da escala só funciona em GRUPO de
+  critérios; num critério folha não faz nada e responde 201. Pra
+  escalar folha, `PUT .../criteria/:id/resources/:rid/judges`.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
