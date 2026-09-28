@@ -4,13 +4,22 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
+import { AsyncLocalStorage } from 'async_hooks';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import {
+  DataSource,
+  In,
+  IsNull,
+  Not,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { ScheduleDay } from '../entities/schedule-day.entity';
 import { ScheduleResource } from '../entities/schedule-resource.entity';
 import { ScheduleEntry } from '../entities/schedule-entry.entity';
 import { ScheduleEntryType } from '../enums/schedule-entry-type.enum';
 import { ScheduleAutoSettings } from '../entities/schedule-auto-settings.entity';
+import { DayWorkspace } from './day-workspace';
 import { ScoreEvent } from '../../scoring/entities/score-event.entity';
 import { ScoreEventKind } from '../../scoring/enums/score-event-kind.enum';
 import {
@@ -104,11 +113,11 @@ const AUTOMATIC_BREAK_LABELS = new Set([
 export class ScheduleService {
   constructor(
     @InjectRepository(ScheduleDay)
-    private readonly daysRepo: Repository<ScheduleDay>,
+    private readonly daysRepoDb: Repository<ScheduleDay>,
     @InjectRepository(ScheduleResource)
-    private readonly resourcesRepo: Repository<ScheduleResource>,
+    private readonly resourcesRepoDb: Repository<ScheduleResource>,
     @InjectRepository(ScheduleEntry)
-    private readonly entriesRepo: Repository<ScheduleEntry>,
+    private readonly entriesRepoDb: Repository<ScheduleEntry>,
     @InjectRepository(ScheduleAutoSettings)
     private readonly autoSettingsRepo: Repository<ScheduleAutoSettings>,
     // Só pra checar se uma apresentação já tem nota (repo direto, sem
@@ -122,7 +131,43 @@ export class ScheduleService {
     private readonly eventsService: EventsService,
     private readonly notificationsService: NotificationsService,
     private readonly activityLogService: EventActivityLogService,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
+
+  // Enquanto um DayWorkspace está ativo (ver withDayWorkspace), os três
+  // repositórios do cronograma apontam pra ele, em memória; fora dele,
+  // pro banco. Assim as reconciliações rodam iguais nos dois modos.
+  private readonly workspaceStorage = new AsyncLocalStorage<DayWorkspace>();
+
+  private get daysRepo(): Repository<ScheduleDay> {
+    return this.workspaceStorage.getStore()?.daysRepo ?? this.daysRepoDb;
+  }
+
+  private get resourcesRepo(): Repository<ScheduleResource> {
+    return (
+      this.workspaceStorage.getStore()?.resourcesRepo ?? this.resourcesRepoDb
+    );
+  }
+
+  private get entriesRepo(): Repository<ScheduleEntry> {
+    return this.workspaceStorage.getStore()?.entriesRepo ?? this.entriesRepoDb;
+  }
+
+  // Roda `work` com o dia carregado em memória e grava só a diferença no
+  // fim, tudo numa transação (ver DayWorkspace). Erro dentro de `work`
+  // desfaz tudo. Só pra operações que mexem num único dia.
+  private withDayWorkspace<T>(
+    day: ScheduleDay,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.dataSource.transaction(async (manager) => {
+      const workspace = await DayWorkspace.load(manager, day);
+      const result = await this.workspaceStorage.run(workspace, work);
+      await workspace.flush(manager);
+      return result;
+    });
+  }
 
   // Sem linha salva = padrão. Não cria a linha na leitura.
   private async getAutoSettingsByAlias(
@@ -536,13 +581,21 @@ export class ScheduleService {
       .where('program.aliasId = :aliasId', { aliasId: day.aliasId })
       .getMany();
 
-    const scheduled = await this.entriesRepo
-      .createQueryBuilder('entry')
-      .innerJoin('entry.resource', 'resource')
-      .where('resource.scheduleDayId = :dayId', { dayId })
-      .andWhere('entry.type = :type', { type: ScheduleEntryType.PRESENTATION })
-      .select(['entry.teamId', 'entry.categoryId'])
-      .getMany();
+    // Dentro de um DayWorkspace (autoGenerate) o dia está em memória: o
+    // banco ainda mostraria as apresentações que acabaram de ser apagadas.
+    const workspace = this.workspaceStorage.getStore();
+    const scheduled =
+      workspace && workspace.dayId === dayId
+        ? workspace.presentationPairs()
+        : await this.entriesRepoDb
+            .createQueryBuilder('entry')
+            .innerJoin('entry.resource', 'resource')
+            .where('resource.scheduleDayId = :dayId', { dayId })
+            .andWhere('entry.type = :type', {
+              type: ScheduleEntryType.PRESENTATION,
+            })
+            .select(['entry.teamId', 'entry.categoryId'])
+            .getMany();
     const scheduledKeys = new Set(
       scheduled.map((e) => `${e.teamId}:${e.categoryId}`),
     );
@@ -677,11 +730,31 @@ export class ScheduleService {
       const teamName = entry.teamId
         ? (await this.teamsRepo.findOneBy({ id: entry.teamId }))?.name
         : null;
-      const view = await this.movePresentationWithWarmup(day, entry, dto);
+      // Relida dentro do workspace: a de cima veio do banco antes das
+      // linhas do dia serem travadas.
+      const view = await this.withDayWorkspace(day, async () =>
+        this.movePresentationWithWarmup(
+          day,
+          await this.findEntryInDayOrThrow(day.id, entry.id),
+          dto,
+        ),
+      );
       await this.notifyPresentationMoved(eventId, teamName, userId);
       return view;
     }
 
+    return this.withDayWorkspace(day, () =>
+      this.moveNonPresentationEntry(day, entry.id, dto),
+    );
+  }
+
+  private async moveNonPresentationEntry(
+    day: ScheduleDay,
+    entryId: string,
+    dto: MoveScheduleEntryDto,
+  ): Promise<ScheduleEntryView> {
+    const dayId = day.id;
+    const entry = await this.findEntryInDayOrThrow(dayId, entryId);
     await this.findResourceOrThrow(dayId, dto.resourceId);
     const oldResourceId = entry.resourceId;
     // Cópias levantadas ANTES de mover: a ocorrência depende da posição
@@ -923,7 +996,7 @@ export class ScheduleService {
     dayId: string,
     entryId: string,
   ): Promise<void> {
-    await this.findDayOrThrow(eventId, dayId);
+    const day = await this.findDayOrThrow(eventId, dayId);
     const entry = await this.findEntryInDayOrThrow(dayId, entryId);
     if (entry.type === ScheduleEntryType.PRESENTATION) {
       await this.assertPresentationHasNoScores(entry.id);
@@ -971,6 +1044,18 @@ export class ScheduleService {
     // "Aguardando disponibilidade da equipe") em uma consulta só —
     // excluir a apresentação sem eles deixaria buracos órfãos na
     // timeline que dessincronizam o horário do resto do dia.
+    // Remoção e reconciliações em memória, gravadas de uma vez (ver
+    // DayWorkspace); a entry é relida lá dentro, já com o dia travado.
+    await this.withDayWorkspace(day, () =>
+      this.removeEntryInDay(dayId, entryId),
+    );
+  }
+
+  private async removeEntryInDay(
+    dayId: string,
+    entryId: string,
+  ): Promise<void> {
+    const entry = await this.findEntryInDayOrThrow(dayId, entryId);
     const presentationId =
       entry.type === ScheduleEntryType.PRESENTATION ? entry.id : null;
 
@@ -1016,6 +1101,15 @@ export class ScheduleService {
     dto: AutoGenerateScheduleDto,
   ): Promise<ScheduleDayView> {
     const day = await this.findDayOrThrow(eventId, dayId);
+    // Geração inteira em memória e gravada de uma vez (ver DayWorkspace):
+    // antes eram milhares de consultas (cada inserção relia e regravava a
+    // pista toda). A resposta é montada do banco, depois do commit.
+    await this.withDayWorkspace(day, () => this.generateDay(eventId, day));
+    const [hydrated] = await this.hydrateDays([day]);
+    return hydrated;
+  }
+
+  private async generateDay(eventId: string, day: ScheduleDay): Promise<void> {
     const mats = await this.resourcesRepo.find({
       where: { scheduleDayId: day.id, supportsPresentations: true },
       order: { order: 'ASC' },
@@ -1394,9 +1488,6 @@ export class ScheduleService {
     for (const runner of runners) await runner.finish();
 
     await this.syncSpecialEventEnds(day.id, specialEntryIds);
-
-    const [hydrated] = await this.hydrateDays([day]);
-    return hydrated;
   }
 
   // Todo evento especial termina no MESMO horário em todas as pistas
@@ -2361,14 +2452,23 @@ export class ScheduleService {
     // Escopado ao dia — a mesma equipe/categoria pode (e deve, num
     // evento de vários dias) se apresentar uma vez em cada dia; só
     // duas vezes no MESMO dia é que não faz sentido.
-    const alreadyScheduled = await this.entriesRepo
-      .createQueryBuilder('entry')
-      .innerJoin('entry.resource', 'resource')
-      .where('resource.scheduleDayId = :dayId', { dayId })
-      .andWhere('entry.type = :type', { type: ScheduleEntryType.PRESENTATION })
-      .andWhere('entry.teamId = :teamId', { teamId })
-      .andWhere('entry.categoryId = :categoryId', { categoryId })
-      .getCount();
+    const workspace = this.workspaceStorage.getStore();
+    const alreadyScheduled =
+      workspace && workspace.dayId === dayId
+        ? workspace
+            .presentationPairs()
+            .filter((p) => p.teamId === teamId && p.categoryId === categoryId)
+            .length
+        : await this.entriesRepoDb
+            .createQueryBuilder('entry')
+            .innerJoin('entry.resource', 'resource')
+            .where('resource.scheduleDayId = :dayId', { dayId })
+            .andWhere('entry.type = :type', {
+              type: ScheduleEntryType.PRESENTATION,
+            })
+            .andWhere('entry.teamId = :teamId', { teamId })
+            .andWhere('entry.categoryId = :categoryId', { categoryId })
+            .getCount();
     if (alreadyScheduled > 0) {
       throw new ConflictException(
         'Essa apresentação já está agendada neste dia.',
