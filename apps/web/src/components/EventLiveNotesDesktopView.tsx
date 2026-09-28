@@ -338,11 +338,19 @@ export function EventLiveNotesDesktopView({
               {notesTab === "mine" ? (
                 judgeQueueContent
               ) : (
-                <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+                <AdminNotesOverview
+                  eventId={event.aliasId}
+                  eventName={event.name}
+                  eventCompleted={event.status === "completed"}
+                />
               )}
             </>
           ) : isAdminOrAssessor ? (
-            <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+            <AdminNotesOverview
+                  eventId={event.aliasId}
+                  eventName={event.name}
+                  eventCompleted={event.status === "completed"}
+                />
           ) : assignment.isJudge ? (
             judgeQueueContent
           ) : isAthlete ? (

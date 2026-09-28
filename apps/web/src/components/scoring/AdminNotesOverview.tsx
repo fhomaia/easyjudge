@@ -24,9 +24,12 @@ import {
 interface AdminNotesOverviewProps {
   eventId: string;
   eventName: string;
+  // Evento concluído: chaves travadas (o backend recusa, ver
+  // CompletedEventLockGuard). Concluir já liberou notas e resultado.
+  eventCompleted?: boolean;
 }
 
-export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewProps) {
+export function AdminNotesOverview({ eventId, eventName, eventCompleted = false }: AdminNotesOverviewProps) {
   const [entries, setEntries] = useState<AdminOverviewEntry[] | null>(null);
   const [days, setDays] = useState<ReleaseDay[] | null>(null);
   const [activeDayId, setActiveDayId] = useState<string | null>(null);
@@ -160,14 +163,16 @@ export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewPro
                   {days.length > 1 ? "Liberar todas as categorias do dia" : "Liberar todas as categorias"}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Liga ou desliga de uma vez. Pra liberar aos poucos, use as chaves de cada categoria.
+                  {eventCompleted
+                    ? "Evento concluído. As notas e o resultado foram liberados e a contestação foi encerrada."
+                    : "Liga ou desliga de uma vez. Pra liberar aos poucos, use as chaves de cada categoria."}
                 </p>
                 <ReleaseToggles
                   className="mt-3"
                   scoresReleased={activeDay.scoresReleased}
                   contestationReleased={activeDay.contestationReleased}
                   resultsReleased={activeDay.resultsReleased}
-                  disabled={savingKey !== null}
+                  disabled={eventCompleted || savingKey !== null}
                   onChange={(changes) =>
                     void changeRelease({ dayId: activeDay.dayId, ...changes }, activeDay.dayId)
                   }
@@ -195,7 +200,7 @@ export function AdminNotesOverview({ eventId, eventName }: AdminNotesOverviewPro
                       scoresReleased={category.scoresReleased}
                       contestationReleased={category.contestationReleased}
                       resultsReleased={category.resultsReleased}
-                      disabled={savingKey !== null}
+                      disabled={eventCompleted || savingKey !== null}
                       onChange={(changes) =>
                         void changeRelease(
                           { dayId: activeDay.dayId, categoryId: category.categoryId, ...changes },

@@ -279,8 +279,9 @@ export function EventLiveSchedulePage() {
         new Set(startedEntryIds),
         new Map(presentationStarts.map((p) => [p.scheduleEntryId, p.startedAt])),
         today,
+        event?.status === "completed",
       ),
-    [days, completedEntryIdSet, startedEntryIds, presentationStarts, today],
+    [days, completedEntryIdSet, startedEntryIds, presentationStarts, today, event?.status],
   );
   const currentItem = live.next;
   const currentEntryId = currentItem?.entry.id ?? null;

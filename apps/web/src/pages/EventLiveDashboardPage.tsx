@@ -291,7 +291,14 @@ export function EventLiveDashboardPage() {
   const live = useMemo(
     () =>
       days && event
-        ? computeEventLiveSchedule(days, completedEntryIdSet, startedEntryIdSet, presentationStartTimes, isoToday)
+        ? computeEventLiveSchedule(
+            days,
+            completedEntryIdSet,
+            startedEntryIdSet,
+            presentationStartTimes,
+            isoToday,
+            event.status === "completed",
+          )
         : null,
     [days, event, completedEntryIdSet, startedEntryIdSet, presentationStartTimes, isoToday],
   );
@@ -840,7 +847,7 @@ export function EventLiveDashboardPage() {
       open={completeDialogOpen}
       onOpenChange={setCompleteDialogOpen}
       title="Concluir evento?"
-      description="Esta ação encerra o evento em definitivo. Deseja prosseguir?"
+      description="Esta ação encerra o evento em definitivo. As notas e o resultado de todas as categorias serão liberados, a contestação será encerrada e as contestações abertas serão marcadas como resolvidas. Depois disso o evento fica só para consulta. Deseja prosseguir?"
       confirmLabel="Concluir"
       confirmingLabel="Concluindo..."
       onConfirm={handleComplete}

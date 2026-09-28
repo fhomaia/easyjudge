@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { OnEvent } from '@nestjs/event-emitter';
 import { Repository } from 'typeorm';
 import { CategoryDayRelease } from '../entities/category-day-release.entity';
 import { EventsService } from '../../events/services/events.service';
@@ -166,6 +167,29 @@ export class ReleasesService {
 
   // Sem `categoryId` = todas as categorias com apresentação no dia (a
   // chave do dia). Notifica só o que passou de fechado pra liberado.
+  // Concluir o evento (decisão do usuário, 2026-09-28): libera notas e
+  // resultado de todas as categorias em todos os dias, fecha a
+  // contestação e resolve as contestações que ficaram abertas. Depois
+  // disso as chaves ficam travadas (CompletedEventLockGuard). Roda via
+  // `emitAsync` ANTES do status mudar (ver EventsService.completeEvent):
+  // se falhar, o evento continua iniciado e dá pra tentar de novo.
+  @OnEvent('event.completing', { promisify: true, suppressErrors: false })
+  async finalizeForCompletion(payload: { aliasId: string }): Promise<void> {
+    const days = await this.scheduleService.getDays(payload.aliasId);
+    for (const group of presentationCategoriesByDay(days)) {
+      await this.setRelease(
+        payload.aliasId,
+        { dayId: group.day.id },
+        {
+          scoresReleased: true,
+          contestationReleased: false,
+          resultsReleased: true,
+        },
+      );
+    }
+    await this.scheduleService.resolveAllOpenContestations(payload.aliasId);
+  }
+
   async setRelease(
     eventId: string,
     scope: { dayId: string; categoryId?: string },

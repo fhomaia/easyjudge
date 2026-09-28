@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Event } from './entities/event.entity';
 import { EventMember } from './entities/event-member.entity';
@@ -13,6 +14,7 @@ import { EventsService } from './services/events.service';
 import { EventStaffService } from './services/event-staff.service';
 import { EventActivityLogService } from './services/event-activity-log.service';
 import { EventMemberGuard } from './guards/event-member.guard';
+import { CompletedEventLockGuard } from './guards/completed-event-lock.guard';
 import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
@@ -45,6 +47,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     EventStaffService,
     EventActivityLogService,
     EventMemberGuard,
+    // Evento concluído é só para consulta (ver CompletedEventLockGuard).
+    { provide: APP_GUARD, useClass: CompletedEventLockGuard },
   ],
   exports: [EventsService, EventMemberGuard, EventActivityLogService],
 })

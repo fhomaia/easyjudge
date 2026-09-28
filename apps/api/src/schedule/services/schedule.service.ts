@@ -2826,6 +2826,31 @@ export class ScheduleService {
     await this.entriesRepo.save(entry);
   }
 
+  // Concluir o evento resolve automaticamente toda contestação que
+  // ficou aberta (decisão do usuário, 2026-09-28): evento concluído não
+  // tem mais contestação. Ver ReleasesService.finalizeForCompletion.
+  async resolveAllOpenContestations(eventId: string): Promise<void> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const days = await this.daysRepo.find({
+      where: { aliasId: event.aliasId },
+      select: ['id'],
+    });
+    if (days.length === 0) return;
+    const resources = await this.resourcesRepo.find({
+      where: { scheduleDayId: In(days.map((d) => d.id)) },
+      select: ['id'],
+    });
+    if (resources.length === 0) return;
+    await this.entriesRepo.update(
+      {
+        resourceId: In(resources.map((r) => r.id)),
+        contestationRequestedAt: Not(IsNull()),
+        contestationResolvedAt: IsNull(),
+      },
+      { contestationResolvedAt: new Date() },
+    );
+  }
+
   // Busca a entry SEM popular a relação `resource` de propósito — se
   // ela viesse hidratada e depois mudássemos só a coluna crua
   // `entry.resourceId` (ver moveEntry), o TypeORM monta o UPDATE a

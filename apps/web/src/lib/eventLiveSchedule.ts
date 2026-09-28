@@ -327,11 +327,16 @@ export function computeEventLiveSchedule(
   startedEntryIds: Set<string> = new Set(),
   startTimes: Map<string, string> = new Map(),
   today: string = toIsoDate(new Date()),
+  eventCompleted = false,
 ): EventLiveSchedule {
   const sortedDays = [...filterRemovedFromSchedule(days)].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
-  const closedDayDates = new Set(sortedDays.filter((d) => d.date < today).map((d) => d.date));
+  // Evento concluído encerra todos os dias, mesmo o de hoje (2026-09-28):
+  // sem "próxima" nem "aquecendo" sobrando de apresentação pulada.
+  const closedDayDates = new Set(
+    sortedDays.filter((d) => eventCompleted || d.date < today).map((d) => d.date),
+  );
 
   const allItems: LiveScheduleItem[] = [];
   const allWarmups: (NextWarmup & { dayDate: string; linkedEntryId: string | null })[] = [];
@@ -397,18 +402,6 @@ export function computeEventLiveSchedule(
     }
   }
 
-  allWarmups.sort((a, b) => (a.dayDate === b.dayDate ? a.start - b.start : a.dayDate < b.dayDate ? -1 : 1));
-  // Próximo aquecimento ainda não concluído — "concluído" aqui é o
-  // sinal real da APRESENTAÇÃO que ele aquece (ver
-  // ScoringService.getCompletedPresentationIds), não a ordem/relógio:
-  // um aquecimento não tem conclusão própria, só faz sentido dizer que
-  // passou quando a apresentação ligada a ele já foi pontuada.
-  const nextWarmup =
-    allWarmups.find(
-      (w) =>
-        !closedDayDates.has(w.dayDate) && !(w.linkedEntryId && completedEntryIds.has(w.linkedEntryId)),
-    ) ?? null;
-
   allItems.sort((a, b) => (a.dayDate === b.dayDate ? a.start - b.start : a.dayDate < b.dayDate ? -1 : 1));
 
   // "Apresentações X/Y" só conta apresentações de verdade — os outros
@@ -435,6 +428,22 @@ export function computeEventLiveSchedule(
   const livePresentationIds = new Set(
     [...latestStartedByResource.values()].map((v) => v.id).filter((id) => !completedEntryIds.has(id)),
   );
+  allWarmups.sort((a, b) => (a.dayDate === b.dayDate ? a.start - b.start : a.dayDate < b.dayDate ? -1 : 1));
+  // Próximo aquecimento ainda não concluído — um aquecimento não tem
+  // conclusão própria: passou quando a APRESENTAÇÃO que ele aquece saiu
+  // da fila (mesma regra de `pending` abaixo). Antes olhava só a súmula
+  // enviada, e o aquecimento de uma apresentação pulada ficava preso no
+  // card "Aquecendo" (2026-09-28).
+  const nextWarmup =
+    allWarmups.find(
+      (w) =>
+        !closedDayDates.has(w.dayDate) &&
+        !(
+          w.linkedEntryId &&
+          allDoneEntryIds.has(w.linkedEntryId) &&
+          !livePresentationIds.has(w.linkedEntryId)
+        ),
+    ) ?? null;
   // Uma apresentação pulada que é iniciada depois volta pra fila, mesmo
   // tendo ficado para trás do ponteiro (ver computeDoneEntryIds).
   const pending = allItems.filter(

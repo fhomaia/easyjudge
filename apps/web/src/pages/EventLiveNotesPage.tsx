@@ -461,13 +461,21 @@ export function EventLiveNotesPage() {
                 judgeQueueContent
               ) : (
                 <div className="p-4">
-                  <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+                  <AdminNotesOverview
+                  eventId={event.aliasId}
+                  eventName={event.name}
+                  eventCompleted={event.status === "completed"}
+                />
                 </div>
               )}
             </>
           ) : isAdminOrAssessor ? (
             <div className="p-4">
-              <AdminNotesOverview eventId={event.aliasId} eventName={event.name} />
+              <AdminNotesOverview
+                  eventId={event.aliasId}
+                  eventName={event.name}
+                  eventCompleted={event.status === "completed"}
+                />
             </div>
           ) : assignment.isJudge ? (
             judgeQueueContent

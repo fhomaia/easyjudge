@@ -432,6 +432,13 @@ export class EventsService {
       throw new ConflictException('Só é possível concluir um evento iniciado.');
     }
 
+    // Libera notas/resultado e encerra as contestações antes de concluir
+    // (ver ReleasesService.finalizeForCompletion). Evento em vez de
+    // chamada direta pra não criar ciclo events -> scoring.
+    await this.eventEmitter.emitAsync('event.completing', {
+      aliasId: event.aliasId,
+    });
+
     event.status = EventStatus.COMPLETED;
     event.completedAt = new Date();
     const saved = await this.eventsRepo.save(event);

@@ -40,11 +40,13 @@ import {
   type UserProfile,
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
 
 const PAGE_SIZE = 6;
 
 export function ProgramsPage() {
   const { id } = useParams<{ id: string }>();
+  useEventSetupGuard(id);
   const notificationsUnreadCount = useNotificationsUnreadCount(id);
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
