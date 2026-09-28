@@ -1624,6 +1624,38 @@ antes do push).
   situação das súmulas quanto no "Apresentações x / y" e no "Progresso
   do dia" do jurado. Substitui a regra de `0aa955d` (desistência contava
   como concluída). Continua aparecendo na lista, com o selo.
+- **Legalidade (relato da jurada Louise, Batalha)**: nada era bug de
+  `requiresCode`: os tipos que ela lançou sem especificação não exigiam.
+  Migration `LegalityDeductionsRequireCode` marca "Skill Performed Out
+  of Level" (9 modelos oficiais + `IASF_DEFAULT_DEDUCTIONS`) e "Division
+  Violation" (USS) como exigindo especificação; sistemas dos usuários
+  não mudam. A especificação (`DEDUCTION_CODE_SET` mais recente) agora
+  vai no detalhe da súmula (`legality.deductions[].code`) e no PDF;
+  antes não chegava em lugar nenhum.
+- **Editar o tempo da dedução** (`LegalityDeductionsPanel`): aceita
+  "1:30", "1.30", "1 30", "130" (`parseElapsed`), salva também ao sair
+  do campo, texto inválido deixa o campo aberto e vermelho (antes fechava
+  em silêncio voltando ao valor antigo), Esc/✕ cancelam
+  (`cancelledEditRef` evita o blur salvar). A dedução recriada mantém o
+  `clientCreatedAt` original (não pula pro topo) e reenvia a
+  especificação pro id novo (antes se perdia). O poll de 6 s da súmula
+  junta a fila local lida antes E depois da busca.
+- **Warning**: `WARNING_DEDUCTION` (`type: 'warning'`, valor 0) é
+  acrescentado por `getDeductionRulesForTemplate` ao fim da lista de
+  todo sistema, sem estar no template. Botão âmbar "Sem desconto",
+  descrição opcional (reusa `DEDUCTION_CODE_SET`, não bloqueia envio),
+  não conta pro Hit Zero (`lib/hitZero.ts`).
+- **Contestação com descrição e imagens**: `POST .../team/:id/contest`
+  virou multipart opcional (`description` até 1000, até 5 `images`
+  JPG/PNG/WEBP/GIF de até 10 MB, `contestationImageUploadOptions`).
+  Quantidade e tamanho conferidos no service (o multer só tem teto alto,
+  senão responde em inglês). Imagens sobem pro storage (`contestations/`)
+  só depois das checagens. Colunas novas `schedule_entries.
+  contestation_description`/`contestation_attachments` (migration
+  `AddContestationDetails`). `ContestationDialog` (programa) e
+  `ContestationDetails` (súmula do jurado e detalhe). Pra testar upload
+  local sem mandar pro R2 de produção, subir a API com as variáveis
+  `R2_*` vazias (o `.env` local tem as credenciais reais).
 - **Gotcha de teste**: `bulk-assign` da escala só funciona em GRUPO de
   critérios; num critério folha não faz nada e responde 201. Pra
   escalar folha, `PUT .../criteria/:id/resources/:rid/judges`.
