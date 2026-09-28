@@ -19,12 +19,10 @@ export enum ScoreEventKind {
   // jurado" pra tela de Notas (ScoringService.getMySubmittedEntryIds).
   SHEET_SUBMITTED = 'sheet_submitted',
   // Jurado da pista (qualquer um, não só o de Legalidade, desde
-  // 2026-09-24) clica "Iniciar" — marca o horário real de início da
-  // apresentação (ver ScoringService.getStartedPresentations/
-  // assertEventStarted). Cada "Iniciar" emite um evento novo (inclusive
-  // depois de zerar com "Reiniciar") — o cálculo de atraso usa sempre o
-  // PRIMEIRO (mais antigo) `timer_started` de cada apresentação, de
-  // qualquer jurado, nunca o mais recente.
+  // 2026-09-24) clica "Iniciar". Cada "Iniciar" emite um evento novo
+  // (inclusive depois de zerar com "Reiniciar"). O início da apresentação
+  // é a primeira atividade de qualquer jurado, "Iniciar" ou não (ver
+  // START_SIGNAL_KINDS em ScoringService, desde 2026-09-28).
   TIMER_STARTED = 'timer_started',
   // Jurado clica "Parar" — guarda o tempo TOTAL marcado pelo cronômetro
   // (`presentationElapsedMs`), pra reabrir a apresentação depois mostrar

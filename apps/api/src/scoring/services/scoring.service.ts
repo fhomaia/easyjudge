@@ -57,6 +57,20 @@ import { NotificationAudience } from '../../notifications/enums/notification-aud
 // constante de 4 itens (mesmo racional de outros módulos deste
 // projeto). CUSTOM fica de fora de propósito: entra sempre por último,
 // ordenado por customFormatLabel (ver getEventResults).
+// O que conta como "a apresentação começou" (2026-09-28): a primeira
+// atividade de QUALQUER jurado, não só o "Iniciar". No Batalha, um
+// jurado lançava as notas sem apertar "Iniciar" e o outro, atrasado,
+// apertava depois: esse "Iniciar" atrasado virava o primeiro, disparava
+// "Apresentação iniciada", a apresentação voltava a aparecer ao vivo e o
+// atraso era recalculado. Rascunho e comentário ficam de fora: o jurado
+// pode escrever antes da equipe entrar.
+const START_SIGNAL_KINDS = [
+  ScoreEventKind.TIMER_STARTED,
+  ScoreEventKind.SCORE_SET,
+  ScoreEventKind.DEDUCTION_ADD,
+  ScoreEventKind.SHEET_SUBMITTED,
+];
+
 const MODALITY_DISPLAY_ORDER = [
   CategoryFormat.TEAM_CHEER,
   CategoryFormat.GROUP_STUNT,
@@ -1804,13 +1818,9 @@ export class ScoringService {
     return [...new Set([...withdrawnIds, ...submitted.map((r) => r.id)])];
   }
 
-  // Início real de cada apresentação pro card "Atraso atual": o primeiro
-  // TIMER_STARTED ou, se nenhum jurado deu "Iniciar", o primeiro registro
-  // de qualquer tipo (nota, dedução, rascunho, envio) — decisão do
-  // usuário (2026-09-25), pra o atraso não parar quando esquecem o
-  // "Iniciar". Separado de getStartedPresentations de propósito: aquele
-  // continua sendo SÓ o "Iniciar" (alimenta "Apresentando agora" e o
-  // aviso de avaliação pendente).
+  // Início real de cada apresentação pro card "Atraso atual" e pro "ao
+  // vivo" do painel: primeira atividade de qualquer jurado (ver
+  // START_SIGNAL_KINDS). Inclui o início sinalizado de eventos especiais.
   async getPresentationStartTimes(
     eventId: string,
   ): Promise<Array<{ scheduleEntryId: string; startedAt: string }>> {
@@ -1837,37 +1847,40 @@ export class ScoringService {
     }
     if (entryIds.length === 0) return specialStarts;
 
-    const rows = await this.scoreEventsRepo
-      .createQueryBuilder('e')
-      .select('e.schedule_entry_id', 'scheduleEntryId')
-      .addSelect(
-        'MIN(e.client_created_at) FILTER (WHERE e.kind = :timerStarted)',
-        'timerStartedAt',
-      )
-      .addSelect('MIN(e.client_created_at)', 'firstEventAt')
-      .where('e.schedule_entry_id IN (:...entryIds)', { entryIds })
-      .setParameter('timerStarted', ScoreEventKind.TIMER_STARTED)
-      .groupBy('e.schedule_entry_id')
-      .getRawMany<{
-        scheduleEntryId: string;
-        timerStartedAt: Date | null;
-        firstEventAt: Date;
-      }>();
+    const firstActivity = await this.getFirstActivityByEntry(entryIds);
     return [
-      ...rows.map((r) => ({
-        scheduleEntryId: r.scheduleEntryId,
-        startedAt: new Date(r.timerStartedAt ?? r.firstEventAt).toISOString(),
-      })),
+      ...Array.from(firstActivity.entries()).map(
+        ([scheduleEntryId, startedAt]) => ({
+          scheduleEntryId,
+          startedAt: startedAt.toISOString(),
+        }),
+      ),
       ...specialStarts,
     ];
   }
 
-  // Horário real de início de cada apresentação já iniciada (primeiro
-  // TIMER_STARTED — ver enum) — alimenta o card "Atraso atual" do
-  // painel Início (comparação feita no frontend, que já tem toda a
-  // lógica de hora agendada × relógio em lib/eventLiveSchedule.ts, sem
-  // duplicar aqui). Uma linha por apresentação, só as que já foram
-  // iniciadas por algum jurado (o primeiro que der "Iniciar").
+  // Primeira atividade (START_SIGNAL_KINDS) de qualquer jurado em cada
+  // apresentação, pelo horário do celular (os dados do Batalha mostraram
+  // 1 a 2 s de diferença pro servidor).
+  private async getFirstActivityByEntry(
+    entryIds: string[],
+  ): Promise<Map<string, Date>> {
+    if (entryIds.length === 0) return new Map();
+    const rows = await this.scoreEventsRepo
+      .createQueryBuilder('e')
+      .select('e.schedule_entry_id', 'scheduleEntryId')
+      .addSelect('MIN(e.client_created_at)', 'startedAt')
+      .where('e.schedule_entry_id IN (:...entryIds)', { entryIds })
+      .andWhere('e.kind IN (:...kinds)', { kinds: START_SIGNAL_KINDS })
+      .groupBy('e.schedule_entry_id')
+      .getRawMany<{ scheduleEntryId: string; startedAt: Date }>();
+    return new Map(rows.map((r) => [r.scheduleEntryId, new Date(r.startedAt)]));
+  }
+
+  // Apresentações já iniciadas e quando (primeira atividade de qualquer
+  // jurado, ver START_SIGNAL_KINDS). Alimenta "Apresentando agora" e o
+  // aviso de avaliação pendente. Mesma regra de getPresentationStartTimes,
+  // sem os eventos especiais.
   async getStartedPresentations(
     eventId: string,
   ): Promise<Array<{ scheduleEntryId: string; startedAt: string }>> {
@@ -1884,20 +1897,8 @@ export class ScoringService {
     }
     if (entryIds.length === 0) return [];
 
-    const events = await this.scoreEventsRepo.find({
-      where: {
-        scheduleEntryId: In(entryIds),
-        kind: ScoreEventKind.TIMER_STARTED,
-      },
-      order: { clientCreatedAt: 'ASC' },
-    });
-    const firstStartByEntry = new Map<string, Date>();
-    for (const event of events) {
-      if (!firstStartByEntry.has(event.scheduleEntryId)) {
-        firstStartByEntry.set(event.scheduleEntryId, event.clientCreatedAt);
-      }
-    }
-    return Array.from(firstStartByEntry.entries()).map(
+    const firstActivity = await this.getFirstActivityByEntry(entryIds);
+    return Array.from(firstActivity.entries()).map(
       ([scheduleEntryId, startedAt]) => ({
         scheduleEntryId,
         startedAt: startedAt.toISOString(),
@@ -1944,8 +1945,7 @@ export class ScoringService {
       events,
     );
 
-    const preExistingTimerStarts =
-      await this.getEntryIdsWithExistingTimerStart(rows);
+    const alreadyStarted = await this.getEntryIdsAlreadyStarted(rows);
 
     if (rows.length > 0) {
       await this.scoreEventsRepo
@@ -1957,11 +1957,7 @@ export class ScoringService {
         .execute();
     }
 
-    await this.notifyAfterScoreEventsInserted(
-      eventId,
-      rows,
-      preExistingTimerStarts,
-    );
+    await this.notifyAfterScoreEventsInserted(eventId, rows, alreadyStarted);
 
     return { savedIds: rows.map((r) => r.id) };
   }
@@ -2001,8 +1997,7 @@ export class ScoringService {
       caller.id,
     );
 
-    const preExistingTimerStarts =
-      await this.getEntryIdsWithExistingTimerStart(rows);
+    const alreadyStarted = await this.getEntryIdsAlreadyStarted(rows);
 
     if (rows.length > 0) {
       await this.scoreEventsRepo
@@ -2014,11 +2009,7 @@ export class ScoringService {
         .execute();
     }
 
-    await this.notifyAfterScoreEventsInserted(
-      eventId,
-      rows,
-      preExistingTimerStarts,
-    );
+    await this.notifyAfterScoreEventsInserted(eventId, rows, alreadyStarted);
 
     return { savedIds: rows.map((r) => r.id) };
   }
@@ -2141,8 +2132,8 @@ export class ScoringService {
         // Qualquer jurado escalado nesta pista usa o cronômetro (antes era
         // só o de Legalidade, pedido do usuário em 2026-09-24). Cada um
         // tem o próprio relógio (getSheet só lê os eventos do jurado), e
-        // o horário de início da apresentação é sempre o PRIMEIRO
-        // TIMER_STARTED de qualquer jurado (getStartedPresentations).
+        // o início da apresentação é a primeira atividade de qualquer
+        // jurado (START_SIGNAL_KINDS, getStartedPresentations).
         let isLegality = legalityCache.get(resourceId);
         if (isLegality === undefined) {
           isLegality = await this.judgingService.isLegalityJudgeForResource(
@@ -2322,20 +2313,19 @@ export class ScoringService {
     );
   }
 
-  // Dos `scheduleEntryId` com `TIMER_STARTED` no lote sendo gravado,
-  // quais JÁ tinham algum `TIMER_STARTED` antes deste envio — usado por
-  // `notifyAfterScoreEventsInserted` pra distinguir o primeiro início de
-  // verdade (dispara "avaliação pendente" pras outras apresentações
-  // ainda abertas) de um "Reiniciar" do cronômetro (não conta como novo
-  // início, mesma regra que `getStartedPresentations` já usa pro
-  // cálculo de atraso). Precisa ser consultado ANTES do insert do lote.
-  private async getEntryIdsWithExistingTimerStart(
+  // Das apresentações com atividade de início (START_SIGNAL_KINDS) no
+  // lote sendo gravado, quais JÁ tinham alguma antes deste envio: só a
+  // primeira atividade de todas conta como início (notificação
+  // "Apresentação iniciada" e "avaliação pendente"). O "Iniciar" de um
+  // segundo jurado, ou um "Reiniciar", não é início novo. Precisa ser
+  // consultado ANTES do insert do lote.
+  private async getEntryIdsAlreadyStarted(
     rows: ScoreEvent[],
   ): Promise<Set<string>> {
     const entryIds = [
       ...new Set(
         rows
-          .filter((r) => r.kind === ScoreEventKind.TIMER_STARTED)
+          .filter((r) => START_SIGNAL_KINDS.includes(r.kind))
           .map((r) => r.scheduleEntryId),
       ),
     ];
@@ -2343,8 +2333,9 @@ export class ScoringService {
     const existing = await this.scoreEventsRepo.find({
       where: {
         scheduleEntryId: In(entryIds),
-        kind: ScoreEventKind.TIMER_STARTED,
+        kind: In(START_SIGNAL_KINDS),
       },
+      select: ['scheduleEntryId'],
     });
     return new Set(existing.map((e) => e.scheduleEntryId));
   }
@@ -2357,19 +2348,57 @@ export class ScoringService {
   //   apresentação (qualquer jurado), notifica ALL — mesma regra de
   //   getCompletedPresentationIds (2026-09-25). Dedup por
   //   scheduleEntryId — não duplica com as súmulas dos outros jurados.
-  // - "Avaliação pendente": pra cada TIMER_STARTED do lote que for o
-  //   PRIMEIRO de verdade daquele scheduleEntryId (não um "Reiniciar"),
+  // - "Avaliação pendente": pra cada apresentação que COMEÇOU neste lote
+  //   (primeira atividade de qualquer jurado, ver START_SIGNAL_KINDS),
   //   busca outras apresentações do evento já iniciadas mas ainda não
   //   completas e notifica STAFF sobre CADA UMA delas (não sobre a que
   //   acabou de começar — é o lembrete "essa outra ainda está aberta").
   private async notifyAfterScoreEventsInserted(
     eventId: string,
     rows: ScoreEvent[],
-    preExistingTimerStarts: Set<string>,
+    alreadyStarted: Set<string>,
   ): Promise<void> {
     if (rows.length === 0) return;
     const event = await this.eventsService.findEventOrThrow(eventId);
 
+    const newlyStartedEntryIds = new Set(
+      rows
+        .filter(
+          (r) =>
+            START_SIGNAL_KINDS.includes(r.kind) &&
+            !alreadyStarted.has(r.scheduleEntryId),
+        )
+        .map((r) => r.scheduleEntryId),
+    );
+    // "Apresentação iniciada" — uma única vez por apresentação, na
+    // primeira atividade de qualquer jurado (mesmo critério de
+    // "newlyStarted" acima). O "Iniciar" de outro jurado depois não conta.
+    // Visível pra todo mundo do evento (a "avaliação pendente" é só STAFF).
+    for (const scheduleEntryId of newlyStartedEntryIds) {
+      const alreadyNotified = await this.notificationsService.existsForEntry(
+        event.aliasId,
+        NotificationType.PRESENTATION_STARTED,
+        scheduleEntryId,
+      );
+      if (alreadyNotified) continue;
+      const entry = await this.scheduleService.findEntryInEventOrThrow(
+        eventId,
+        scheduleEntryId,
+      );
+      const team = entry.teamId
+        ? await this.teamsRepo.findOneBy({ id: entry.teamId })
+        : null;
+      await this.notificationsService.createOncePerEntry(
+        event.aliasId,
+        NotificationType.PRESENTATION_STARTED,
+        NotificationAudience.ALL,
+        `Apresentação ${team?.name ?? 'Equipe'} iniciada`,
+        scheduleEntryId,
+      );
+    }
+
+    // Depois do "iniciada": quando a primeira atividade já é a súmula
+    // inteira (jurado sem internet ou sem "Iniciar"), a ordem fica certa.
     const submittedEntryIds = new Set(
       rows
         .filter((r) => r.kind === ScoreEventKind.SHEET_SUBMITTED)
@@ -2394,43 +2423,6 @@ export class ScoringService {
         NotificationType.PRESENTATION_COMPLETED,
         NotificationAudience.ALL,
         `Apresentação ${team?.name ?? 'Equipe'} concluída`,
-        scheduleEntryId,
-      );
-    }
-
-    const newlyStartedEntryIds = new Set(
-      rows
-        .filter(
-          (r) =>
-            r.kind === ScoreEventKind.TIMER_STARTED &&
-            !preExistingTimerStarts.has(r.scheduleEntryId),
-        )
-        .map((r) => r.scheduleEntryId),
-    );
-    // "Apresentação iniciada" — dispara uma única vez, no PRIMEIRO
-    // TIMER_STARTED de verdade de cada apresentação (mesmo critério de
-    // "newlyStarted" acima — reiniciar o cronômetro não conta como novo
-    // início). Diferente de "avaliação pendente" (só STAFF), esta é
-    // visível pra todo mundo do evento.
-    for (const scheduleEntryId of newlyStartedEntryIds) {
-      const alreadyNotified = await this.notificationsService.existsForEntry(
-        event.aliasId,
-        NotificationType.PRESENTATION_STARTED,
-        scheduleEntryId,
-      );
-      if (alreadyNotified) continue;
-      const entry = await this.scheduleService.findEntryInEventOrThrow(
-        eventId,
-        scheduleEntryId,
-      );
-      const team = entry.teamId
-        ? await this.teamsRepo.findOneBy({ id: entry.teamId })
-        : null;
-      await this.notificationsService.createOncePerEntry(
-        event.aliasId,
-        NotificationType.PRESENTATION_STARTED,
-        NotificationAudience.ALL,
-        `Apresentação ${team?.name ?? 'Equipe'} iniciada`,
         scheduleEntryId,
       );
     }
