@@ -1749,6 +1749,29 @@ dois em Oregon; motivo do valor alto não investigado), e o mover fazia
 - Testado: tela pelo usuário (slider e resumo); PDF gerado no Node com
   dados sintéticos (rolldown + `pdftoppm`).
 
+## Endereço do evento, menu ⋯ do Início e espectadores (2026-09-29)
+
+- **`Event.address`** (varchar 300, opcional, migration
+  `AddEventAddress`, rodada no Neon pelo usuário antes do push): campo
+  "Endereço (opcional)" em `EventFormFields` (criar e "Dados do
+  evento"), copiado no `publishEvent` junto de `location`/`venue`.
+  Exibido só no Início do ao vivo (`EventAddressLink`: link pro Google
+  Maps buscando nome do local + endereço + cidade).
+- **Menu ⋯ do Início**: no computador (`EventLiveDesktopView`) o botão
+  só funcionava com evento publicado (só tinha "Reverter publicação");
+  no celular não existia. Agora os dois têm "Gerenciar equipe"
+  (admin/assessor, fora de concluído) e "Reverter publicação" (só
+  `published`). A tela de acessos recebe `state: { from: "live" }` e o
+  "Sair" volta pro Início em vez do Setup.
+- **"Espectadores" conta atletas** (pedido do usuário): em
+  `EventsService.getMemberRoleCounts` a chave `spectator` vira o número
+  de pessoas com papel espectador OU atleta (cada uma uma vez). Vale pro
+  card do Início e pras Métricas; "Atletas" continua só atleta. Sem
+  atleta no banco local, a soma não foi testada com dado real.
+- **Popup de contestação**: botões `h-9`, centralizados, rótulo
+  "Enviar" (o título já diz "Solicitar contestação"), cabem lado a lado
+  no celular.
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
