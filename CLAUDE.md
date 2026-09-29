@@ -1939,6 +1939,17 @@ fato pendente:
   verificar erros de tipo sem risco de reescrever nada, usar `npx tsc
   --noEmit -p .` (funciona de verdade em `apps/api`, diferente do
   `apps/web` — ver gotcha do `tsc -b` acima).
+- **Tela rolando sozinha ao abrir um `Select` por toque no celular**
+  (2026-09-29): o posicionador do Base UI é `absolute` por padrão, e ao
+  abrir por toque ele faz `scrollIntoView` na opção selecionada ANTES de
+  posicionar a lista (ela ainda está no fim do documento, fora da tela).
+  O Chrome no celular rolava a tela até lá, mesmo com a rolagem travada
+  por um popup, e voltava devagar. Corrigido com
+  `positionMethod="fixed"` no `SelectContent` (`components/ui/select.tsx`),
+  valendo pra todo seletor. `alignItemWithTrigger` NÃO era a causa (o
+  Base UI já o ignora quando a lista é aberta por toque); voltou pro
+  padrão `true`. Só reproduz com toque de verdade (DevTools em modo
+  celular); clique de mouse e toque sintético por JS não mostram o bug.
 - **Input `type="number"` controlado direto por `number` state
   (`value={x}` + `onChange={(e) => setX(Number(e.target.value))}`)
   nunca fica vazio pro usuário apagar e digitar de novo** — apagar o
