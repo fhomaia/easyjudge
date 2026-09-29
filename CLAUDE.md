@@ -1755,13 +1755,20 @@ dois em Oregon; motivo do valor alto não investigado), e o mover fazia
   `AddEventAddress`, rodada no Neon pelo usuário antes do push): campo
   "Endereço (opcional)" em `EventFormFields` (criar e "Dados do
   evento"), copiado no `publishEvent` junto de `location`/`venue`.
-  Exibido só no Início do ao vivo (`EventAddressLink`: link pro Google
-  Maps buscando nome do local + endereço + cidade).
+  Exibido só nos cards da Home (`EventLocation`, lista e grade):
+  "endereço · cidade/UF" numa linha, endereço como link pro Google Maps
+  (busca nome do local + endereço + cidade, `stopPropagation` pra não
+  abrir o evento), e o nome do local embaixo com ícone de prédio (os
+  cards nunca mostravam o nome do local antes).
 - **Menu ⋯ do Início**: no computador (`EventLiveDesktopView`) o botão
   só funcionava com evento publicado (só tinha "Reverter publicação");
   no celular não existia. Agora os dois têm "Gerenciar equipe"
   (admin/assessor, fora de concluído) e "Reverter publicação" (só
-  `published`). A tela de acessos recebe `state: { from: "live" }` e o
+  `published`). No celular o topo do Início é uma linha só pra
+  qualquer papel/status: status à esquerda; play ("Ir para agora",
+  jurado, degradê igual ao do desktop), documentos e ⋯ à direita
+  (`quickActions`); "Concluir evento" virou item do ⋯ no celular (no
+  desktop continua botão). A tela de acessos recebe `state: { from: "live" }` e o
   "Sair" volta pro Início em vez do Setup.
 - **"Espectadores" conta atletas** (pedido do usuário): em
   `EventsService.getMemberRoleCounts` a chave `spectator` vira o número
