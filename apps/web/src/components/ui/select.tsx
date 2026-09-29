@@ -76,6 +76,12 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
+        // fixed em vez do padrão absolute: ao abrir por toque o Base UI faz
+        // scrollIntoView na opção selecionada antes de posicionar a lista,
+        // quando ela ainda está no fim do documento. Com absolute o celular
+        // rolava a tela inteira até lá (mesmo com a rolagem travada pelo
+        // popup) e voltava devagar.
+        positionMethod="fixed"
         className="isolate z-50"
       >
         <SelectPrimitive.Popup
