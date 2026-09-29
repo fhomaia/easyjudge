@@ -189,13 +189,13 @@ export function ScheduleTableView({
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border/60">
-            <th className="sticky left-0 top-0 z-20 min-w-24 border-r border-border/40 bg-card px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+            <th className="sticky left-0 top-0 z-20 min-w-14 border-r border-border/40 bg-card px-2 py-2 text-left text-xs font-medium text-muted-foreground sm:min-w-24 sm:px-3">
               Horário
             </th>
             {sortedResources.map((resource) => (
               <th
                 key={resource.id}
-                className="sticky top-0 z-10 min-w-40 border-r border-border/30 bg-card px-3 py-2 text-left text-xs font-medium text-muted-foreground last:border-r-0"
+                className="sticky top-0 z-10 min-w-32 border-r border-border/30 bg-card px-2 py-2 text-left text-xs font-medium text-muted-foreground last:border-r-0 sm:min-w-40 sm:px-3"
               >
                 <span className="inline-flex items-center gap-1.5">
                   <span
@@ -214,7 +214,7 @@ export function ScheduleTableView({
               key={rowStart}
               className="border-b border-border/40 last:border-b-0"
             >
-              <td className="sticky left-0 z-10 border-r border-border/40 bg-card px-3 py-2 align-top text-xs font-medium text-muted-foreground">
+              <td className="sticky left-0 z-10 border-r border-border/40 bg-card px-2 py-2 align-top text-xs sm:px-3 font-medium text-muted-foreground">
                 {formatMinutes(rowStart)}
               </td>
               {sortedResources.map((resource, resourceIndex) => {
@@ -273,7 +273,7 @@ export function ScheduleTableView({
               célula do último evento (ver comentário de
               resourceEndMinutes acima). */}
           <tr className="border-t-2 border-dashed border-border/60">
-            <td className="sticky left-0 z-10 border-r border-border/40 bg-card px-3 py-2 align-top text-xs text-muted-foreground/60">
+            <td className="sticky left-0 z-10 border-r border-border/40 bg-card px-2 py-2 align-top text-xs sm:px-3 text-muted-foreground/60">
               {rowStarts.length === 0 ? "—" : "+"}
             </td>
             {sortedResources.map((resource, index) => (

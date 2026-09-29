@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/formatDate";
 import { listVariants } from "@/lib/motionVariants";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
+import { useIsMobile } from "@/lib/useIsMobile";
 import {
   ApiError,
   categoriesApi,
@@ -80,6 +81,9 @@ export function CategoriesPage() {
   const [sort, setSort] = useState<CategorySortOption>("recent");
   const [teamSort, setTeamSort] = useState<"asc" | "desc" | null>(null);
   const [view, setView] = useState<CategoryViewMode>("list");
+  // Celular: sempre em cartões (a tabela não cabe na largura); a troca de
+  // visualização some do filtro.
+  const isMobile = useIsMobile();
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -224,9 +228,10 @@ export function CategoriesPage() {
     <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="relative flex-1 overflow-y-auto">
+      {/* `pt-14 sm:pt-0`: espaço da barra fixa do AppSidebar no celular. */}
+      <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
         <PageLoadingOverlay loading={(!event || categories === null) && !error} />
-        <div className="flex items-center justify-between px-10 pt-6">
+        <div className="flex items-center justify-between px-4 pt-6 sm:px-10">
           <button
             type="button"
             onClick={() => navigate(`/events/${id}/setup`)}
@@ -238,7 +243,7 @@ export function CategoriesPage() {
           <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
-        <div className="px-10 pb-10">
+        <div className="px-4 pb-10 sm:px-10">
           {error && <p className="mt-6 text-sm text-destructive">{error}</p>}
 
           {event && (
@@ -265,15 +270,15 @@ export function CategoriesPage() {
           )}
 
           {categories !== null && (
-            <div className="mt-6 grid gap-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
+            <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <h1 className="text-2xl font-semibold text-foreground">Categorias do evento</h1>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Gerencie todas as categorias que farão parte do seu evento.
                   </p>
                 </div>
-                <Button onClick={() => setCreateOpen(true)}>
+                <Button className="w-full sm:w-auto" onClick={() => setCreateOpen(true)}>
                   <Plus data-icon="inline-start" />
                   Adicionar categoria
                 </Button>
@@ -300,7 +305,7 @@ export function CategoriesPage() {
                     <p className="py-16 text-center text-sm text-muted-foreground">
                       Nenhuma categoria encontrada com esses filtros.
                     </p>
-                  ) : view === "list" ? (
+                  ) : view === "list" && !isMobile ? (
                     <CategoryTable
                       categories={paginatedCategories}
                       teamCounts={teamCounts}
@@ -322,8 +327,10 @@ export function CategoriesPage() {
                         <CategoryGridItem
                           key={category.id}
                           category={category}
+                          teamCount={teamCounts.get(category.id) ?? 0}
                           onEdit={setEditTarget}
                           onDelete={setDeleteTarget}
+                          onViewTeams={setTeamsTarget}
                         />
                       ))}
                     </motion.div>

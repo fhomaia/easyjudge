@@ -101,7 +101,7 @@ export function CategoryTable({
                 <button
                   type="button"
                   onClick={() => onViewTeams(category)}
-                  className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                  className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                 >
                   {teamCounts.get(category.id) ?? 0}{" "}
                   {(teamCounts.get(category.id) ?? 0) === 1 ? "equipe" : "equipes"}

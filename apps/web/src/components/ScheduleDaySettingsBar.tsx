@@ -71,7 +71,10 @@ export function ScheduleDaySettingsBar({
   const matCount = sortedResources.filter((r) => r.supportsPresentations).length;
 
   return (
-    <div className="flex flex-wrap items-center justify-around gap-4 rounded-xl border border-border/60 bg-card p-4">
+    // Celular: seções empilhadas, alinhadas à esquerda e separadas por
+    // linhas (o `justify-around` com quebra de linha espalhava tudo de
+    // um jeito confuso). A partir de `sm`, a barra de sempre.
+    <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-around sm:gap-4">
       <div>
         <p className="mb-2 text-xs text-muted-foreground">Dias do evento</p>
         <ScheduleDayTabs
@@ -84,7 +87,7 @@ export function ScheduleDaySettingsBar({
         />
       </div>
 
-      <div className="hidden h-10 w-px bg-border sm:block" />
+      <div className="h-px w-full bg-border sm:h-10 sm:w-px" />
 
       <div
         key={`${day.id}:${day.startMinutes}:${day.endMinutes}:${day.defaultGapMinutes}`}
@@ -108,7 +111,7 @@ export function ScheduleDaySettingsBar({
           </div>
         </HeaderStat>
 
-        <div className="hidden h-10 w-px bg-border sm:block" />
+        <div className="h-px w-full bg-border sm:h-10 sm:w-px" />
 
         <HeaderStat icon={ArrowLeftRight} label="Intervalo entre apresentações">
           <div className="flex items-center gap-1">
@@ -124,7 +127,7 @@ export function ScheduleDaySettingsBar({
         </HeaderStat>
       </div>
 
-      <div className="hidden h-10 w-px bg-border sm:block" />
+      <div className="h-px w-full bg-border sm:h-10 sm:w-px" />
 
       <HeaderStat icon={LayoutGrid} label="Recursos (pistas)">
         {matCount} {matCount === 1 ? "pista" : "pistas"}
@@ -133,7 +136,7 @@ export function ScheduleDaySettingsBar({
       {sortedResources.length > 0 && (
         <>
           <div className="hidden h-10 w-px bg-border sm:block" />
-          <div className="flex flex-col gap-1">
+          <div className="-mt-1 flex flex-wrap gap-x-3 gap-y-1 pl-6 sm:mt-0 sm:flex-col sm:gap-1 sm:pl-0">
             {sortedResources.map((resource) => (
               <div key={resource.id} className="flex items-center gap-1.5 text-xs">
                 <span

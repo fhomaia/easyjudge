@@ -66,7 +66,7 @@ export function RegulationAdditionalDocuments({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex items-center gap-1.5 rounded-md border border-primary/40 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-primary/40 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
         >
           <Plus className="size-3.5" />
           Adicionar documento

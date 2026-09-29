@@ -28,7 +28,10 @@ function SelectableTemplateCard({
   onToggle: () => void;
 }) {
   return (
-    <div className="relative w-80 shrink-0">
+    // Um pouco mais estreito no celular, pra caber inteiro na tela e dar a
+    // pista de que a fileira rola pro lado. `flex`: o cartão estica até a
+    // altura do mais alto da fileira (todos com a mesma altura).
+    <div className="relative flex w-64 shrink-0 sm:w-80">
       <span
         aria-hidden="true"
         className={cn(
@@ -40,7 +43,7 @@ function SelectableTemplateCard({
       >
         <Check className="size-3.5" />
       </span>
-      <ScoringTemplateCard template={template} onClick={onToggle} className="w-80" />
+      <ScoringTemplateCard template={template} onClick={onToggle} className="w-64 sm:w-80" />
     </div>
   );
 }
@@ -107,9 +110,9 @@ export function ScoringTemplatesSummarySection({
   }
 
   return (
-    <div className="grid gap-4 rounded-lg border border-border/60 bg-card p-5">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 rounded-lg border border-border/60 bg-card p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-foreground">Sistemas de pontuação</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Sistemas de pontuação vinculados a este evento — disponíveis pra usar nas categorias.
@@ -118,7 +121,7 @@ export function ScoringTemplatesSummarySection({
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+          className="flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
         >
           <Link2 className="size-4" />
           Vincular sistema de pontuação
@@ -130,24 +133,9 @@ export function ScoringTemplatesSummarySection({
           Atribua um sistema de pontuação ao evento.
         </p>
       ) : (
-        <div className="grid gap-4">
-          {mySelected.length > 0 && (
-            <div className="grid gap-2">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                Meus sistemas de pontuação
-              </h3>
-              {renderRow(mySelected)}
-            </div>
-          )}
-          {systemSelected.length > 0 && (
-            <div className="grid gap-2">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                Pré-definidos
-              </h3>
-              {renderRow(systemSelected)}
-            </div>
-          )}
-        </div>
+        // Uma fileira só (pedido do usuário): os do usuário primeiro, depois
+        // os pré-definidos, sem subtítulo separando.
+        renderRow([...mySelected, ...systemSelected])
       )}
 
       <LinkScoringTemplatesDialog

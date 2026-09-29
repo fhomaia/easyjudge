@@ -83,9 +83,10 @@ export function EventStaffPage() {
     <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="relative flex-1 overflow-y-auto">
+      {/* `pt-14 sm:pt-0`: espaço da barra fixa do AppSidebar no celular. */}
+      <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
         <PageLoadingOverlay loading={!event && !error} />
-        <div className="flex items-center justify-between px-10 pt-6">
+        <div className="flex items-center justify-between px-4 pt-6 sm:px-10">
           <button
             type="button"
             onClick={() => navigate(cameFromLive ? `/events/${id}/live` : `/events/${id}/setup`)}
@@ -97,13 +98,13 @@ export function EventStaffPage() {
           <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
-        <div className="px-10 pb-10">
+        <div className="px-4 pb-10 sm:px-10">
           {error && <p className="mt-6 text-sm text-destructive">{error}</p>}
 
           {event && (
-            <div className="grid gap-6">
-              <div className="mt-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <UserCog className="size-5" />
                   </div>
@@ -116,9 +117,9 @@ export function EventStaffPage() {
                 </div>
 
                 {isAdmin && (
-                  <Button onClick={() => setCreateOpen(true)}>
+                  <Button className="w-full sm:w-auto" onClick={() => setCreateOpen(true)}>
                     <Plus data-icon="inline-start" />
-                    Adicionar pessoa
+                    Adicionar
                   </Button>
                 )}
               </div>
@@ -132,9 +133,9 @@ export function EventStaffPage() {
                     return (
                       <div
                         key={member.id}
-                        className="flex items-center justify-between gap-4 p-4"
+                        className="flex items-center justify-between gap-3 p-4 sm:gap-4"
                       >
-                        <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           <span
                             style={{
                               backgroundColor: getAvatarColor(member.userId ?? member.id),
@@ -144,8 +145,10 @@ export function EventStaffPage() {
                             {getInitials(member.firstName, member.lastName)}
                           </span>
                           <div className="min-w-0">
-                            <p className="flex items-center gap-2 truncate text-sm font-medium text-foreground">
-                              {member.firstName} {member.lastName}
+                            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-foreground">
+                              <span className="min-w-0 truncate">
+                                {member.firstName} {member.lastName}
+                              </span>
                               {member.isOwner && (
                                 <Badge
                                   variant="outline"
@@ -166,11 +169,20 @@ export function EventStaffPage() {
                             <p className="truncate text-xs text-muted-foreground">
                               {member.email}
                             </p>
+                            {/* Celular: papéis embaixo do email (ao lado não
+                                cabiam e cortavam a linha). */}
+                            <div className="mt-1.5 flex flex-wrap gap-1.5 sm:hidden">
+                              {member.roles.map((role) => (
+                                <Badge key={role} variant="secondary">
+                                  {EVENT_MEMBER_ROLE_LABELS[role]}
+                                </Badge>
+                              ))}
+                            </div>
                           </div>
                         </div>
 
                         <div className="flex shrink-0 items-center gap-3">
-                          <div className="flex flex-wrap justify-end gap-1.5">
+                          <div className="hidden flex-wrap justify-end gap-1.5 sm:flex">
                             {member.roles.map((role) => (
                               <Badge key={role} variant="secondary">
                                 {EVENT_MEMBER_ROLE_LABELS[role]}

@@ -35,16 +35,14 @@ export function CreateEventStaffMemberDialog({
   onOpenChange,
   onCreated,
 }: CreateEventStaffMemberDialogProps) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [roles, setRoles] = useState<Set<EventMemberRole>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function resetForm() {
-    setFirstName("");
-    setLastName("");
+    setFullName("");
     setEmail("");
     setRoles(new Set());
     setError(null);
@@ -73,9 +71,14 @@ export function CreateEventStaffMemberDialog({
     setError(null);
     setLoading(true);
     try {
+      // Um campo só de nome completo; a API continua recebendo nome e
+      // sobrenome, separados no primeiro espaço (mesma regra do cadastro,
+      // RegisterDialog). O `pattern` do campo garante as duas partes.
+      const name = fullName.trim().replace(/\s+/g, " ");
+      const i = name.indexOf(" ");
       const member = await eventStaffApi.create(eventId, {
-        firstName,
-        lastName,
+        firstName: name.slice(0, i),
+        lastName: name.slice(i + 1),
         email,
         roles: Array.from(roles),
       });
@@ -90,9 +93,9 @@ export function CreateEventStaffMemberDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="gap-7 p-10 sm:max-w-lg">
+      <DialogContent className="max-h-[92dvh] gap-5 overflow-y-auto p-6 sm:max-w-lg sm:gap-7 sm:p-10">
         <div className="grid gap-1.5">
-          <DialogTitle className="text-xl font-medium">Adicionar pessoa</DialogTitle>
+          <DialogTitle className="text-xl font-medium">Adicionar</DialogTitle>
           <DialogDescription>
             Cadastre alguém pra fazer parte do evento e escolha o(s) papel(is) dela. Se a pessoa
             ainda não tem conta na plataforma, o convite fica pendente até ela se cadastrar com
@@ -103,25 +106,17 @@ export function CreateEventStaffMemberDialog({
         <FormError message={error} />
 
         <form onSubmit={handleSubmit} className="grid gap-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="staff-first-name">Nome</Label>
-              <Input
-                id="staff-first-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="staff-last-name">Sobrenome</Label>
-              <Input
-                id="staff-last-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                required
-              />
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="staff-full-name">Nome completo</Label>
+            <Input
+              id="staff-full-name"
+              placeholder="Nome completo"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              pattern="\s*\S+\s+\S.*"
+              title="Informe o nome completo (nome e sobrenome)."
+              required
+            />
           </div>
 
           <div className="grid gap-2">
@@ -160,7 +155,7 @@ export function CreateEventStaffMemberDialog({
           </div>
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Adicionando..." : "Adicionar pessoa"}
+            {loading ? "Adicionando..." : "Adicionar"}
           </Button>
         </form>
       </DialogContent>

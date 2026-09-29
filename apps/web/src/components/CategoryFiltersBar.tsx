@@ -69,11 +69,15 @@ export function CategoryFiltersBar({
         />
       </div>
 
+      {/* Celular: modalidade na linha inteira, status e ordenação lado a
+          lado embaixo; a partir de `sm`, `contents` devolve os três pra
+          linha da barra, na ordem de sempre. */}
+      <div className="grid grid-cols-2 gap-2 sm:contents">
       <Select
         value={statusFilter}
         onValueChange={(value) => onStatusFilterChange(value as CategoryStatusFilter)}
       >
-        <SelectTrigger className="sm:w-48">
+        <SelectTrigger className="w-full min-w-0 sm:w-48">
           <SelectValue>{(value: CategoryStatusFilter) => STATUS_FILTER_LABELS[value]}</SelectValue>
         </SelectTrigger>
         <SelectContent>
@@ -89,7 +93,7 @@ export function CategoryFiltersBar({
         value={modalityFilter}
         onValueChange={(value) => onModalityFilterChange(value as CategoryModalityFilter)}
       >
-        <SelectTrigger className="sm:w-60">
+        <SelectTrigger className="order-first col-span-2 w-full min-w-0 sm:order-none sm:w-60">
           <SelectValue>
             {(value: CategoryModalityFilter) => MODALITY_FILTER_LABELS[value]}
           </SelectValue>
@@ -104,7 +108,7 @@ export function CategoryFiltersBar({
       </Select>
 
       <Select value={sort} onValueChange={(value) => onSortChange(value as CategorySortOption)}>
-        <SelectTrigger className="sm:w-44">
+        <SelectTrigger className="w-full min-w-0 sm:w-44">
           <SelectValue>{(value: CategorySortOption) => SORT_LABELS[value]}</SelectValue>
         </SelectTrigger>
         <SelectContent>
@@ -115,8 +119,10 @@ export function CategoryFiltersBar({
           ))}
         </SelectContent>
       </Select>
+      </div>
 
-      <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+      {/* Sem troca de visualização no celular: lá é sempre em cartões. */}
+      <div className="hidden items-center gap-1 rounded-lg bg-muted p-1 sm:flex">
         <button
           type="button"
           onClick={() => onViewChange("list")}

@@ -80,7 +80,7 @@ export function EditProgramDialog({
 
   return (
     <Dialog open={program !== null} onOpenChange={handleOpenChange}>
-      <DialogContent className="gap-7 p-10 sm:max-w-lg">
+      <DialogContent className="max-h-[92dvh] gap-5 overflow-y-auto p-6 sm:max-w-lg sm:gap-7 sm:p-10">
         <div className="grid gap-1.5">
           <DialogTitle className="text-xl font-medium">Editar dados do programa</DialogTitle>
           <DialogDescription>Atualize os dados do programa.</DialogDescription>
@@ -89,7 +89,7 @@ export function EditProgramDialog({
         <FormError message={error} />
 
         {form && (
-          <form onSubmit={handleSubmit} className="grid gap-5">
+          <form onSubmit={handleSubmit} className="grid grid-cols-[minmax(0,1fr)] gap-5">
             <ProgramFormFields form={form} onChange={update} />
 
             <Button type="submit" disabled={loading} className="w-full">

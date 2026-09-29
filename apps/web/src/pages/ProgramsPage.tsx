@@ -41,6 +41,7 @@ import {
 } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 const PAGE_SIZE = 6;
 
@@ -69,6 +70,16 @@ export function ProgramsPage() {
   const [deleteTeamTarget, setDeleteTeamTarget] = useState<Team | null>(null);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
+  // Celular: os detalhes ficam embaixo da lista, então tocar num programa
+  // rola a tela até eles (no desktop estão lado a lado, não precisa).
+  const detailRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
+  function handleSelectProgram(programId: string) {
+    setSelectedProgramId(programId);
+    if (isMobile) {
+      requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }
 
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
@@ -198,9 +209,10 @@ export function ProgramsPage() {
     <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="relative flex-1 overflow-y-auto">
+      {/* `pt-14 sm:pt-0`: espaço da barra fixa do AppSidebar no celular. */}
+      <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
         <PageLoadingOverlay loading={programs === null && !error} />
-        <div className="flex items-center justify-between px-10 pt-6">
+        <div className="flex items-center justify-between px-4 pt-6 sm:px-10">
           <button
             type="button"
             onClick={() => navigate(`/events/${id}/setup`)}
@@ -212,13 +224,13 @@ export function ProgramsPage() {
           <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
-        <div className="px-10 pb-10">
+        <div className="px-4 pb-10 sm:px-10">
           {error && <p className="mt-6 text-sm text-destructive">{error}</p>}
 
           {programs !== null && (
-            <div className="mt-6 grid gap-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
+            <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <h1 className="text-2xl font-semibold text-foreground">Programas e equipes</h1>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Cadastre os programas participantes e as equipes inscritas em cada categoria.
@@ -234,7 +246,7 @@ export function ProgramsPage() {
                     </span>
                   </div>
                 </div>
-                <Button onClick={() => setCreateProgramOpen(true)}>
+                <Button className="w-full sm:w-auto" onClick={() => setCreateProgramOpen(true)}>
                   <Plus data-icon="inline-start" />
                   Novo programa
                 </Button>
@@ -242,7 +254,7 @@ export function ProgramsPage() {
 
               {hasAnyPrograms ? (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr] lg:gap-8">
-                  <div className="grid gap-4">
+                  <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
                     <div className="relative self-start">
                       <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -261,7 +273,7 @@ export function ProgramsPage() {
                         <button
                           key={program.id}
                           type="button"
-                          onClick={() => setSelectedProgramId(program.id)}
+                          onClick={() => handleSelectProgram(program.id)}
                           className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
                             program.id === selectedProgramId
                               ? "border-primary/40 bg-primary/[0.05]"
@@ -301,11 +313,11 @@ export function ProgramsPage() {
                     <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
                   </div>
 
-                  <div className="lg:border-l lg:border-border lg:pl-8">
+                  <div ref={detailRef} className="min-w-0 scroll-mt-16 lg:border-l lg:border-border lg:pl-8">
                     {selectedProgram ? (
-                      <div className="grid gap-4">
-                        <div className="flex items-start justify-between gap-4 rounded-lg border border-border/60 bg-card p-5">
-                          <div className="flex items-center gap-4">
+                      <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+                        <div className="flex flex-col gap-4 rounded-lg border border-border/60 bg-card p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+                          <div className="flex min-w-0 items-center gap-4">
                             <button
                               type="button"
                               onClick={() => logoInputRef.current?.click()}
@@ -324,9 +336,9 @@ export function ProgramsPage() {
                               className="hidden"
                               onChange={handleLogoChange}
                             />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-lg font-semibold text-foreground">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="min-w-0 truncate text-lg font-semibold text-foreground">
                                   {selectedProgram.name}
                                 </p>
                                 {selectedProgram.userId ? (
@@ -347,18 +359,18 @@ export function ProgramsPage() {
                                   <MapPin className="size-3.5" />
                                   {selectedProgram.city} · {selectedProgram.state}
                                 </span>
-                                <span className="flex items-center gap-1.5">
-                                  <Mail className="size-3.5" />
-                                  {selectedProgram.email}
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <Mail className="size-3.5 shrink-0" />
+                                  <span className="truncate">{selectedProgram.email}</span>
                                 </span>
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center justify-between gap-1 sm:justify-end">
                             {selectedProgram.userId ? (
                               <p
                                 title="Este programa já está vinculado a uma conta própria — os dados são editados pelo próprio programa."
-                                className="max-w-48 text-right text-xs text-muted-foreground"
+                                className="text-xs text-muted-foreground sm:max-w-48 sm:text-right"
                               >
                                 Gerenciado pela própria conta do programa
                               </p>
@@ -383,9 +395,9 @@ export function ProgramsPage() {
                           </div>
                         </div>
 
-                        <div className="grid gap-4 rounded-lg border border-border/60 bg-card p-5">
-                          <div className="flex items-center justify-between gap-4">
-                            <div>
+                        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 rounded-lg border border-border/60 bg-card p-4 sm:p-5">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
                               <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
                                 Equipes do programa
                                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -399,7 +411,7 @@ export function ProgramsPage() {
                             <button
                               type="button"
                               onClick={() => setCreateTeamOpen(true)}
-                              className="flex shrink-0 items-center gap-1.5 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                              className="flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
                             >
                               <Plus className="size-4" />
                               Nova equipe
@@ -415,7 +427,7 @@ export function ProgramsPage() {
                               {selectedProgram.teams.map((team) => (
                                 <div
                                   key={team.id}
-                                  className="flex items-center gap-3 rounded-lg border border-border/60 p-3"
+                                  className="flex items-start gap-2 rounded-lg border border-border/60 p-3 sm:gap-3"
                                 >
                                   <div
                                     style={{ backgroundColor: getAvatarColor(team.id) }}
@@ -424,16 +436,38 @@ export function ProgramsPage() {
                                     <Users className="size-4" />
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-foreground">
-                                      {team.name}
-                                    </p>
+                                    {/* Editar/excluir logo depois do nome (antes
+                                        ficavam na ponta direita da linha). */}
+                                    <div className="flex min-w-0 items-center gap-1">
+                                      <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                                        {team.name}
+                                      </p>
+                                      <div className="flex shrink-0 items-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditTeamTarget(team)}
+                                          aria-label="Editar equipe"
+                                          className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                        >
+                                          <Pencil className="size-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setDeleteTeamTarget(team)}
+                                          aria-label="Excluir equipe"
+                                          className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                        >
+                                          <Trash2 className="size-4" />
+                                        </button>
+                                      </div>
+                                    </div>
                                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                       {team.categories.map((category) => (
                                         <span
                                           key={category.id}
-                                          className="group flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs text-primary"
+                                          className="group flex max-w-full min-w-0 items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs text-primary"
                                         >
-                                          {category.name}
+                                          <span className="truncate">{category.name}</span>
                                           <button
                                             type="button"
                                             onClick={() =>
@@ -454,24 +488,6 @@ export function ProgramsPage() {
                                         }
                                       />
                                     </div>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditTeamTarget(team)}
-                                      aria-label="Editar equipe"
-                                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                    >
-                                      <Pencil className="size-4" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setDeleteTeamTarget(team)}
-                                      aria-label="Excluir equipe"
-                                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                                    >
-                                      <Trash2 className="size-4" />
-                                    </button>
                                   </div>
                                 </div>
                               ))}

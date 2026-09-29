@@ -9,11 +9,21 @@ import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
 
 interface CategoryGridItemProps {
   category: Category;
+  // Equipes inscritas na categoria (mesma contagem da coluna "Equipes" da
+  // tabela); tocar abre a lista delas.
+  teamCount: number;
   onEdit: (category: Category) => void;
   onDelete: (category: Category) => void;
+  onViewTeams: (category: Category) => void;
 }
 
-export function CategoryGridItem({ category, onEdit, onDelete }: CategoryGridItemProps) {
+export function CategoryGridItem({
+  category,
+  teamCount,
+  onEdit,
+  onDelete,
+  onViewTeams,
+}: CategoryGridItemProps) {
   return (
     <motion.div
       variants={listItemVariants}
@@ -70,8 +80,15 @@ export function CategoryGridItem({ category, onEdit, onDelete }: CategoryGridIte
         </div>
       </div>
 
-      <div className="mt-auto flex pt-1">
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
         <CategoryStatusBadge status={category.status} />
+        <button
+          type="button"
+          onClick={() => onViewTeams(category)}
+          className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+        >
+          {teamCount} {teamCount === 1 ? "equipe" : "equipes"}
+        </button>
       </div>
     </motion.div>
   );

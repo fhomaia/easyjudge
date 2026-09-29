@@ -25,7 +25,7 @@ export function RegulationDocumentsSection({
   const additionalDocuments = documents.filter((d) => d.kind === "additional");
 
   return (
-    <div className="grid gap-4 rounded-lg border border-border/60 bg-card p-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 rounded-lg border border-border/60 bg-card p-4 sm:p-5">
       <div>
         <h2 className="text-lg font-semibold text-foreground">Documentos do evento</h2>
         <p className="mt-1 text-sm text-muted-foreground">

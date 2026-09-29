@@ -66,7 +66,7 @@ export function ProgramFormFields({ form, onChange }: ProgramFormFieldsProps) {
             <span className="text-sm font-normal text-muted-foreground">(opcional)</span>
           </Label>
           <Select value={selectedKey || null} onValueChange={(v) => handleSelect(v as string)}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full min-w-0">
               {/* placeholder é ignorado pelo Base UI quando o filho é
                   função — ver PresentationDetailsDialog.tsx pro detalhe
                   do bug (2026-08-05). */}
@@ -74,7 +74,7 @@ export function ProgramFormFields({ form, onChange }: ProgramFormFieldsProps) {
                 {(value: string | null) =>
                   value
                     ? catalog.find((e) => catalogKey(e) === value)?.name
-                    : "Cadastro manual (novo programa)"
+                    : "Selecione para preencher"
                 }
               </SelectValue>
             </SelectTrigger>
@@ -83,12 +83,17 @@ export function ProgramFormFields({ form, onChange }: ProgramFormFieldsProps) {
                 const alreadyUsedByMe = entry.source === "own" || entry.usedByMe;
                 return (
                   <SelectItem key={catalogKey(entry)} value={catalogKey(entry)}>
-                    <span className="flex w-full items-center justify-between gap-2">
-                      <span>
-                        {entry.name}{" "}
-                        <span className="text-muted-foreground">({entry.email})</span>
+                    {/* Nome e email em duas linhas, podendo quebrar
+                        (`whitespace-normal`): o item do Select é uma linha só
+                        e cortava o texto no celular. */}
+                    <span className="flex w-full min-w-0 items-center justify-between gap-2 whitespace-normal">
+                      <span className="min-w-0">
+                        <span className="block break-words">{entry.name}</span>
+                        <span className="block text-xs break-all text-muted-foreground">
+                          {entry.email}
+                        </span>
                       </span>
-                      <Badge variant={alreadyUsedByMe ? "secondary" : "outline"}>
+                      <Badge className="shrink-0" variant={alreadyUsedByMe ? "secondary" : "outline"}>
                         {alreadyUsedByMe ? "Já usado por você" : "Da plataforma"}
                       </Badge>
                     </span>
@@ -97,6 +102,10 @@ export function ProgramFormFields({ form, onChange }: ProgramFormFieldsProps) {
               })}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Programas que você já cadastrou ou que têm conta na Cheer Cup. Se não estiver na
+            lista, preencha os campos abaixo.
+          </p>
         </div>
       )}
 

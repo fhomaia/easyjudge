@@ -327,9 +327,11 @@ export function EventSetupPage() {
     <div className="flex h-dvh bg-background">
       <AppSidebar profile={profile} onLogout={handleLogout} />
 
-      <main className="relative flex-1 overflow-y-auto">
+      {/* `pt-14 sm:pt-0`: espaço da barra fixa do AppSidebar no celular
+          (mesmo padrão da HomePage). */}
+      <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
         <PageLoadingOverlay loading={(!event || regulation === null || templates === null) && !error} />
-        <div className="flex items-center justify-between px-10 pt-6">
+        <div className="flex items-center justify-between px-4 pt-6 sm:px-10">
           <button
             type="button"
             onClick={() => navigate("/")}
@@ -341,13 +343,15 @@ export function EventSetupPage() {
           <NotificationBell unreadCount={notificationsUnreadCount} />
         </div>
 
-        <div className="px-10 pb-10">
+        <div className="px-4 pb-10 sm:px-10">
           {error && <p className="mt-6 text-sm text-destructive">{error}</p>}
 
           {event && (
-            <div className="grid gap-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
+            // minmax(0,1fr): item de grid tem `min-width: auto`, então a
+            // linha de etapas do resumo alargava a página inteira no celular.
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <h1 className="mt-4 text-2xl font-semibold text-foreground">
                     Configuração do evento
                   </h1>
@@ -362,7 +366,7 @@ export function EventSetupPage() {
                   event.currentUserRoles.includes("assessor")) && (
                   <Button
                     size="lg"
-                    className="mt-4 shrink-0 shadow-md"
+                    className="w-full shrink-0 shadow-md sm:mt-4 sm:w-auto"
                     onClick={() => navigate(`/events/${id}/access`)}
                   >
                     <UserCog data-icon="inline-start" />

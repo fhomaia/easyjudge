@@ -18,6 +18,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type Active,
@@ -60,6 +61,7 @@ import { findScheduleConflicts } from "@/lib/scheduleConflicts";
 import { computeResourceTimes } from "@/lib/scheduleTime";
 import { SCHEDULE_TYPE_STYLES } from "@/lib/scheduleEntryDisplay";
 import { useEventSetupGuard } from "@/lib/useEventSetupGuard";
+import { useIsMobile } from "@/lib/useIsMobile";
 import {
   scheduleApi,
   usersApi,
@@ -117,6 +119,10 @@ export function SchedulePage() {
     undo: () => Promise<void>;
   } | null>(null);
   const [viewMode, setViewMode] = useState<"timeline" | "table">("table");
+  // Celular: só a Tabela (colunas = pistas, linhas = horários; rola pro
+  // lado), sem a troca pra Linha do tempo, que não cabe na largura.
+  const isMobile = useIsMobile();
+  const effectiveViewMode = isMobile ? "table" : viewMode;
   const [error, setError] = useState<string | null>(null);
   const [activeDragEntryId, setActiveDragEntryId] = useState<string | null>(null);
   const [activeDragDelta, setActiveDragDelta] = useState({ x: 0, y: 0 });
@@ -570,7 +576,14 @@ export function SchedulePage() {
       .finally(() => setScheduleMutationPending(false));
   }
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // Celular: arraste só segurando o dedo parado sobre o item (delay), pra
+  // deslizar o dedo continuar rolando a tabela em vez de arrastar sem
+  // querer. TouchSensor (e não PointerSensor) porque ele segura o toque
+  // depois de ativar; com o de ponteiro o navegador trata o movimento
+  // como rolagem e cancela o arraste no meio. Desktop: 5px, como antes.
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 8 } });
+  const sensors = useSensors(isMobile ? touchSensor : pointerSensor);
 
   return (
     <div className="flex h-dvh bg-background">
@@ -583,9 +596,10 @@ export function SchedulePage() {
         onDragEnd={handleDragEnd}
         onDragCancel={clearActiveDrag}
       >
-        <main className="relative flex flex-1 flex-col overflow-y-auto">
+        {/* `pt-14 sm:pt-0`: espaço da barra fixa do AppSidebar no celular. */}
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto pt-14 sm:pt-0">
           <PageLoadingOverlay loading={!daysLoaded} />
-          <div className="flex items-center justify-between px-10 pt-6">
+          <div className="flex items-center justify-between px-4 pt-6 sm:px-10">
             <button
               type="button"
               onClick={() => navigate(`/events/${id}/setup`)}
@@ -597,9 +611,9 @@ export function SchedulePage() {
             <NotificationBell unreadCount={notificationsUnreadCount} />
           </div>
 
-          <div className="flex flex-1 flex-col gap-6 px-10 pb-10">
+          <div className="flex min-w-0 flex-1 flex-col gap-6 px-4 pb-10 sm:px-10">
             <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                   <CalendarClock className="size-5" />
                 </div>
@@ -611,7 +625,7 @@ export function SchedulePage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 {days.length > 1 && (
                   <Button
                     type="button"
@@ -684,7 +698,7 @@ export function SchedulePage() {
                       cresce/rola (`main` já é `overflow-y-auto`) em vez
                       de sobrepor. */}
                   <div className="flex min-h-[70vh] min-w-0 flex-col gap-6 xl:min-h-0">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="hidden items-center justify-between gap-3 sm:flex">
                       <div className="flex items-center gap-1 self-start rounded-lg border border-border/60 bg-muted/30 p-1">
                         <Button
                           type="button"
@@ -707,7 +721,7 @@ export function SchedulePage() {
                       </div>
                     </div>
                     <div className="relative min-h-72 flex-1">
-                      {viewMode === "timeline" ? (
+                      {effectiveViewMode === "timeline" ? (
                         <ScheduleTimeline
                           day={selectedDay}
                           dragInfo={dragInfo}
