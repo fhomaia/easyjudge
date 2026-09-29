@@ -1729,6 +1729,26 @@ dois em Oregon; motivo do valor alto não investigado), e o mover fazia
   mesmo com nota lançada (o 409 só vem depois); ao fechar alguns popups
   de confirmação o título troca por um genérico durante a animação.
 
+## Nota máxima na súmula e empate no slider (2026-09-29)
+
+- **Slider do jurado (desktop)**: equipes com a mesma nota (1 casa)
+  dividem um marcador (`groupTeamScores` em `ScoreBandSlider.tsx`) e a
+  tag lista os nomes um por linha; antes os marcadores empilhavam e o
+  hover só mostrava o de cima. Notas próximas mas diferentes ainda
+  podem encostar.
+- **Súmula de detalhe** (programa/atleta/admin): "/ máx." em cinza ao
+  lado da nota de cada item (`MaxScoreLabel`) e do Total
+  (`ScoringSummary showMaxScore`, a tela do jurado não usa). PDF idem:
+  no cartão Total e na coluna da nota, desenhado por `didDrawCell`
+  (`scoreCell`/`drawMaxScore`, o autoTable não mistura estilos numa
+  célula; célula de cabeçalho não herda `columnStyles`, por isso o
+  `halign` vai na própria célula).
+- **Resumo (`ScoringSummary`) em grade**: 4 blocos = 2x2 no celular e
+  uma linha a partir de `sm`; 3 ou menos = sempre uma linha. Vale pras
+  4 telas que usam o componente.
+- Testado: tela pelo usuário (slider e resumo); PDF gerado no Node com
+  dados sintéticos (rolldown + `pdftoppm`).
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
