@@ -19,7 +19,6 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { EventAddressLink } from "@/components/EventAddressLink";
 import { AppSidebar } from "@/components/AppSidebar";
 import { BlinkingDot } from "@/components/BlinkingDot";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -197,7 +196,6 @@ export function EventLiveDesktopView({
                     {event.venue}
                   </span>
                 )}
-                <EventAddressLink event={event} />
               </div>
             </div>
           </div>

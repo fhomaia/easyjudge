@@ -14,6 +14,7 @@ import {
   MapPin,
   Menu,
   MoreHorizontal,
+  Play,
   Trophy,
   UserRound,
   Users,
@@ -29,7 +30,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MobileNavSheet } from "@/components/MobileNavSheet";
-import { EventAddressLink } from "@/components/EventAddressLink";
 import { EventLiveDesktopView } from "@/components/EventLiveDesktopView";
 import { JudgesSummaryDialog } from "@/components/JudgesSummaryDialog";
 import { ProgramsSummaryDialog } from "@/components/ProgramsSummaryDialog";
@@ -455,6 +455,93 @@ export function EventLiveDashboardPage() {
     ? Math.min(warmupTotal, Math.max(0, nowMinutes - live.next.warmup.start))
     : 0;
 
+  // Play ("Ir para agora", jurado), documentos e menu ⋯, à direita da
+  // linha do status pra qualquer papel. "Concluir evento" fica dentro do
+  // menu (como botão na mesma linha, empurrava estes pra uma linha de
+  // baixo que só existia com o evento iniciado).
+  const quickActions = (
+    <div className="flex shrink-0 items-center gap-2">
+      {assignment.isJudge && (
+        <button
+          type="button"
+          onClick={handleGoToNow}
+          disabled={!nextJudgePresentationId}
+          aria-label="Ir para agora"
+          title="Ir para agora"
+          className="flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-700 text-white shadow-sm transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Play className="size-4" />
+        </button>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              disabled={!regulation || regulation.documents.length === 0}
+              title={
+                !regulation || regulation.documents.length === 0
+                  ? "Nenhum documento enviado ainda"
+                  : undefined
+              }
+              aria-label="Documentos do regulamento"
+              className="flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+            />
+          }
+        >
+          <FileText className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          {regulation?.documents.map((doc) => (
+            <DropdownMenuItem
+              key={doc.id}
+              onClick={() => window.open(doc.fileUrl, "_blank", "noopener,noreferrer")}
+            >
+              <FileText data-icon="inline-start" />
+              <span className="truncate">{doc.name}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {(canManageTeam || canRevert || canComplete) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Mais opções"
+                className="flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted"
+              />
+            }
+          >
+            <MoreHorizontal className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {canManageTeam && (
+              <DropdownMenuItem
+                onClick={() => navigate(`/events/${event.aliasId}/access`, { state: { from: "live" } })}
+                className="whitespace-nowrap"
+              >
+                Gerenciar equipe
+              </DropdownMenuItem>
+            )}
+            {canRevert && (
+              <DropdownMenuItem onClick={() => setRevertDialogOpen(true)} className="whitespace-nowrap">
+                Reverter publicação
+              </DropdownMenuItem>
+            )}
+            {canComplete && (
+              <DropdownMenuItem onClick={() => setCompleteDialogOpen(true)} className="whitespace-nowrap">
+                Concluir evento
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+  );
+
   return (
     <>
     <div className="flex h-dvh flex-col bg-background lg:hidden">
@@ -506,7 +593,7 @@ export function EventLiveDashboardPage() {
           <div className="flex items-center justify-between gap-3 px-4 pt-4">
             <div className="flex flex-wrap items-center gap-2">
               {event.status === "started" ? (
-                <span className="flex items-center gap-2 text-sm font-semibold text-emerald-600">
+                <span className="flex items-center gap-2 whitespace-nowrap text-sm font-semibold text-emerald-600">
                   <BlinkingDot colorClassName="bg-emerald-500" />
                   Evento em andamento
                 </span>
@@ -525,95 +612,8 @@ export function EventLiveDashboardPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <button
-                      type="button"
-                      disabled={!regulation || regulation.documents.length === 0}
-                      title={
-                        !regulation || regulation.documents.length === 0
-                          ? "Nenhum documento enviado ainda"
-                          : undefined
-                      }
-                      aria-label="Documentos do regulamento"
-                      className="flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
-                    />
-                  }
-                >
-                  <FileText className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  {regulation?.documents.map((doc) => (
-                    <DropdownMenuItem
-                      key={doc.id}
-                      onClick={() => window.open(doc.fileUrl, "_blank", "noopener,noreferrer")}
-                    >
-                      <FileText data-icon="inline-start" />
-                      <span className="truncate">{doc.name}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {(canManageTeam || canRevert) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <button
-                        type="button"
-                        aria-label="Mais opções"
-                        className="flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted"
-                      />
-                    }
-                  >
-                    <MoreHorizontal className="size-4" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {canManageTeam && (
-                      <DropdownMenuItem
-                        onClick={() => navigate(`/events/${event.aliasId}/access`, { state: { from: "live" } })}
-                        className="whitespace-nowrap"
-                      >
-                        Gerenciar equipe
-                      </DropdownMenuItem>
-                    )}
-                    {canRevert && (
-                      <DropdownMenuItem onClick={() => setRevertDialogOpen(true)} className="whitespace-nowrap">
-                        Reverter publicação
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {canComplete && (
-                <button
-                  type="button"
-                  onClick={() => setCompleteDialogOpen(true)}
-                  className="flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1.5 text-sm font-medium text-violet-600 transition-colors hover:bg-violet-500/20"
-                >
-                  <BlinkingDot colorClassName="bg-violet-500" />
-                  Concluir evento
-                </button>
-              )}
-
-              {assignment.isJudge && (
-                <button
-                  type="button"
-                  onClick={handleGoToNow}
-                  disabled={!nextJudgePresentationId}
-                  className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
-                >
-                  <Clock className="size-4" />
-                  Ir para agora
-                </button>
-              )}
-            </div>
+            {quickActions}
           </div>
-
-          <EventAddressLink event={event} className="mx-4 mt-2 text-sm text-muted-foreground" />
 
           {live.next ? (
             <div className="mx-4 mt-4 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 text-white shadow-lg">

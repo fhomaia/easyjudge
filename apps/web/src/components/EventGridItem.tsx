@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
+import { EventLocation } from "@/components/EventLocation";
 import { useNavigate } from "react-router-dom";
-import { CalendarDays, MapPin, Users } from "lucide-react";
+import { CalendarDays, Users } from "lucide-react";
 import { EventActionsMenu } from "@/components/EventActionsMenu";
 import { EventLifecycleAction } from "@/components/EventLifecycleAction";
 import { EventStatusIndicator } from "@/components/EventStatusArea";
@@ -98,10 +99,7 @@ export function EventGridItem({
             <CalendarDays className="size-3.5 shrink-0" />
             {formatDate(event.startDate)}
           </span>
-          <span className="flex items-center gap-1.5">
-            <MapPin className="size-3.5 shrink-0" />
-            <span className="truncate">{event.location}</span>
-          </span>
+          <EventLocation event={event} />
           <span className="flex items-center gap-1.5">
             <Users className="size-3.5 shrink-0" />
             {event.categoriesCount ?? 0} categorias · {event.programsCount ?? 0} programas
