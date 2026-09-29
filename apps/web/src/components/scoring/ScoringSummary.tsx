@@ -14,6 +14,9 @@ interface ScoringSummaryProps {
   isLegalityJudge: boolean;
   finalResult: number;
   maxScore: number;
+  // Mostra a nota máxima da categoria em pequeno ao lado do Total
+  // ("88.5 / 100.0"; súmula de detalhe, a tela do jurado não usa).
+  showMaxScore?: boolean;
   // "compact": versão de uma linha só, sem card próprio — pensada pra
   // caber dentro do rodapé de ação (entre "Equipe anterior" e o aviso
   // de critérios faltando), a pedido do usuário (o card grande de
@@ -29,6 +32,7 @@ export function ScoringSummary({
   isLegalityJudge,
   finalResult,
   maxScore,
+  showMaxScore = false,
   variant = "mobile",
   className,
 }: ScoringSummaryProps) {
@@ -39,6 +43,10 @@ export function ScoringSummary({
   // verdade (maxScore > 0); sem eles (jurado só de legalidade) fica
   // sem base de comparação, não mostra.
   const utilizationPercent = hasCriteria && maxScore > 0 ? (finalResult / maxScore) * 100 : null;
+
+  // Total, Deduções, Resultado final e Aproveitamento (os opcionais
+  // entram só quando aparecem).
+  const tileCount = 1 + Number(hasCriteria) + Number(isLegalityJudge) + Number(utilizationPercent !== null);
 
   if (variant === "compact") {
     return (
@@ -80,10 +88,23 @@ export function ScoringSummary({
       )}
     >
       <p className="text-xs font-semibold tracking-wide text-muted-foreground">RESUMO</p>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-center">
+      <div
+        className={cn(
+          "mt-2 grid items-start gap-3 text-center",
+          // 4 blocos: 2x2 em tela estreita (senão o último quebrava
+          // sozinho numa linha), uma linha só a partir de `sm`. Com 3 ou
+          // menos, sempre uma linha.
+          tileCount === 4 ? "grid-cols-2 sm:grid-cols-4" : tileCount === 3 ? "grid-cols-3" : "grid-cols-2",
+        )}
+      >
         {hasCriteria && (
           <div>
-            <p className="text-lg font-bold tabular-nums text-foreground">{totalScore.toFixed(1)}</p>
+            <p className="text-lg font-bold tabular-nums text-foreground">
+              {totalScore.toFixed(1)}
+              {showMaxScore && (
+                <span className="text-xs font-medium text-muted-foreground"> / {maxScore.toFixed(1)}</span>
+              )}
+            </p>
             <p className="text-[11px] text-muted-foreground">Total</p>
           </div>
         )}

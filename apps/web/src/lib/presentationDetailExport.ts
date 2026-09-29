@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { criteriaWithSubgroups, isStandaloneCriterion } from "@/lib/criteriaWithSubgroups";
-import autoTable from "jspdf-autotable";
+import autoTable, { type CellHookData } from "jspdf-autotable";
 import JSZip from "jszip";
 import { WARNING_DEDUCTION_TYPE, formatElapsed } from "@/lib/deductionIcons";
 import { formatCriterionScore, formatDeduction, formatPercent, formatPoints } from "@/lib/formatNumber";
@@ -29,6 +29,51 @@ import { criterionBandForScore } from "@/lib/scoreBands";
 // (null quando o critério não usa faixas/valores fixos ou está sem nota).
 function criterionBand(criterion: PresentationDetailCriterion) {
   return criterionBandForScore(criterion, criterion.value);
+}
+
+// Célula da nota de um critério com a nota máxima em pequeno à direita
+// ("12,5  / 20", como na tela). O autoTable não mistura estilos numa
+// célula, então a nota fica com espaço à direita e `drawMaxScore`
+// (didDrawCell) desenha o "/ máx." por cima.
+const MAX_SCORE_WIDTH = 40;
+type MaxScoreCell = {
+  content: string;
+  styles: { halign: "right"; cellPadding: { top: number; bottom: number; left: number; right: number } };
+};
+const maxScoreByCell = new WeakMap<object, { maxScore: number; color: [number, number, number] }>();
+
+function scoreCell(
+  value: number | null,
+  maxScore: number,
+  color: [number, number, number] = MUTED,
+): MaxScoreCell {
+  const cell: MaxScoreCell = {
+    content: formatCriterionScore(value),
+    // halign aqui (não só no columnStyles): célula de cabeçalho não
+    // herda o columnStyles.
+    styles: { halign: "right", cellPadding: { top: 8, bottom: 8, left: 8, right: 8 + MAX_SCORE_WIDTH } },
+  };
+  maxScoreByCell.set(cell, { maxScore, color });
+  return cell;
+}
+
+function drawMaxScore(data: CellHookData) {
+  const info = typeof data.cell.raw === "object" && data.cell.raw ? maxScoreByCell.get(data.cell.raw) : undefined;
+  if (!info) return;
+  const doc = data.doc as jsPDF;
+  const font = doc.getFont();
+  const fontSize = doc.getFontSize();
+  const textColor = doc.getTextColor();
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...info.color);
+  doc.text(`/ ${formatCriterionScore(info.maxScore)}`, data.cell.x + data.cell.width - 8, data.cell.y + data.cell.height / 2, {
+    align: "right",
+    baseline: "middle",
+  });
+  doc.setFont(font.fontName, font.fontStyle);
+  doc.setFontSize(fontSize);
+  doc.setTextColor(textColor);
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -209,7 +254,11 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
   let cursorY = headerHeight + 26;
 
   // --- Cartões de resumo (mesmos números de ScoringSummary) ---
-  const stats: { label: string; value: string }[] = [{ label: "TOTAL", value: `${formatPoints(totalScore)} pts` }];
+  // `suffix`: texto menor ao lado do valor (nota máxima no Total, como
+  // na tela).
+  const stats: { label: string; value: string; suffix?: string }[] = [
+    { label: "TOTAL", value: formatPoints(totalScore), suffix: ` / ${formatPoints(maxScore)} pts` },
+  ];
   if (detail.legality) {
     stats.push({ label: "DEDUÇÕES", value: `${formatPoints(deductionsTotal)} pts` });
   }
@@ -227,7 +276,21 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
     doc.setTextColor(...BRAND);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(15);
-    doc.text(stat.value, x + statWidth / 2, cursorY + 28, { align: "center" });
+    if (stat.suffix) {
+      const valueWidth = doc.getTextWidth(stat.value);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const suffixWidth = doc.getTextWidth(stat.suffix);
+      const startX = x + (statWidth - valueWidth - suffixWidth) / 2;
+      doc.setTextColor(...MUTED);
+      doc.text(stat.suffix, startX + valueWidth, cursorY + 28);
+      doc.setTextColor(...BRAND);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.text(stat.value, startX, cursorY + 28);
+    } else {
+      doc.text(stat.value, x + statWidth / 2, cursorY + 28, { align: "center" });
+    }
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(...MUTED);
@@ -251,14 +314,17 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
           [
             group.name.toUpperCase(),
             ...(band ? [{ content: band.name, styles: { fontStyle: "normal" as const, fontSize: 9.5 } }] : []),
-            { content: formatCriterionScore(criterion.value), styles: { halign: "right" } },
+            scoreCell(criterion.value, criterion.maxScore, [255, 255, 255]),
           ],
         ],
         body: [],
         theme: "grid",
         styles: { fontSize: 10.5, cellPadding: 8, textColor: INK, lineColor: [225, 229, 234] },
         headStyles: { fillColor: BRAND, textColor: 255, fontStyle: "bold", fontSize: 11 },
-        columnStyles: band ? { 1: { cellWidth: 130 }, 2: { cellWidth: 90 } } : { 1: { cellWidth: 90 } },
+        columnStyles: band
+          ? { 1: { cellWidth: 130 }, 2: { cellWidth: 90 + MAX_SCORE_WIDTH } }
+          : { 1: { cellWidth: 90 + MAX_SCORE_WIDTH } },
+        didDrawCell: drawMaxScore,
         margin: { left: MARGIN, right: MARGIN },
         pageBreak: "avoid",
       });
@@ -299,15 +365,16 @@ export function buildPresentationDetailPdf(detail: PresentationDetail): jsPDF {
                 },
               ]
             : []),
-          formatCriterionScore(row.criterion.value),
+          scoreCell(row.criterion.value, row.criterion.maxScore),
         ];
       }),
       theme: "grid",
       styles: { fontSize: 10.5, cellPadding: 8, textColor: INK, lineColor: [225, 229, 234] },
       headStyles: { fillColor: BRAND, textColor: 255, fontStyle: "bold", fontSize: 11 },
       columnStyles: hasBands
-        ? { 1: { cellWidth: 130 }, 2: { cellWidth: 90, halign: "right", fontStyle: "bold" } }
-        : { 1: { cellWidth: 90, halign: "right", fontStyle: "bold" } },
+        ? { 1: { cellWidth: 130 }, 2: { cellWidth: 90 + MAX_SCORE_WIDTH, halign: "right", fontStyle: "bold" } }
+        : { 1: { cellWidth: 90 + MAX_SCORE_WIDTH, halign: "right", fontStyle: "bold" } },
+      didDrawCell: drawMaxScore,
       alternateRowStyles: { fillColor: STRIPE },
       margin: { left: MARGIN, right: MARGIN },
       // Grupo inteiro na mesma página quando cabe (senão começa na

@@ -33,6 +33,16 @@ interface PresentationNotesDetailProps {
   celebrateHitZero?: boolean;
 }
 
+// Nota máxima do item, ao lado da nota (largura fixa pra alinhar as
+// notas de todas as linhas).
+function MaxScoreLabel({ maxScore }: { maxScore: number }) {
+  return (
+    <span className="-ml-1.5 w-12 shrink-0 text-xs tabular-nums text-muted-foreground">
+      / {formatCriterionScore(maxScore)}
+    </span>
+  );
+}
+
 // Faixa (ou valor fixo) em que a nota do critério caiu (mesma regra da
 // tela do jurado). Nada quando o critério não usa faixas/valores fixos
 // ou está sem nota.
@@ -101,6 +111,7 @@ export function PresentationNotesDetail({
         isLegalityJudge={detail.legality !== null}
         finalResult={finalResult}
         maxScore={maxScore}
+        showMaxScore
         variant="desktop"
       />
 
@@ -116,6 +127,7 @@ export function PresentationNotesDetail({
             <span className="w-16 shrink-0 rounded-lg bg-muted py-1.5 text-center text-base font-bold tabular-nums text-foreground">
               {formatCriterionScore(group.criteria[0].value)}
             </span>
+            <MaxScoreLabel maxScore={group.criteria[0].maxScore} />
           </div>
         ) : (
         <div key={group.id} className="rounded-2xl border border-border bg-card p-4">
@@ -141,6 +153,7 @@ export function PresentationNotesDetail({
                   <span className="w-16 shrink-0 rounded-lg bg-muted py-1.5 text-center text-base font-bold tabular-nums text-foreground">
                     {formatCriterionScore(row.criterion.value)}
                   </span>
+                  <MaxScoreLabel maxScore={row.criterion.maxScore} />
                 </div>
               ),
             )}

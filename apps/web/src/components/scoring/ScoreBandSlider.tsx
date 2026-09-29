@@ -10,11 +10,23 @@ interface ScoreBandSliderProps {
   onValueChange: (value: number) => void;
   // Nota de cada OUTRA equipe da mesma categoria neste critério (ver
   // ScoringService.getCriterionComparisons) — um marcador por equipe,
-  // mesmo estilo pra todas (sem destaque de "líder"), sem tratamento
-  // especial de sobreposição quando duas notas caem perto/no mesmo
-  // ponto. Marcador só visual (ícone), sem texto solto pra não poluir a
+  // mesmo estilo pra todas (sem destaque de "líder"); notas iguais
+  // dividem um marcador só (ver groupTeamScores). Marcador só visual (ícone), sem texto solto pra não poluir a
   // tela; nome da equipe só aparece no hover.
   teamScores?: { value: number; teamName: string }[];
+}
+
+// Junta as equipes com a mesma nota (arredondada pra 1 casa, a mesma
+// precisão exibida; a média de vários jurados pode ter ruído de float)
+// num marcador só, senão os marcadores empilham e o hover só mostra o
+// de cima.
+function groupTeamScores(teamScores: { value: number; teamName: string }[] = []) {
+  const groups = new Map<number, string[]>();
+  for (const team of teamScores) {
+    const value = Math.round(team.value * 10) / 10;
+    groups.set(value, [...(groups.get(value) ?? []), team.teamName]);
+  }
+  return [...groups].map(([value, teamNames]) => ({ value, teamNames }));
 }
 
 // Slider próprio (não o `ui/slider.tsx` genérico) pra poder colorir o
@@ -56,24 +68,28 @@ export function ScoreBandSlider({
             style={{ backgroundColor: currentBand?.color ?? "var(--color-primary)" }}
           />
           {/* Nota das outras equipes da categoria — um marcador por
-              equipe, mesmo estilo pra todas, sem texto solto pra não
+              nota, mesmo estilo pra todos, sem texto solto pra não
               poluir a tela; nome da equipe só aparece no hover (mesmo
               padrão CSS group/group-hover já usado no projeto, sem lib
               de tooltip nova). Acima do trilho de propósito — os nomes
-              de faixa já ocupam a linha de baixo. Sem tratamento de
-              sobreposição: equipes com nota igual/próxima renderizam
-              marcadores no mesmo lugar. */}
-          {teamScores?.map((team) => {
-            const pct = (Math.min(Math.max(team.value, 0), maxScore) / maxScore) * 100;
+              de faixa já ocupam a linha de baixo. Equipes com a mesma
+              nota (1 casa, a precisão exibida) dividem o marcador e a
+              tag lista todas, uma por linha; notas só próximas ainda
+              podem encostar. */}
+          {groupTeamScores(teamScores).map((group) => {
+            const pct = (Math.min(Math.max(group.value, 0), maxScore) / maxScore) * 100;
             return (
               <div
-                key={team.teamName}
+                key={group.value}
                 className="group absolute -top-3 -translate-x-1/2 cursor-default"
                 style={{ left: `${pct}%` }}
               >
                 <span className="block size-2 rounded-full bg-foreground/60 ring-2 ring-background" />
                 <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 rounded-md bg-foreground px-2 py-1 text-[11px] whitespace-nowrap text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100">
-                  {team.teamName} · {team.value.toFixed(1)}
+                  {group.teamNames.map((name) => (
+                    <div key={name}>{name}</div>
+                  ))}
+                  <div className="mt-0.5 font-semibold tabular-nums">{group.value.toFixed(1)}</div>
                 </div>
               </div>
             );
