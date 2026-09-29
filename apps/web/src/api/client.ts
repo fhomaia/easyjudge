@@ -333,6 +333,7 @@ export interface Event {
   competitionDays: number;
   location: string;
   venue: string | null;
+  address: string | null;
   logoUrl: string | null;
   // Código de compartilhamento (QR + texto) — só existe a partir do
   // primeiro publish, estável através das versões (ver
@@ -367,6 +368,7 @@ export interface CreateEventPayload {
   competitionDays?: number;
   location: string;
   venue?: string;
+  address?: string;
 }
 
 export type UpdateEventPayload = Partial<CreateEventPayload>;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MoreHorizontal, Plus, Trash2, UserCog } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -40,6 +40,9 @@ export function EventStaffPage() {
   const notificationsUnreadCount = useNotificationsUnreadCount(id);
   useEventSetupGuard(id);
   const navigate = useNavigate();
+  // Aberta pelo menu do Início do evento ao vivo: "Sair" volta pra lá,
+  // não pro Setup.
+  const cameFromLive = (useLocation().state as { from?: string } | null)?.from === "live";
   const logout = useAuthStore((s) => s.logout);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -85,7 +88,7 @@ export function EventStaffPage() {
         <div className="flex items-center justify-between px-10 pt-6">
           <button
             type="button"
-            onClick={() => navigate(`/events/${id}/setup`)}
+            onClick={() => navigate(cameFromLive ? `/events/${id}/live` : `/events/${id}/setup`)}
             className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />

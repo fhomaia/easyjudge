@@ -33,6 +33,11 @@ export class Event {
   @Column({ type: 'varchar', nullable: true })
   venue: string | null;
 
+  // Endereço completo (rua, número, bairro), opcional. Mostrado na tela
+  // Início do evento ao vivo como link pro mapa.
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  address: string | null;
+
   @Column({ name: 'logo_url', type: 'varchar', nullable: true })
   logoUrl: string | null;
 

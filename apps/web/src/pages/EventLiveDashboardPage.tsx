@@ -13,6 +13,7 @@ import {
   FileText,
   MapPin,
   Menu,
+  MoreHorizontal,
   Trophy,
   UserRound,
   Users,
@@ -28,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MobileNavSheet } from "@/components/MobileNavSheet";
+import { EventAddressLink } from "@/components/EventAddressLink";
 import { EventLiveDesktopView } from "@/components/EventLiveDesktopView";
 import { JudgesSummaryDialog } from "@/components/JudgesSummaryDialog";
 import { ProgramsSummaryDialog } from "@/components/ProgramsSummaryDialog";
@@ -131,6 +133,7 @@ export function EventLiveDashboardPage() {
   const [starting, setStarting] = useState(false);
   const [startCelebrationOpen, setStartCelebrationOpen] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -424,6 +427,10 @@ export function EventLiveDashboardPage() {
   const canStart = event.currentUserRoles.includes("admin") && event.status === "published";
   const isAdminOrAssessor = event.currentUserRoles.some((r) => r === "admin" || r === "assessor");
   const canComplete = isAdminOrAssessor && event.status === "started";
+  // Menu "⋯" do celular: mesmos itens do menu do computador
+  // (EventLiveDesktopView).
+  const canRevert = isAdminOrAssessor && event.status === "published";
+  const canManageTeam = isAdminOrAssessor && event.status !== "completed";
   // "Jurados cadastrados" — quem lança nota também pode ver quem mais
   // tá julgando o evento (ver JudgesController.findAll, ampliado pra
   // jurado); "Programas cadastrados" continua só admin/assessor (é
@@ -550,6 +557,37 @@ export function EventLiveDashboardPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {(canManageTeam || canRevert) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label="Mais opções"
+                        className="flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted"
+                      />
+                    }
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {canManageTeam && (
+                      <DropdownMenuItem
+                        onClick={() => navigate(`/events/${event.aliasId}/access`, { state: { from: "live" } })}
+                        className="whitespace-nowrap"
+                      >
+                        Gerenciar equipe
+                      </DropdownMenuItem>
+                    )}
+                    {canRevert && (
+                      <DropdownMenuItem onClick={() => setRevertDialogOpen(true)} className="whitespace-nowrap">
+                        Reverter publicação
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
               {canComplete && (
                 <button
                   type="button"
@@ -574,6 +612,8 @@ export function EventLiveDashboardPage() {
               )}
             </div>
           </div>
+
+          <EventAddressLink event={event} className="mx-4 mt-2 text-sm text-muted-foreground" />
 
           {live.next ? (
             <div className="mx-4 mt-4 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 text-white shadow-lg">
@@ -841,6 +881,16 @@ export function EventLiveDashboardPage() {
       eventNavItems={eventNavTabs}
       profile={profile}
       onLogout={handleLogout}
+    />
+
+    <ConfirmDialog
+      open={revertDialogOpen}
+      onOpenChange={setRevertDialogOpen}
+      title="Reverter publicação?"
+      description="O evento volta para o status Criado e você pode editar as configurações novamente. Ele deixa de ficar visível para os participantes até ser publicado de novo."
+      confirmLabel="Reverter"
+      confirmingLabel="Revertendo..."
+      onConfirm={handleRevert}
     />
 
     <ConfirmDialog

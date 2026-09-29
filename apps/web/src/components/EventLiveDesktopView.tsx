@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import {
   Bell,
@@ -18,6 +19,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
+import { EventAddressLink } from "@/components/EventAddressLink";
 import { AppSidebar } from "@/components/AppSidebar";
 import { BlinkingDot } from "@/components/BlinkingDot";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -146,9 +148,12 @@ export function EventLiveDesktopView({
   // ver EventsService.unpublishEvent). Admin e assessor podem reverter
   // (mesmo par de papéis que já pode editar as configurações do
   // evento, ver updateEvent no backend).
-  const canRevert =
-    event.currentUserRoles.some((r) => r === "admin" || r === "assessor") &&
-    event.status === "published";
+  const canRevert = isAdminOrAssessor && event.status === "published";
+  // "Gerenciar equipe" (mesma tela e nome do botão do Setup); fora
+  // de evento concluído, em que as telas de configuração redirecionam
+  // de volta pro ao vivo (useEventSetupGuard).
+  const canManageAccess = isAdminOrAssessor && event.status !== "completed";
+  const navigate = useNavigate();
 
   const resourceStatuses = useMemo(
     () => computeResourceNextStatus(days ?? [], live, completedEntryIds, startedEntryIds, presentationStartTimes),
@@ -192,6 +197,7 @@ export function EventLiveDesktopView({
                     {event.venue}
                   </span>
                 )}
+                <EventAddressLink event={event} />
               </div>
             </div>
           </div>
@@ -255,7 +261,7 @@ export function EventLiveDesktopView({
               </button>
             )}
 
-            {canRevert ? (
+            {canRevert || canManageAccess ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -269,12 +275,22 @@ export function EventLiveDesktopView({
                   <MoreHorizontal className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem
-                    onClick={() => setRevertDialogOpen(true)}
-                    className="whitespace-nowrap"
-                  >
-                    Reverter publicação
-                  </DropdownMenuItem>
+                  {canManageAccess && (
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/events/${event.aliasId}/access`, { state: { from: "live" } })}
+                      className="whitespace-nowrap"
+                    >
+                      Gerenciar equipe
+                    </DropdownMenuItem>
+                  )}
+                  {canRevert && (
+                    <DropdownMenuItem
+                      onClick={() => setRevertDialogOpen(true)}
+                      className="whitespace-nowrap"
+                    >
+                      Reverter publicação
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (

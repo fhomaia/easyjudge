@@ -378,6 +378,7 @@ export class EventsService {
         competitionDays: event.competitionDays,
         location: event.location,
         venue: event.venue,
+        address: event.address,
         logoUrl: event.logoUrl,
         createdById: event.createdById,
         eventCode,
@@ -805,6 +806,17 @@ export class EventsService {
     for (const row of rows) {
       counts[row.role] = row.count;
     }
+    // "Espectadores" conta também os atletas (pedido do usuário,
+    // 2026-09-29), cada pessoa uma vez só mesmo com os dois papéis.
+    // Vale pro card do Início e pras Métricas; "Atletas" continua só
+    // atleta.
+    const [{ count: audience }] = await this.membersRepo.query<
+      Array<{ count: number }>
+    >(
+      `SELECT COUNT(*)::int AS count FROM event_members WHERE alias_id = $1 AND ('spectator' = ANY(roles) OR 'athlete' = ANY(roles))`,
+      [event.aliasId],
+    );
+    counts[EventMemberRole.SPECTATOR] = audience;
     return counts;
   }
 

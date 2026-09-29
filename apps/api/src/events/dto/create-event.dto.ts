@@ -34,4 +34,9 @@ export class CreateEventDto {
   @IsString()
   @MaxLength(150)
   venue?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  address?: string;
 }

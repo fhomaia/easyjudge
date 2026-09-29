@@ -25,6 +25,7 @@ function toFormValues(event: Event): EventFormValues {
     startDate: event.startDate,
     location: event.location,
     venue: event.venue ?? "",
+    address: event.address ?? "",
   };
 }
 
@@ -83,6 +84,7 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
         startDate: form.startDate,
         location: form.location,
         venue: form.venue,
+        address: form.address,
       });
       if (photo) {
         try {

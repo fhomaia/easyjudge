@@ -153,12 +153,15 @@ export function ContestationDialog({ open, onOpenChange, teamName, onConfirm }: 
 
         <FormError message={error} />
 
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
+        {/* Botões mais baixos que o padrão (h-11) e rótulo curto (o
+            título já diz "Solicitar contestação"): cabem lado a lado no
+            celular. */}
+        <div className="flex items-center justify-center gap-3">
+          <Button variant="outline" className="h-9 px-4" onClick={() => handleOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
-            {loading ? "Enviando..." : "Solicitar contestação"}
+          <Button variant="destructive" className="h-9 px-4" onClick={handleConfirm} disabled={loading}>
+            {loading ? "Enviando..." : "Enviar"}
           </Button>
         </div>
       </DialogContent>

@@ -22,6 +22,7 @@ const initialForm = {
   startDate: "",
   location: "",
   venue: "",
+  address: "",
 };
 
 export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEventDialogProps) {
@@ -61,6 +62,7 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
         startDate: form.startDate,
         location: form.location,
         venue: form.venue,
+        address: form.address,
       });
       if (photo) {
         event = await eventsApi.uploadLogo(event.aliasId, photo);

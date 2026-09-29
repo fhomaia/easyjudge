@@ -7,6 +7,7 @@ export interface EventFormValues {
   startDate: string;
   location: string;
   venue: string;
+  address: string;
 }
 
 interface EventFormFieldsProps {
@@ -63,6 +64,18 @@ export function EventFormFields({ form, onChange, disabled = false }: EventFormF
           placeholder="Ex. Expominas"
           value={form.venue}
           onChange={(e) => onChange("venue", e.target.value)}
+          disabled={disabled}
+        />
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="event-address">Endereço (opcional)</Label>
+        <Input
+          id="event-address"
+          placeholder="Ex. Av. Amazonas, 6200, Gameleira"
+          value={form.address}
+          onChange={(e) => onChange("address", e.target.value)}
+          maxLength={300}
           disabled={disabled}
         />
       </div>
