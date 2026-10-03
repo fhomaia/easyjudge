@@ -481,7 +481,7 @@ export function RegisterDialog({
                 className="absolute inset-0"
               >
                 {step === "role" && (
-                  <div className="grid gap-5 short:gap-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3">
                     <h3 className="text-xl font-medium short:text-lg">
                       Qual será seu tipo de conta?
                     </h3>
@@ -525,7 +525,7 @@ export function RegisterDialog({
                 {step === "name" && (
                   <form
                     onSubmit={submitSimpleStep}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       {form.role === "program"
@@ -570,7 +570,7 @@ export function RegisterDialog({
                 {step === "document" && (
                   <form
                     onSubmit={submitDocument}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       {isOptionalCpfOnlyRole(form.role) ? (
@@ -642,7 +642,7 @@ export function RegisterDialog({
                 {step === "birthDate" && (
                   <form
                     onSubmit={submitSimpleStep}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       Qual é a sua data de nascimento?
@@ -676,7 +676,7 @@ export function RegisterDialog({
                 {step === "email" && (
                   <form
                     onSubmit={submitSimpleStep}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       Qual é o seu email?
@@ -699,7 +699,7 @@ export function RegisterDialog({
                 {step === "team" && (
                   <form
                     onSubmit={submitSimpleStep}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       Qual sua equipe ou instituição?{" "}
@@ -725,7 +725,7 @@ export function RegisterDialog({
                 {step === "programEmail" && (
                   <form
                     onSubmit={submitSimpleStep}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       Qual o email do seu programa?{" "}
@@ -755,11 +755,11 @@ export function RegisterDialog({
                 )}
 
                 {step === "summary" && (
-                  <div className="grid gap-5 short:gap-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3">
                     <h3 className="text-xl font-medium short:text-lg">
                       Confere se está tudo certo:
                     </h3>
-                    <dl className="grid gap-2 rounded-lg border p-3 text-sm">
+                    <dl className="grid grid-cols-[minmax(0,1fr)] gap-3 rounded-lg border p-3 text-sm">
                       <SummaryRow
                         label="Papel"
                         value={SIGNUP_ROLE_LABELS[form.role]}
@@ -837,13 +837,14 @@ export function RegisterDialog({
                     >
                       {loading ? "Enviando..." : "Confirmar e criar conta"}
                     </Button>
+                    <div aria-hidden className="h-4" />
                   </div>
                 )}
 
                 {step === "verify" && (
                   <form
                     onSubmit={submitVerify}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       Enviamos um código pro seu email. Qual é?
@@ -877,7 +878,7 @@ export function RegisterDialog({
                 {step === "password" && (
                   <form
                     onSubmit={submitPassword}
-                    className="grid gap-5 short:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
                   >
                     <h3 className="text-xl font-medium short:text-lg">
                       Agora, crie uma senha:
@@ -976,9 +977,9 @@ export function RegisterDialog({
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
+    <div className="grid gap-0.5">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium">{value}</dd>
+      <dd className="font-medium [overflow-wrap:anywhere]">{value}</dd>
     </div>
   );
 }
