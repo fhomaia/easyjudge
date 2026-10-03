@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { EventLiveBottomNav, buildEventNavTabs } from "@/components/EventLiveShared";
 import { useEventLiveGuard } from "@/lib/useEventLiveGuard";
 import { useEventLiveSocket } from "@/lib/useEventLiveSocket";
+import { useExpandedIds } from "@/lib/useExpandedIds";
 import { resolveCenterTab, resolveNotesHref } from "@/lib/eventNavPriority";
 import { formatEventDateRange } from "@/lib/formatDateRange";
 import { formatDayTab } from "@/lib/formatDate";
@@ -57,23 +58,33 @@ function IncompleteDayNotice() {
 // EventLiveResultsPage). Extraído pra não duplicar o JSX nos dois
 // lugares.
 function ResultsMetricsGrid({ results }: { results: EventResults }) {
+  // Cada card abre no toque pra mostrar os nomes inteiros (mesmo padrão
+  // das listas abaixo e do Cronograma).
+  const cards = useExpandedIds();
+  const textClass = (id: string) => (cards.isExpanded(id) ? "break-words" : "truncate");
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div className="rounded-2xl border border-violet-300/40 bg-violet-500/5 p-4">
+      <button
+        type="button"
+        aria-expanded={cards.isExpanded("overall")}
+        onClick={() => cards.toggle("overall")}
+        className="rounded-2xl border border-violet-300/40 bg-violet-500/5 p-4 text-left"
+      >
         <div className="flex items-center gap-2">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600">
             <Star className="size-4.5" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-violet-600">Maior percentual geral</p>
-            <p className="truncate text-xs text-muted-foreground">Entre todas as categorias</p>
+            <p className={cn("text-sm font-semibold text-violet-600", textClass("overall"))}>Maior percentual geral</p>
+            <p className={cn("text-xs text-muted-foreground", textClass("overall"))}>Entre todas as categorias</p>
           </div>
         </div>
         {results.topOverall ? (
           <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
             <div className="min-w-0">
-              <p className="truncate text-lg font-bold text-foreground">{results.topOverall.teamName}</p>
-              <p className="truncate text-xs text-muted-foreground">{results.topOverall.categoryName}</p>
+              <p className={cn("text-lg font-bold text-foreground", textClass("overall"))}>{results.topOverall.teamName}</p>
+              <p className={cn("text-xs text-muted-foreground", textClass("overall"))}>{results.topOverall.categoryName}</p>
             </div>
             <p className="text-2xl font-bold text-violet-600 sm:shrink-0">
               {formatPercent(results.topOverall.percentage)}
@@ -82,23 +93,28 @@ function ResultsMetricsGrid({ results }: { results: EventResults }) {
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">Sem apresentações pontuadas ainda.</p>
         )}
-      </div>
+      </button>
 
-      <div className="rounded-2xl border border-emerald-300/40 bg-emerald-500/5 p-4">
+      <button
+        type="button"
+        aria-expanded={cards.isExpanded("teamCheer")}
+        onClick={() => cards.toggle("teamCheer")}
+        className="rounded-2xl border border-emerald-300/40 bg-emerald-500/5 p-4 text-left"
+      >
         <div className="flex items-center gap-2">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600">
             <Users className="size-4.5" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-emerald-600">Maior percentual - Team Cheer</p>
-            <p className="truncate text-xs text-muted-foreground">Considerando apenas Team Cheer</p>
+            <p className={cn("text-sm font-semibold text-emerald-600", textClass("teamCheer"))}>Maior percentual - Team Cheer</p>
+            <p className={cn("text-xs text-muted-foreground", textClass("teamCheer"))}>Considerando apenas Team Cheer</p>
           </div>
         </div>
         {results.topTeamCheer ? (
           <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
             <div className="min-w-0">
-              <p className="truncate text-lg font-bold text-foreground">{results.topTeamCheer.teamName}</p>
-              <p className="truncate text-xs text-muted-foreground">{results.topTeamCheer.categoryName}</p>
+              <p className={cn("text-lg font-bold text-foreground", textClass("teamCheer"))}>{results.topTeamCheer.teamName}</p>
+              <p className={cn("text-xs text-muted-foreground", textClass("teamCheer"))}>{results.topTeamCheer.categoryName}</p>
             </div>
             <p className="text-2xl font-bold text-emerald-600 sm:shrink-0">
               {formatPercent(results.topTeamCheer.percentage)}
@@ -107,23 +123,28 @@ function ResultsMetricsGrid({ results }: { results: EventResults }) {
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">Sem apresentações Team Cheer pontuadas ainda.</p>
         )}
-      </div>
+      </button>
 
-      <div className="rounded-2xl border border-amber-300/40 bg-amber-500/5 p-4">
+      <button
+        type="button"
+        aria-expanded={cards.isExpanded("program")}
+        onClick={() => cards.toggle("program")}
+        className="rounded-2xl border border-amber-300/40 bg-amber-500/5 p-4 text-left"
+      >
         <div className="flex items-center gap-2">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
             <Trophy className="size-4.5" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-amber-600">Programa com mais pontos</p>
-            <p className="truncate text-xs text-muted-foreground">Soma de todas as apresentações</p>
+            <p className={cn("text-sm font-semibold text-amber-600", textClass("program"))}>Programa com mais pontos</p>
+            <p className={cn("text-xs text-muted-foreground", textClass("program"))}>Soma de todas as apresentações</p>
           </div>
         </div>
         {results.topProgram ? (
           <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
             <div className="min-w-0">
-              <p className="truncate text-lg font-bold text-foreground">{results.topProgram.programName}</p>
-              <p className="truncate text-xs text-muted-foreground">Total de pontos</p>
+              <p className={cn("text-lg font-bold text-foreground", textClass("program"))}>{results.topProgram.programName}</p>
+              <p className={cn("text-xs text-muted-foreground", textClass("program"))}>Total de pontos</p>
             </div>
             <p className="text-2xl font-bold text-amber-600 sm:shrink-0">
               {formatPoints(results.topProgram.totalPoints)}
@@ -132,7 +153,7 @@ function ResultsMetricsGrid({ results }: { results: EventResults }) {
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">Sem apresentações pontuadas ainda.</p>
         )}
-      </div>
+      </button>
     </div>
   );
 }
@@ -154,6 +175,9 @@ export function EventLiveResultsPage() {
   const [activeDayId, setActiveDayId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState<number | null>(null);
+  // Equipes e programas das listas abrem no toque pra mostrar o nome
+  // inteiro (mesmo padrão do Cronograma).
+  const resultRows = useExpandedIds();
 
   function toggleCategory(categoryId: string) {
     setExpandedCategories((prev) => {
@@ -402,8 +426,10 @@ export function EventLiveResultsPage() {
                                   <Medal className="size-4" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <p className="truncate font-medium text-foreground">{category.categoryName}</p>
-                                  <p className="truncate text-xs text-muted-foreground">
+                                  <p className={cn("font-medium text-foreground", isExpanded ? "break-words" : "truncate")}>
+                                    {category.categoryName}
+                                  </p>
+                                  <p className={cn("text-xs text-muted-foreground", isExpanded ? "break-words" : "truncate")}>
                                     {FORMAT_LABELS[category.categoryFormat]} · {category.teamCount} apresentaç
                                     {category.teamCount === 1 ? "ão" : "ões"}
                                   </p>
@@ -447,17 +473,37 @@ export function EventLiveResultsPage() {
 
                               {isExpanded && (
                                 <div className="divide-y divide-border border-t border-border bg-muted/20">
-                                  {category.presentations.map((p, rank) => (
-                                    <div
+                                  {category.presentations.map((p, rank) => {
+                                    const rowId = `category:${p.scheduleEntryId}`;
+                                    const rowExpanded = resultRows.isExpanded(rowId);
+                                    return (
+                                    <button
+                                      type="button"
                                       key={p.scheduleEntryId}
-                                      className="flex items-center gap-3 py-2.5 pr-4 pl-14"
+                                      aria-expanded={rowExpanded}
+                                      onClick={() => resultRows.toggle(rowId)}
+                                      className="flex w-full items-center gap-3 py-2.5 pr-4 pl-14 text-left"
                                     >
                                       <span className="w-6 shrink-0 text-sm font-semibold text-muted-foreground">
                                         {rank + 1}º
                                       </span>
                                       <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium text-foreground">{p.teamName}</p>
-                                        <p className="truncate text-xs text-muted-foreground">{p.programName}</p>
+                                        <p
+                                          className={cn(
+                                            "text-sm font-medium text-foreground",
+                                            rowExpanded ? "break-words" : "truncate",
+                                          )}
+                                        >
+                                          {p.teamName}
+                                        </p>
+                                        <p
+                                          className={cn(
+                                            "text-xs text-muted-foreground",
+                                            rowExpanded ? "break-words" : "truncate",
+                                          )}
+                                        >
+                                          {p.programName}
+                                        </p>
                                       </div>
                                       <div className="shrink-0 text-right">
                                         <p className="text-sm font-semibold text-foreground">
@@ -467,8 +513,9 @@ export function EventLiveResultsPage() {
                                           {formatPercent(p.percentage)}
                                         </p>
                                       </div>
-                                    </div>
-                                  ))}
+                                    </button>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -520,8 +567,10 @@ export function EventLiveResultsPage() {
                                   <Medal className="size-4" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <p className="truncate font-medium text-foreground">{modalityLabel}</p>
-                                  <p className="truncate text-xs text-muted-foreground">
+                                  <p className={cn("font-medium text-foreground", isExpanded ? "break-words" : "truncate")}>
+                                    {modalityLabel}
+                                  </p>
+                                  <p className={cn("text-xs text-muted-foreground", isExpanded ? "break-words" : "truncate")}>
                                     {modality.categoryCount} categoria{modality.categoryCount === 1 ? "" : "s"} ·{" "}
                                     {modality.teamCount} apresentaç{modality.teamCount === 1 ? "ão" : "ões"}
                                   </p>
@@ -565,17 +614,35 @@ export function EventLiveResultsPage() {
 
                               {isExpanded && (
                                 <div className="divide-y divide-border border-t border-border bg-muted/20">
-                                  {modality.presentations.map((p, rank) => (
-                                    <div
+                                  {modality.presentations.map((p, rank) => {
+                                    const rowId = `modality:${p.scheduleEntryId}`;
+                                    const rowExpanded = resultRows.isExpanded(rowId);
+                                    return (
+                                    <button
+                                      type="button"
                                       key={p.scheduleEntryId}
-                                      className="flex items-center gap-3 py-2.5 pr-4 pl-14"
+                                      aria-expanded={rowExpanded}
+                                      onClick={() => resultRows.toggle(rowId)}
+                                      className="flex w-full items-center gap-3 py-2.5 pr-4 pl-14 text-left"
                                     >
                                       <span className="w-6 shrink-0 text-sm font-semibold text-muted-foreground">
                                         {rank + 1}º
                                       </span>
                                       <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium text-foreground">{p.teamName}</p>
-                                        <p className="truncate text-xs text-muted-foreground">
+                                        <p
+                                          className={cn(
+                                            "text-sm font-medium text-foreground",
+                                            rowExpanded ? "break-words" : "truncate",
+                                          )}
+                                        >
+                                          {p.teamName}
+                                        </p>
+                                        <p
+                                          className={cn(
+                                            "text-xs text-muted-foreground",
+                                            rowExpanded ? "break-words" : "truncate",
+                                          )}
+                                        >
                                           {p.categoryName} · {p.programName}
                                         </p>
                                       </div>
@@ -587,8 +654,9 @@ export function EventLiveResultsPage() {
                                           {formatPercent(p.percentage)}
                                         </p>
                                       </div>
-                                    </div>
-                                  ))}
+                                    </button>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -617,13 +685,26 @@ export function EventLiveResultsPage() {
                     ) : (
                       <div className="mt-3 divide-y divide-border">
                         {results.programs.map((program, index) => (
-                          <div key={program.programId} className="flex items-center gap-3 px-4 py-3">
+                          <button
+                            type="button"
+                            key={program.programId}
+                            aria-expanded={resultRows.isExpanded(`program:${program.programId}`)}
+                            onClick={() => resultRows.toggle(`program:${program.programId}`)}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                          >
                             <div className="flex w-9 shrink-0 items-center gap-1">
                               {index < 3 && <Trophy className={cn("size-4 shrink-0", MEDAL_COLORS[index])} />}
                               <span className="text-sm font-semibold text-muted-foreground">{index + 1}º</span>
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-foreground">{program.programName}</p>
+                              <p
+                                className={cn(
+                                  "text-sm font-semibold text-foreground",
+                                  resultRows.isExpanded(`program:${program.programId}`) ? "break-words" : "truncate",
+                                )}
+                              >
+                                {program.programName}
+                              </p>
                               <p className="truncate text-xs text-muted-foreground">
                                 {program.presentationCount} apresentaç{program.presentationCount === 1 ? "ão" : "ões"}
                               </p>
@@ -631,7 +712,7 @@ export function EventLiveResultsPage() {
                             <p className="shrink-0 font-bold text-amber-600">
                               {formatPoints(program.totalPoints)} pts
                             </p>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}
