@@ -1016,6 +1016,8 @@ Neon pelo usuário ANTES do push: `DeductionTypeToVarchar` e
 - Tipo de conta é FIXO (só definido no cadastro; não existe troca).
   Decisão do usuário: manter assim por enquanto. Um email = uma conta,
   então quem quer ser jurado E programa precisa de dois emails.
+  Documento (CPF/CNPJ) NÃO é único desde 2026-10-03 (migration
+  `DropUserDocumentUnique`), justamente pra permitir isso.
 - Jurado é atividade (qualquer conta menos Programa); Programa é
   identidade da conta. Por isso NÃO existe "papel de programa por
   evento". `linkUnclaimedMembersByEmail(userId, email, accountRole)`

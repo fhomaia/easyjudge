@@ -71,7 +71,9 @@ export class UsersService {
   // sem diferenciar maiúsculas/minúsculas de findByEmailInsensitive —
   // usado por AuthService.forgotPassword pra checar se a conta já tem
   // senha definida (cadastro concluído).
-  async findByEmailInsensitiveWithPassword(email: string): Promise<User | null> {
+  async findByEmailInsensitiveWithPassword(
+    email: string,
+  ): Promise<User | null> {
     return this.usersRepository
       .createQueryBuilder('user')
       .addSelect('user.passwordHash')
@@ -143,19 +145,6 @@ export class UsersService {
       await this.usersRepository.delete(existingEmail.id);
     }
 
-    // Documento agora é opcional pra role=athlete (ver RegisterDto) — só
-    // confere duplicidade quando um número de verdade foi informado,
-    // senão `documentNumber: undefined` faria a query bater em qualquer
-    // linha sem documento.
-    const existingDocument = dto.documentNumber
-      ? await this.usersRepository.findOne({
-          where: { documentNumber: dto.documentNumber },
-        })
-      : null;
-    if (existingDocument) {
-      throw new ConflictException('Este documento já está cadastrado.');
-    }
-
     const user = this.usersRepository.create({
       role: dto.role,
       firstName: dto.firstName,
@@ -224,12 +213,6 @@ export class UsersService {
           'Documento já cadastrado — não pode ser alterado.',
         );
       }
-      const existingDocument = await this.usersRepository.findOne({
-        where: { documentNumber: dto.documentNumber },
-      });
-      if (existingDocument) {
-        throw new ConflictException('Este documento já está cadastrado.');
-      }
       user.documentType = dto.documentType ?? DocumentType.CPF;
       user.documentNumber = dto.documentNumber;
     }
@@ -251,9 +234,7 @@ export class UsersService {
       const minAgeDate = new Date();
       minAgeDate.setFullYear(minAgeDate.getFullYear() - 13);
       if (new Date(dto.birthDate) > minAgeDate) {
-        throw new BadRequestException(
-          'É necessário ter 13 anos ou mais.',
-        );
+        throw new BadRequestException('É necessário ter 13 anos ou mais.');
       }
       user.birthDate = dto.birthDate;
     }
@@ -281,10 +262,7 @@ export class UsersService {
       throw new UnauthorizedException('Senha atual incorreta.');
     }
 
-    const passwordHash = await bcrypt.hash(
-      dto.newPassword,
-      BCRYPT_SALT_ROUNDS,
-    );
+    const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_SALT_ROUNDS);
     await this.usersRepository.update(userId, { passwordHash });
   }
 

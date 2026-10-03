@@ -35,7 +35,8 @@ export class User {
   })
   documentType: DocumentType | null;
 
-  @Index({ unique: true })
+  // Não é único (decisão do usuário, 2026-10-03): a mesma pessoa pode
+  // ter mais de uma conta (ex.: jurado e programa, um email cada).
   @Column({ name: 'document_number', type: 'varchar', nullable: true })
   documentNumber: string | null;
 
