@@ -75,6 +75,14 @@ export class AthleteLink {
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
   confirmedAt: Date | null;
 
+  // Quando o atleta saiu da equipe (removido por qualquer um dos lados).
+  // O vínculo não é apagado: continua valendo pras súmulas dos eventos
+  // que já tinham começado antes disso (`Event.startedAt <= endedAt`),
+  // ver AthletesService.endLink/getConfirmedProgramUserIds. Vínculo
+  // encerrado some das listas e não concede acesso novo.
+  @Column({ name: 'ended_at', type: 'timestamptz', nullable: true })
+  endedAt: Date | null;
+
   // Quem criou a linha (o programa ou o próprio atleta) — só auditoria.
   @Column({ name: 'created_by_id', type: 'varchar', nullable: true })
   createdById: string | null;

@@ -30,7 +30,9 @@ export function AthleteProgramsPage() {
       .me()
       .then((p) => {
         setProfile(p);
-        if (p.role !== "athlete") navigate("/", { replace: true });
+        // Qualquer conta menos Programa pode ser atleta (mesma regra do
+        // AthleteProgramsController e do item do menu).
+        if (p.role === "program") navigate("/", { replace: true });
       })
       .catch(() => navigate("/", { replace: true }));
   }, [navigate]);
@@ -66,7 +68,7 @@ export function AthleteProgramsPage() {
 
             <Button onClick={() => setRequestOpen(true)} className="shrink-0">
               <Plus data-icon="inline-start" />
-              Vincular a um programa
+              Vincular-se a um programa
             </Button>
           </div>
 
@@ -136,7 +138,7 @@ export function AthleteProgramsPage() {
         open={removeTarget !== null}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
         title="Remover vínculo"
-        description={`Você deixa de estar vinculado a ${removeTarget?.programEmail ?? "este programa"}. Você perde o acesso aos eventos dele como atleta (continua podendo entrar como espectador, se tiver o código).`}
+        description={`Você deixa de estar vinculado a ${removeTarget?.programEmail ?? "este programa"}. Nos eventos dele que ainda não começaram, você deixa de ser atleta e fica como espectador. Nos eventos já iniciados ou concluídos, continua vendo as súmulas da equipe.`}
         confirmLabel="Remover"
         confirmingLabel="Removendo..."
         onConfirm={async () => {

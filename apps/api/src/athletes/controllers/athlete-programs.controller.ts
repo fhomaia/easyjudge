@@ -21,9 +21,11 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 // "Meus programas" do PRÓPRIO atleta logado — o primeiro vínculo é
 // criado no cadastro (ver AuthService.setPassword), esta rota é pra
 // adicionar mais programas depois (um atleta pode ter vários).
+// Qualquer conta menos Programa pode ser atleta (mesma regra do jurado):
+// conta Jurado/Organização também usa esta tela.
 @Controller('athletes/me/programs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ATHLETE)
+@Roles(UserRole.ATHLETE, UserRole.JUDGE, UserRole.ORGANIZATION)
 export class AthleteProgramsController {
   constructor(private readonly athletesService: AthletesService) {}
 

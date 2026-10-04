@@ -18,15 +18,13 @@ interface CreateAthleteDialogProps {
 }
 
 export function CreateAthleteDialog({ open, onOpenChange, onCreated }: CreateAthleteDialogProps) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function resetForm() {
-    setFirstName("");
-    setLastName("");
+    setFullName("");
     setEmail("");
     setError(null);
   }
@@ -41,7 +39,17 @@ export function CreateAthleteDialog({ open, onOpenChange, onCreated }: CreateAth
     setError(null);
     setLoading(true);
     try {
-      const athlete = await athletesApi.create({ firstName, lastName, email });
+      // Um campo só de nome completo; a API continua recebendo nome e
+      // sobrenome, separados no primeiro espaço (mesma regra de
+      // CreateEventStaffMemberDialog). O `pattern` do campo garante as
+      // duas partes.
+      const name = fullName.trim().replace(/\s+/g, " ");
+      const i = name.indexOf(" ");
+      const athlete = await athletesApi.create({
+        firstName: name.slice(0, i),
+        lastName: name.slice(i + 1),
+        email,
+      });
       onCreated(athlete);
       handleOpenChange(false);
     } catch (err) {
@@ -53,7 +61,7 @@ export function CreateAthleteDialog({ open, onOpenChange, onCreated }: CreateAth
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="gap-7 p-10 sm:max-w-lg">
+      <DialogContent className="max-h-[92dvh] gap-7 overflow-y-auto p-6 sm:max-w-lg sm:p-10">
         <div className="grid gap-1.5">
           <DialogTitle className="text-xl font-medium">Adicionar atleta</DialogTitle>
           <DialogDescription>
@@ -65,25 +73,17 @@ export function CreateAthleteDialog({ open, onOpenChange, onCreated }: CreateAth
         <FormError message={error} />
 
         <form onSubmit={handleSubmit} className="grid gap-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="athlete-first-name">Nome</Label>
-              <Input
-                id="athlete-first-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="athlete-last-name">Sobrenome</Label>
-              <Input
-                id="athlete-last-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                required
-              />
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="athlete-full-name">Nome completo</Label>
+            <Input
+              id="athlete-full-name"
+              placeholder="Nome completo"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              pattern="\s*\S+\s+\S.*"
+              title="Informe o nome completo (nome e sobrenome)."
+              required
+            />
           </div>
 
           <div className="grid gap-2">

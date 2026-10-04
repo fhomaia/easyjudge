@@ -67,7 +67,9 @@ export const NAV_ITEMS: {
     href: "/athletes/programs",
     label: "Meus programas",
     icon: Building2,
-    roles: ["athlete"],
+    // Qualquer conta menos Programa pode ser atleta (mesmo par de roles
+    // do AthleteProgramsController).
+    roles: ["athlete", "judge", "organization"],
   },
 ];
 

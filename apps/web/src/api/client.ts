@@ -671,6 +671,9 @@ export interface AthleteLinkView {
   hasAccount: boolean;
   programResolved: boolean;
   confirmed: boolean;
+  // Convite pendente cujo email virou uma conta Programa (nunca vai ser
+  // aceito). Só vem true no elenco do programa (athletesApi.list).
+  emailIsProgramAccount: boolean;
   createdAt: string;
 }
 

@@ -1658,8 +1658,12 @@ export class ScoringService {
     eventId: string,
     userId: string,
   ): Promise<{ locked: boolean; entries: AdminOverviewEntryView[] }> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
     const programUserIds =
-      await this.athletesService.getConfirmedProgramUserIds(userId);
+      await this.athletesService.getConfirmedProgramUserIds(
+        userId,
+        event.startedAt,
+      );
     if (programUserIds.length === 0) {
       return { locked: true, entries: [] };
     }
@@ -1844,8 +1848,9 @@ export class ScoringService {
         'As notas desta apresentação ainda não foram liberadas.',
       );
     }
+    const { startedAt } = await this.eventsService.findEventOrThrow(eventId);
     const programUserIds =
-      await this.athletesService.getConfirmedProgramUserIds(userId);
+      await this.athletesService.getConfirmedProgramUserIds(userId, startedAt);
     const participations = (
       await Promise.all(
         programUserIds.map((programUserId) =>

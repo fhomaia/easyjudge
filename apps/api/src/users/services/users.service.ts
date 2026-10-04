@@ -66,6 +66,22 @@ export class UsersService {
       .getOne();
   }
 
+  // Dos emails informados, quais já pertencem a uma conta Programa
+  // (minúsculos). Usado pelo elenco do programa pra avisar que um
+  // convite de atleta nunca vai ser aceito (Programa não pode ser
+  // atleta, ver AthletesService.listForProgram).
+  async findProgramAccountEmails(emails: string[]): Promise<Set<string>> {
+    if (emails.length === 0) return new Set();
+    const users = await this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) IN (:...emails)', {
+        emails: emails.map((e) => e.toLowerCase()),
+      })
+      .andWhere('user.role = :role', { role: UserRole.PROGRAM })
+      .getMany();
+    return new Set(users.map((u) => u.email.toLowerCase()));
+  }
+
   // Mesmo raciocínio de findByEmailWithPassword (select:false na
   // entidade exige addSelect explícito), combinado com a comparação
   // sem diferenciar maiúsculas/minúsculas de findByEmailInsensitive —
@@ -185,7 +201,11 @@ export class UsersService {
   // pra ficar consistente com "só conta depois que o programa confirma".
   async hasConfirmedAthleteLink(userId: string): Promise<boolean> {
     const count = await this.athleteLinksRepository.count({
-      where: { athleteUserId: userId, confirmedAt: Not(IsNull()) },
+      where: {
+        athleteUserId: userId,
+        confirmedAt: Not(IsNull()),
+        endedAt: IsNull(),
+      },
     });
     return count > 0;
   }

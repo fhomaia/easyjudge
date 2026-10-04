@@ -234,13 +234,14 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
       });
+      // Reclama convites que um PROGRAMA já tinha criado (por email)
+      // antes da conta existir. Qualquer conta menos Programa pode ser
+      // atleta, não só ATHLETE.
+      await this.athletesService.linkUnclaimedAthleteInvitesByEmail(
+        user.id,
+        user.email,
+      );
       if (user.role === UserRole.ATHLETE) {
-        // Reclama convites que um PROGRAMA já tinha criado (por email)
-        // pra este atleta antes dele ter conta.
-        await this.athletesService.linkUnclaimedAthleteInvitesByEmail(
-          user.id,
-          user.email,
-        );
         // Vínculo inicial informado no cadastro (ver RegisterDto.
         // programEmail) — opcional, fica pendente de confirmação do
         // programa (ver AthletesService.createOrRequestLink).
@@ -288,6 +289,13 @@ export class AuthService {
     // senha certa já reativa sozinho, sem precisar de suporte.
     if (!user.active) {
       await this.usersService.reactivate(user.id);
+    }
+
+    if (user.role !== UserRole.PROGRAM) {
+      await this.athletesService.linkUnclaimedAthleteInvitesByEmail(
+        user.id,
+        user.email,
+      );
     }
 
     return this.buildAccessToken(user.id, user.role);

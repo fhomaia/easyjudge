@@ -53,7 +53,7 @@ export function RequestProgramLinkDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="gap-7 p-10 sm:max-w-lg">
         <div className="grid gap-1.5">
-          <DialogTitle className="text-xl font-medium">Vincular a um programa</DialogTitle>
+          <DialogTitle className="text-xl font-medium">Vincular-se a um programa</DialogTitle>
           <DialogDescription>
             Informe o email do programa. O pedido fica pendente até o programa confirmar — se ele
             ainda não tem conta na plataforma, o vínculo é reclamado automaticamente quando ele se

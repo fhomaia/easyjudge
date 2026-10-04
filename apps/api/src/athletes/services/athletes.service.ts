@@ -9,6 +9,7 @@ import { AthleteLink } from '../entities/athlete-link.entity';
 import { CreateAthleteLinkDto } from '../dto/create-athlete-link.dto';
 import { EventsService } from '../../events/services/events.service';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
+import { EventStatus } from '../../events/enums/event-status.enum';
 import { UsersService } from '../../users/services/users.service';
 import { UserRole } from '../../common/enums/user-role.enum';
 
@@ -21,6 +22,10 @@ export interface AthleteLinkView {
   hasAccount: boolean;
   programResolved: boolean;
   confirmed: boolean;
+  // Convite pendente cujo email virou uma conta Programa depois do
+  // convite: nunca vai ser aceito (Programa não pode ser atleta). Só o
+  // elenco do programa preenche; nas outras respostas é sempre false.
+  emailIsProgramAccount: boolean;
   createdAt: string;
 }
 
@@ -40,16 +45,29 @@ export class AthletesService {
   // Programa gerenciando o próprio elenco (AthleteRosterController).
   async listForProgram(programUserId: string): Promise<AthleteLinkView[]> {
     const links = await this.linksRepo.find({
-      where: { programUserId },
+      where: { programUserId, endedAt: IsNull() },
       order: { createdAt: 'DESC' },
     });
-    return links.map((l) => this.toView(l));
+    const pendingEmails = links
+      .filter((l) => l.athleteUserId === null && l.email)
+      .map((l) => l.email as string);
+    const programEmails =
+      await this.usersService.findProgramAccountEmails(pendingEmails);
+    return links.map((l) =>
+      this.toView(
+        l,
+        l.athleteUserId === null &&
+          !!l.email &&
+          programEmails.has(l.email.toLowerCase()),
+      ),
+    );
   }
 
   // Programa adiciona um atleta por nome/sobrenome/email — nasce já
   // confirmado (foi o próprio programa que criou, não tem o que
-  // confirmar). Casa com uma conta ATHLETE existente por email, se
-  // houver; senão fica como convite pendente (mesmo padrão de
+  // confirmar). Casa com uma conta existente por email, de qualquer tipo
+  // menos Programa (Programa não pode ser atleta, mesma regra do
+  // jurado); sem conta, fica como convite pendente (mesmo padrão de
   // JudgeParticipation/ProgramParticipation).
   async create(
     programUserId: string,
@@ -60,6 +78,7 @@ export class AthletesService {
       .createQueryBuilder('link')
       .where('link.programUserId = :programUserId', { programUserId })
       .andWhere('LOWER(link.email) = LOWER(:email)', { email })
+      .andWhere('link.endedAt IS NULL')
       .getOne();
     if (existing) {
       throw new ConflictException('Este atleta já está no seu elenco.');
@@ -69,10 +88,12 @@ export class AthletesService {
     if (!programUser) throw new NotFoundException('Programa não encontrado.');
 
     const athleteUser = await this.usersService.findByEmailInsensitive(email);
-    const athleteUserId =
-      athleteUser && athleteUser.role === UserRole.ATHLETE
-        ? athleteUser.id
-        : null;
+    if (athleteUser?.role === UserRole.PROGRAM) {
+      throw new ConflictException(
+        'Este email pertence a uma conta de Programa, que não pode ser atleta.',
+      );
+    }
+    const athleteUserId = athleteUser?.id ?? null;
 
     const link = this.linksRepo.create({
       programUserId,
@@ -92,20 +113,42 @@ export class AthletesService {
   }
 
   async remove(programUserId: string, linkId: string): Promise<void> {
-    const link = await this.linksRepo.findOneBy({ id: linkId, programUserId });
+    const link = await this.linksRepo.findOneBy({
+      id: linkId,
+      programUserId,
+      endedAt: IsNull(),
+    });
     if (!link) throw new NotFoundException('Vínculo não encontrado.');
-    await this.revokeEventAccessForLink(link);
-    await this.linksRepo.remove(link);
+    await this.endLink(link);
   }
 
   // Atleta se desvinculando do PRÓPRIO lado ("Meus programas") — mesmo
   // efeito de `remove` (acima, lado do programa), só escopado por
   // athleteUserId em vez de programUserId.
   async removeMyLink(athleteUserId: string, linkId: string): Promise<void> {
-    const link = await this.linksRepo.findOneBy({ id: linkId, athleteUserId });
+    const link = await this.linksRepo.findOneBy({
+      id: linkId,
+      athleteUserId,
+      endedAt: IsNull(),
+    });
     if (!link) throw new NotFoundException('Vínculo não encontrado.');
+    await this.endLink(link);
+  }
+
+  // Atleta saindo da equipe (qualquer um dos lados). Convite/pedido que
+  // nunca teve os dois lados resolvidos não deu acesso nenhum: só apaga.
+  // Senão o vínculo é ENCERRADO, não apagado (decisão do usuário,
+  // 2026-10-03): quem sai mantém o histórico dos eventos já iniciados ou
+  // concluídos e perde o papel só nos que ainda não começaram (ver
+  // revokeEventAccessForLink e getConfirmedProgramUserIds).
+  private async endLink(link: AthleteLink): Promise<void> {
+    if (!link.programUserId || !link.athleteUserId) {
+      await this.linksRepo.remove(link);
+      return;
+    }
     await this.revokeEventAccessForLink(link);
-    await this.linksRepo.remove(link);
+    link.endedAt = new Date();
+    await this.linksRepo.save(link);
   }
 
   // Programa confirma um vínculo que o ATLETA iniciou (informou o email
@@ -118,7 +161,11 @@ export class AthletesService {
     programUserId: string,
     linkId: string,
   ): Promise<AthleteLinkView> {
-    const link = await this.linksRepo.findOneBy({ id: linkId, programUserId });
+    const link = await this.linksRepo.findOneBy({
+      id: linkId,
+      programUserId,
+      endedAt: IsNull(),
+    });
     if (!link) throw new NotFoundException('Vínculo não encontrado.');
     if (!link.confirmedAt) {
       link.confirmedAt = new Date();
@@ -141,6 +188,7 @@ export class AthletesService {
       .createQueryBuilder('link')
       .where('link.athleteUserId = :athleteUserId', { athleteUserId })
       .andWhere('LOWER(link.programEmail) = LOWER(:email)', { email })
+      .andWhere('link.endedAt IS NULL')
       .getOne();
     if (existing) {
       throw new ConflictException('Você já pediu vínculo com esse programa.');
@@ -174,15 +222,17 @@ export class AthletesService {
 
   async listMyPrograms(athleteUserId: string): Promise<AthleteLinkView[]> {
     const links = await this.linksRepo.find({
-      where: { athleteUserId },
+      where: { athleteUserId, endedAt: IsNull() },
       order: { createdAt: 'DESC' },
     });
     return links.map((l) => this.toView(l));
   }
 
-  // Chamado por AuthService.setPassword quando uma conta ATHLETE
-  // completa o cadastro — reclama convites que um PROGRAMA já tinha
-  // criado (por email) antes do atleta ter conta.
+  // Chamado por AuthService (cadastro e login) pra qualquer conta menos
+  // Programa — reclama convites que um PROGRAMA já tinha criado (por
+  // email) antes da pessoa ter conta. O login cobre convites criados
+  // antes de contas Jurado/Organização poderem ser atletas, que ficaram
+  // pendentes mesmo com a conta existindo.
   async linkUnclaimedAthleteInvitesByEmail(
     athleteUserId: string,
     email: string,
@@ -222,16 +272,27 @@ export class AthletesService {
     }
   }
 
-  // Usado por ScoringService.getAthleteOverview — a quais programas
-  // (userId) este atleta tem vínculo CONFIRMADO, pra filtrar as
-  // apresentações visíveis em Notas.
-  async getConfirmedProgramUserIds(athleteUserId: string): Promise<string[]> {
+  // Usado por ScoringService (visão do atleta nas Súmulas) — a quais
+  // programas (userId) este atleta tem vínculo CONFIRMADO valendo pra um
+  // evento. Vínculo encerrado só vale se o evento já tinha começado
+  // quando o atleta saiu (`eventStartedAt <= endedAt`): mantém o
+  // histórico sem dar acesso a evento posterior.
+  async getConfirmedProgramUserIds(
+    athleteUserId: string,
+    eventStartedAt: Date | null,
+  ): Promise<string[]> {
     const links = await this.linksRepo.find({
       where: { athleteUserId, confirmedAt: Not(IsNull()) },
     });
-    return links
+    const ids = links
+      .filter(
+        (l) =>
+          l.endedAt === null ||
+          (eventStartedAt !== null && eventStartedAt <= l.endedAt),
+      )
       .map((l) => l.programUserId)
       .filter((id): id is string => id !== null);
+    return [...new Set(ids)];
   }
 
   // Concede o papel ATHLETE em todo evento onde `programUserId` já tem
@@ -259,9 +320,10 @@ export class AthletesService {
     }
   }
 
-  // Inverso de syncEventAccessForLink — chamado ao desfazer um vínculo
-  // (de qualquer lado, ver remove/removeMyLink). Tira ATHLETE de todo
-  // evento onde esse programa concedeu o papel, mas não deixa a pessoa
+  // Inverso de syncEventAccessForLink — chamado ao encerrar um vínculo
+  // (de qualquer lado, ver endLink). Tira ATHLETE dos eventos desse
+  // programa que ainda NÃO começaram (criado/publicado); nos iniciados e
+  // concluídos o papel fica, pra manter o histórico. Não deixa a pessoa
   // sem nenhum acesso: ela cai pra SPECTATOR no lugar (pedido explícito
   // do usuário) — mesmo raciocínio de "resgate de código" já usado em
   // EventsService.joinByCode, upsertMemberRole é idempotente então não
@@ -280,6 +342,16 @@ export class AthletesService {
       lastName: link.lastName,
     };
     for (const aliasId of aliasIds) {
+      const event = await this.eventsService
+        .findEventOrThrow(aliasId)
+        .catch(() => null);
+      if (
+        !event ||
+        event.status === EventStatus.STARTED ||
+        event.status === EventStatus.COMPLETED
+      ) {
+        continue;
+      }
       await this.eventsService.removeMemberRole(
         aliasId,
         EventMemberRole.ATHLETE,
@@ -302,7 +374,7 @@ export class AthletesService {
     aliasId: string,
   ): Promise<void> {
     const links = await this.linksRepo.find({
-      where: { programUserId, athleteUserId: Not(IsNull()) },
+      where: { programUserId, athleteUserId: Not(IsNull()), endedAt: IsNull() },
     });
     for (const link of links) {
       if (!link.athleteUserId) continue;
@@ -319,7 +391,10 @@ export class AthletesService {
     }
   }
 
-  private toView(link: AthleteLink): AthleteLinkView {
+  private toView(
+    link: AthleteLink,
+    emailIsProgramAccount = false,
+  ): AthleteLinkView {
     return {
       id: link.id,
       firstName: link.firstName ?? '',
@@ -329,6 +404,7 @@ export class AthletesService {
       hasAccount: link.athleteUserId !== null,
       programResolved: link.programUserId !== null,
       confirmed: link.confirmedAt !== null,
+      emailIsProgramAccount,
       createdAt: link.createdAt.toISOString(),
     };
   }
