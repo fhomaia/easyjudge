@@ -47,6 +47,20 @@ export function hasStaleScoreBands(criteria: ScoringCriterion[]): boolean {
   );
 }
 
+// Faixas que vão além da nota máxima do item (ex.: o valor do item
+// baixou de 20 pra 19 depois que as faixas foram salvas). Só aviso no
+// builder, não bloqueia o uso do sistema: o jurado nunca passa da nota
+// máxima, então o trecho a mais só não é usado.
+export function findBandsAboveMax(bands: ScoreBand[], maxScore: number): ScoreBand[] {
+  return bands.filter((band) => band.max > maxScore + 1e-9);
+}
+
+export function hasScoreBandsAboveMax(criteria: ScoringCriterion[]): boolean {
+  return criteria.some(
+    (c) => c.useScoreBands && !!c.scoreBands && findBandsAboveMax(c.scoreBands, c.maxScore).length > 0,
+  );
+}
+
 // Qual faixa "vale" pra uma nota — usado na tela do jurado (nome/cor da
 // faixa atual, embaixo de "Nota máxima"). Faixas podem se sobrepor (ver
 // validateScoreBands); em caso de sobreposição, a de início mais baixo

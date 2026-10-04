@@ -55,6 +55,28 @@ export function getDirectChildren(
   return criteria.filter((c) => c.parentId === parentId).sort((a, b) => a.order - b.order);
 }
 
+// Nota máxima de grupo = soma dos filhos (o servidor grava o mesmo
+// valor, ver ScoringCriteriaService.recalculateGroupScores). Calcula na
+// tela pra refletir na hora, sem esperar a resposta. Mantém o mesmo
+// objeto pra quem não mudou (o painel de edição reinicia os campos
+// quando o objeto do critério muda).
+export function withGroupTotals(criteria: ScoringCriterion[]): ScoringCriterion[] {
+  const childrenMap = buildChildrenMap(criteria);
+  const totals = new Map<string, number>();
+  function totalOf(c: ScoringCriterion): number {
+    if (c.type !== "group") return c.maxScore;
+    const sum = (childrenMap.get(c.id) ?? []).reduce((acc, child) => acc + totalOf(child), 0);
+    const total = Math.round(sum * 1e6) / 1e6;
+    totals.set(c.id, total);
+    return total;
+  }
+  for (const c of childrenMap.get(null) ?? []) totalOf(c);
+  return criteria.map((c) => {
+    const total = totals.get(c.id);
+    return total === undefined || Math.abs(total - c.maxScore) < 1e-9 ? c : { ...c, maxScore: total };
+  });
+}
+
 export function sumMaxScore(criteria: ScoringCriterion[]): number {
   return criteria.reduce((sum, c) => sum + c.maxScore, 0);
 }

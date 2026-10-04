@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { withGroupTotals } from "@/lib/scoringTree";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, ArrowRight, Award, CheckCircle2, Download, FileSpreadsheet, FileText, Lock, Pencil } from "lucide-react";
@@ -20,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { exportScoringTemplateToExcel, exportScoringTemplateToPdf } from "@/lib/scoringTemplateExport";
-import { hasStaleFixedValues, hasStaleScoreBands } from "@/lib/scoreBands";
+import { hasScoreBandsAboveMax, hasStaleFixedValues, hasStaleScoreBands } from "@/lib/scoreBands";
 import {
   ApiError,
   scoringCriteriaApi,
@@ -47,7 +48,9 @@ export function ScoringTemplateBuilderPage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [template, setTemplate] = useState<ScoringTemplate | null>(null);
-  const [criteria, setCriteria] = useState<ScoringCriterion[] | null>(null);
+  const [rawCriteria, setCriteria] = useState<ScoringCriterion[] | null>(null);
+  // Valor dos grupos sempre como soma dos itens (ver withGroupTotals).
+  const criteria = useMemo(() => (rawCriteria ? withGroupTotals(rawCriteria) : null), [rawCriteria]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ScoringCriterion | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +222,7 @@ export function ScoringTemplateBuilderPage() {
   const readOnly = isLocked || isSystemTemplate;
   const staleScoreBands = criteria ? hasStaleScoreBands(criteria) : false;
   const staleFixedValues = criteria ? hasStaleFixedValues(criteria) : false;
+  const bandsAboveMax = criteria ? hasScoreBandsAboveMax(criteria) : false;
 
   return (
     <div className="flex h-dvh bg-background">
@@ -334,6 +338,17 @@ export function ScoringTemplateBuilderPage() {
                     pontuação máxima foi alterada depois que as faixas foram salvas. Revise as
                     faixas do critério afetado (veja o aviso no painel de edição) antes de usar
                     este sistema de pontuação numa categoria.
+                  </p>
+                </div>
+              )}
+
+              {step === "structure" && !readOnly && bandsAboveMax && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <p>
+                    Alguma faixa de pontuação vai além da pontuação máxima do item, porque o valor do item
+                    foi diminuído depois que as faixas foram salvas. Revise as faixas do item afetado (veja o
+                    aviso no painel de edição).
                   </p>
                 </div>
               )}

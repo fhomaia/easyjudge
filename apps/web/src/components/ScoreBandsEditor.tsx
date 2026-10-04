@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResourceColorPicker } from "@/components/ResourceColorPicker";
 import { PASTEL_BAND_COLORS } from "@/lib/avatarColor";
-import { validateScoreBands } from "@/lib/scoreBands";
+import { findBandsAboveMax, validateScoreBands } from "@/lib/scoreBands";
 import type { ScoreBand } from "@/api/client";
 
 interface ScoreBandsEditorProps {
@@ -128,6 +128,7 @@ function ScoreBandCard({
 
 export function ScoreBandsEditor({ bands, maxScore, onChange, disabled }: ScoreBandsEditorProps) {
   const error = validateScoreBands(bands, maxScore);
+  const aboveMax = findBandsAboveMax(bands, maxScore);
 
   function updateBand(index: number, patch: Partial<ScoreBand>) {
     onChange(bands.map((band, i) => (i === index ? { ...band, ...patch } : band)));
@@ -178,6 +179,12 @@ export function ScoreBandsEditor({ bands, maxScore, onChange, disabled }: ScoreB
       )}
 
       {error && <p className="text-xs text-amber-600">{error}</p>}
+      {aboveMax.map((band, i) => (
+        <p key={i} className="text-xs text-amber-600">
+          A faixa “{band.name.trim() || "sem nome"}” vai até {band.max}, acima da pontuação máxima do item ({maxScore}).
+          Ajuste o fim dela.
+        </p>
+      ))}
     </div>
   );
 }

@@ -75,7 +75,9 @@ export class ScoringCriteriaService {
       templateId,
       order,
     });
-    return this.criteriaRepo.save(criterion);
+    const saved = await this.criteriaRepo.save(criterion);
+    await this.recalculateGroupScores(templateId);
+    return this.findCriterionOrThrow(templateId, saved.id);
   }
 
   // DTO permite `description` opcional (undefined quando não enviado);
@@ -285,7 +287,9 @@ export class ScoringCriteriaService {
       this.assertFixedValuesValid(criterion.fixedValues ?? [], criterion.maxScore);
     }
 
-    return this.criteriaRepo.save(criterion);
+    await this.criteriaRepo.save(criterion);
+    await this.recalculateGroupScores(templateId);
+    return this.findCriterionOrThrow(templateId, id);
   }
 
   async remove(templateId: string, id: string, userId: string): Promise<void> {
@@ -293,6 +297,7 @@ export class ScoringCriteriaService {
     await this.templatesService.assertNotLockedForEditing(templateId);
     const criterion = await this.findCriterionOrThrow(templateId, id);
     await this.criteriaRepo.remove(criterion);
+    await this.recalculateGroupScores(templateId);
   }
 
   // Reordena e/ou reparenta um nó dentro de uma transação. Retorna a
@@ -348,9 +353,49 @@ export class ScoringCriteriaService {
       if (oldParentId !== newParentId) {
         await this.renumberSiblings(templateId, oldParentId, null, repo);
       }
+      await this.recalculateGroupScores(templateId, repo);
     });
 
     return this.findAllForTemplate(templateId, userId);
+  }
+
+  // A nota máxima de um grupo não é digitada: é sempre a soma dos
+  // filhos (decisão do usuário, 2026-10-03). Recalcula a árvore inteira
+  // de baixo pra cima depois de qualquer mudança que afete valores ou
+  // estrutura (criar, editar, excluir, mover), e grava só os grupos que
+  // mudaram. Um `maxScore` enviado pra um grupo é sobrescrito aqui.
+  // Grupo sem filhos fica com 0.
+  private async recalculateGroupScores(
+    templateId: string,
+    repo: Repository<ScoringCriterion> = this.criteriaRepo,
+  ): Promise<void> {
+    const all = await repo.find({ where: { templateId } });
+    const childrenByParent = new Map<string, ScoringCriterion[]>();
+    for (const c of all) {
+      if (!c.parentId) continue;
+      const list = childrenByParent.get(c.parentId) ?? [];
+      list.push(c);
+      childrenByParent.set(c.parentId, list);
+    }
+    const changed: ScoringCriterion[] = [];
+    const totalOf = (c: ScoringCriterion): number => {
+      if (c.type !== ScoringCriterionType.GROUP) return c.maxScore;
+      const sum = (childrenByParent.get(c.id) ?? []).reduce(
+        (acc, child) => acc + totalOf(child),
+        0,
+      );
+      // Arredonda o ruído de soma de float (0.1 + 0.2).
+      const total = Math.round(sum * 1e6) / 1e6;
+      if (Math.abs(total - c.maxScore) > 1e-9) {
+        c.maxScore = total;
+        changed.push(c);
+      }
+      return total;
+    };
+    for (const c of all) {
+      if (!c.parentId) totalOf(c);
+    }
+    if (changed.length > 0) await repo.save(changed);
   }
 
   private async promoteToGroupIfNeeded(

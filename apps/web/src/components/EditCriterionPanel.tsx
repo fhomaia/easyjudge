@@ -181,26 +181,40 @@ export function EditCriterionPanel({
         </p>
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="criterion-max-score">Pontuação máxima</Label>
-        <Input
-          id="criterion-max-score"
-          type="number"
-          step={0.01}
-          value={maxScore}
-          disabled={readOnly}
-          onChange={(e) => {
-            setMaxScore(e.target.value);
-            const parsed = Number(e.target.value);
-            if (e.target.value.trim() !== "" && !Number.isNaN(parsed)) {
-              scheduleDebouncedSave({ maxScore: parsed });
-            }
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          Pontuação máxima que este critério pode receber.
-        </p>
-      </div>
+      {criterion.type === "group" ? (
+        // Grupo não tem valor próprio: é a soma dos itens dentro dele
+        // (calculada no servidor e na tela, ver withGroupTotals).
+        <div className="grid gap-2">
+          <Label>Pontuação máxima</Label>
+          <p className="flex h-9 items-center rounded-md border border-border bg-muted/40 px-3 text-sm text-foreground">
+            {criterion.maxScore.toFixed(2)} pts
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Soma automática dos itens de avaliação deste grupo.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          <Label htmlFor="criterion-max-score">Pontuação máxima</Label>
+          <Input
+            id="criterion-max-score"
+            type="number"
+            step={0.01}
+            value={maxScore}
+            disabled={readOnly}
+            onChange={(e) => {
+              setMaxScore(e.target.value);
+              const parsed = Number(e.target.value);
+              if (e.target.value.trim() !== "" && !Number.isNaN(parsed)) {
+                scheduleDebouncedSave({ maxScore: parsed });
+              }
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Pontuação máxima que este critério pode receber.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="criterion-description">
