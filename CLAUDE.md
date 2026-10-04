@@ -1818,6 +1818,75 @@ continua com o desktop como alvo principal, mas agora funciona em 412px.
   conferidas pelo usuário; só o fix do seletor (ver gotcha "Tela rolando
   sozinha ao abrir um `Select`") foi investigado nesta sessão.
 
+## Atleta em qualquer conta (2026-10-03)
+
+Qualquer conta menos Programa pode ser atleta de um programa (mesma
+regra do jurado). Decisão: sem checagem de conflito pra quem é jurado e
+atleta no mesmo evento (responsabilidade do organizador).
+
+- `AthleteProgramsController` ("Meus programas") aceita conta
+  Atleta, Jurado e Organização; item do menu (`NAV_ITEMS`) e a trava
+  da própria tela (`AthleteProgramsPage`, só barra conta Programa) idem.
+- "Adicionar atleta" (programa) pede o nome completo num campo só,
+  separado no 1º espaço (mesma regra de `CreateEventStaffMemberDialog`).
+- `AthletesService.create` (programa adicionando por email) liga a
+  conta de qualquer tipo; email de conta Programa dá 409.
+- Convite pendente (`linkUnclaimedAthleteInvitesByEmail`) é reclamado
+  no cadastro de qualquer conta não-Programa E no login (cobre convites
+  criados antes da mudança, que ficaram pendentes com a conta já
+  existindo). `programEmail` no cadastro continua só pra conta Atleta.
+- Convite pendente cujo email virou conta Programa DEPOIS do convite
+  nunca é aceito: o elenco (`listForProgram`, campo
+  `emailIsProgramAccount`) mostra o aviso "Uma conta Programa foi
+  criada usando este e-mail..." numa faixa própria e esconde
+  "Confirmado"; o programa remove pela lixeira de sempre.
+- **Sair da equipe mantém o histórico** (decisão do usuário,
+  2026-10-03, migration `AddAthleteLinkEndedAt`): remover o vínculo
+  (qualquer lado) ENCERRA (`athlete_links.ended_at`) em vez de apagar,
+  quando os dois lados já estavam resolvidos (convite/pedido sem conta
+  continua sendo apagado). Papel ATHLETE sai só dos eventos `created`/
+  `published` do programa (vira SPECTATOR); nos `started`/`completed`
+  fica. `getConfirmedProgramUserIds(athleteUserId, eventStartedAt)`
+  conta vínculo encerrado só se `event.startedAt <= endedAt`. Vínculo
+  encerrado some das listas, de `hasConfirmedAthleteLink`, das checagens
+  de duplicado (dá pra readicionar) e de `grantEventAccessForNewProgramEvent`.
+- Limitação conhecida: na aba Súmulas, quem é jurado (ou admin) E
+  atleta no mesmo evento vê só a visão de jurado/admin, não a
+  `AthleteNotesOverview`.
+- Testado com contas descartáveis contra a API local (8 cenários,
+  apagadas ao final); o papel no evento acumula (`{judge,athlete}`).
+
+## Nota máxima de grupo calculada (2026-10-03)
+
+Pedido do usuário: no construtor de sistema de pontuação, só os itens de
+avaliação têm valor digitado; o grupo é sempre a soma dos filhos.
+
+- **API**: `ScoringCriteriaService.recalculateGroupScores` recalcula a
+  árvore inteira de baixo pra cima depois de criar, editar, excluir e
+  mover (dentro da transação do mover), gravando só os grupos que
+  mudaram. `maxScore` enviado pra grupo é sobrescrito. Grupo sem filhos
+  = 0. O campo `maxScore` continua gravado (nada que lê a árvore mudou).
+- **Migration `RecalculateGroupMaxScores`** alinha os grupos existentes
+  (repete a atualização até nada mudar; sem `down`, o valor digitado
+  antes se perde). No banco local nenhum dos 90 grupos estava diferente
+  da soma; em produção pode haver sistema de usuário com grupo digitado
+  diferente, que passa a refletir a soma real (e pode virar
+  "Incompleto" se a soma não bater com a meta).
+- **Builder**: `withGroupTotals` (`lib/scoringTree.ts`) calcula o mesmo na
+  tela (estado bruto `rawCriteria`, `criteria` derivado com `useMemo`),
+  então o grupo e a "Pontuação distribuída" mudam assim que o item salva.
+  Mantém o mesmo objeto pra quem não mudou (o `EditCriterionPanel`
+  reinicia os campos quando o objeto muda). No painel, grupo mostra o
+  valor fixo com "Soma automática dos itens de avaliação deste grupo."
+- **Faixa acima da nota máxima do item** (valor do item baixou depois
+  das faixas salvas): antes nada avisava (a validação só pegava faixa
+  que NÃO chega ao máximo). Agora `findBandsAboveMax`/
+  `hasScoreBandsAboveMax` (`lib/scoreBands.ts`) mostram aviso por faixa
+  no `ScoreBandsEditor` e banner no topo do builder. Só aviso, de
+  propósito: não deixa o sistema "Incompleto" nem a API recusa (o jurado
+  nunca passa da nota máxima; a cópia local do USS tinha "Stunt
+  Difficulty (Coed)" com máximo 19 e faixa até 20).
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
@@ -1834,28 +1903,12 @@ fato pendente:
    real com esse volume de domínios interdependentes (hoje inclui
    `scoring`/`notifications`/`athletes` também, não só os módulos de
    setup do evento).
-2. **Backfill de documentação (2026-07-19 → 2026-07-26).** O período
-   que construiu lançamento de notas, o painel "evento ao vivo"
-   inteiro, notificações, jornada do atleta e impersonation não tem o
-   detalhamento de decisão/gotcha que o resto deste arquivo tem (ver
-   nota no topo do arquivo) — só reconstruir isso com precisão exigiria
-   ou as transcrições de sessão daquele período (não disponíveis aqui)
-   ou uma exploração grande de código pra reverse-engineer decisões
-   sem garantia de acertar o "porquê". Fora de escopo até o usuário
-   pedir explicitamente.
-3. **Atleta em qualquer conta (depois do Batalha).** Contas de jurado e
-   organização poderem ser atletas de um programa (qualquer conta menos
-   Programa, mesma regra do jurado). Hoje só `UserRole.ATHLETE`: "Meus
-   programas" (`AthleteProgramsController` + item de menu), programa
-   adicionando por email (`AthletesService`) e convite reclamado no
-   cadastro (`AuthService.setPassword`). Decisão: não checar conflito de
-   jurado e atleta no mesmo evento (responsabilidade do organizador).
-4. **Súmula sem internet em qualquer apresentação.** Hoje só a súmula já
+2. **Súmula sem internet em qualquer apresentação.** Hoje só a súmula já
    aberta funciona offline (registros na fila do IndexedDB); abrir outra
    exige buscar a súmula no servidor. Ideia: guardar as súmulas do
    jurado ao abrir a tela de Súmulas. Mexe na tela mais sensível; não
    fazer em véspera de evento.
-5. **Latência por consulta entre Render e Neon (~40 a 50 ms).** Medida
+3. **Latência por consulta entre Render e Neon (~40 a 50 ms).** Medida
    em 2026-09-28: rota sem banco ~230 ms, `/users/me` +100 ms,
    `/schedule/days` +470 ms. Os dois estão em Oregon, onde o esperado
    seria 1 a 3 ms por consulta. Causa não investigada (endpoint com
@@ -1998,7 +2051,9 @@ fato pendente:
   `AutoGenerateDialog`; o mesmo padrão existe em pelo menos mais 6
   componentes do projeto — `CustomIntervalDialog`, `EditCriterionPanel`,
   `CategoryFormFields`, `DeductionRulesSection`, `ScoreBandsEditor`,
-  `ScoringTemplateFormFields` — não corrigidos ainda, só o reportado).
+  `ScoringTemplateFormFields`; conferido em 2026-10-03: todos já
+  guardam o valor como texto, e `DeductionRulesSection` não existe
+  mais. Os campos numéricos mais novos seguem o mesmo padrão).
   Fix: guardar o valor do input como STRING separada (aceita vazio
   livremente enquanto digita), convertendo pra number só no momento de
   usar o valor de verdade (submit), com fallback pro mínimo válido se
