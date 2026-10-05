@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { AsyncLocalStorage } from 'async_hooks';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
@@ -579,6 +580,8 @@ export class ScheduleService {
       })
       .leftJoinAndSelect('team.categories', 'category')
       .where('program.aliasId = :aliasId', { aliasId: day.aliasId })
+      // Inscrição em rascunho (programa ainda não enviou) não entra.
+      .andWhere('program.submittedAt IS NOT NULL')
       .getMany();
 
     // Dentro de um DayWorkspace (autoGenerate) o dia está em memória: o
@@ -989,6 +992,33 @@ export class ScheduleService {
 
     const [view] = await this.attachNames([newPresentation]);
     return view;
+  }
+
+  // Programa sendo excluído (ProgramsService.remove, inclusive "Aceitar
+  // cancelamento"): tira as apresentações das equipes dele pelo caminho
+  // normal (removeEntry leva aquecimento, esperas e intervalos junto e
+  // reconcilia a pista). Apresentação com nota lançada dá erro e a
+  // exclusão do programa é cancelada (2026-10-05).
+  @OnEvent('program.removing', { promisify: true, suppressErrors: false })
+  async removeProgramPresentations(payload: {
+    aliasId: string;
+    teamIds: string[];
+  }): Promise<void> {
+    if (payload.teamIds.length === 0) return;
+    const rows: { id: string; dayId: string }[] = await this.entriesRepoDb
+      .createQueryBuilder('e')
+      .innerJoin(ScheduleResource, 'r', 'r.id = e.resourceId')
+      .select('e.id', 'id')
+      .addSelect('r.scheduleDayId', 'dayId')
+      .where('e.type = :type', { type: ScheduleEntryType.PRESENTATION })
+      .andWhere('e.teamId IN (:...teamIds)', { teamIds: payload.teamIds })
+      .getRawMany();
+    for (const row of rows) {
+      // Uma remoção pode ter levado outra junto (ex.: mesma equipe); só
+      // remove o que ainda existe.
+      const exists = await this.entriesRepoDb.existsBy({ id: row.id });
+      if (exists) await this.removeEntry(payload.aliasId, row.dayId, row.id);
+    }
   }
 
   async removeEntry(
@@ -2435,9 +2465,12 @@ export class ScheduleService {
 
     const team = await this.teamsRepo
       .createQueryBuilder('team')
-      .innerJoin('team.program', 'program', 'program.aliasId = :aliasId', {
-        aliasId,
-      })
+      .innerJoin(
+        'team.program',
+        'program',
+        'program.aliasId = :aliasId AND program.submittedAt IS NOT NULL',
+        { aliasId },
+      )
       .innerJoin('team.categories', 'category', 'category.id = :categoryId', {
         categoryId,
       })

@@ -5,6 +5,13 @@ import { ProgramProfile } from './entities/program-profile.entity';
 import { ProgramAthlete } from './entities/program-athlete.entity';
 import { TeamCategoryAthlete } from './entities/team-category-athlete.entity';
 import { Team } from '../teams/entities/team.entity';
+import { Category } from '../categories/entities/category.entity';
+import { ProgramRegistrationController } from './controllers/program-registration.controller';
+import { ProgramRegistrationAdminController } from './controllers/program-registration-admin.controller';
+import { RegistrationRequest } from './entities/registration-request.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { MailModule } from '../auth/mail.module';
+import { ProgramRegistrationService } from './services/program-registration.service';
 import { ProgramAthletesController } from './controllers/program-athletes.controller';
 import { ProgramAthletesService } from './services/program-athletes.service';
 import { ProgramsController } from './controllers/programs.controller';
@@ -23,7 +30,11 @@ import { AthletesModule } from '../athletes/athletes.module';
       ProgramAthlete,
       TeamCategoryAthlete,
       Team,
+      Category,
+      RegistrationRequest,
     ]),
+    NotificationsModule,
+    MailModule,
     EventsModule,
     UsersModule,
     AthletesModule,
@@ -33,8 +44,14 @@ import { AthletesModule } from '../athletes/athletes.module';
     ProgramProfileController,
     ProgramCatalogController,
     ProgramAthletesController,
+    ProgramRegistrationController,
+    ProgramRegistrationAdminController,
   ],
-  providers: [ProgramsService, ProgramAthletesService],
+  providers: [
+    ProgramsService,
+    ProgramAthletesService,
+    ProgramRegistrationService,
+  ],
   exports: [ProgramsService, ProgramAthletesService],
 })
 export class ProgramsModule {}

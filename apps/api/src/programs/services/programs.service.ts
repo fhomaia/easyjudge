@@ -1,3 +1,5 @@
+import { Team } from '../../teams/entities/team.entity';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ConflictException,
   ForbiddenException,
@@ -9,6 +11,7 @@ import { In, Repository } from 'typeorm';
 import { ProgramParticipation } from '../entities/program-participation.entity';
 import { ProgramAthlete } from '../entities/program-athlete.entity';
 import { TeamCategoryAthlete } from '../entities/team-category-athlete.entity';
+import { RegistrationRequest } from '../entities/registration-request.entity';
 import { ProgramProfile } from '../entities/program-profile.entity';
 import { CreateProgramParticipationDto } from '../dto/create-program-participation.dto';
 import { UpdateProgramParticipationDto } from '../dto/update-program-participation.dto';
@@ -66,17 +69,23 @@ export class ProgramsService {
     private readonly athletesRepo: Repository<ProgramAthlete>,
     @InjectRepository(TeamCategoryAthlete)
     private readonly teamCategoryAthletesRepo: Repository<TeamCategoryAthlete>,
+    @InjectRepository(RegistrationRequest)
+    private readonly requestsRepo: Repository<RegistrationRequest>,
     private readonly eventsService: EventsService,
     private readonly usersService: UsersService,
     private readonly athletesService: AthletesService,
     private readonly activityLogService: EventActivityLogService,
     private readonly storageService: StorageService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
+  // `draft`: inscrição pelo próprio programa, em rascunho até
+  // submitRegistration (sem papel PROGRAM, invisível pro produtor).
   async create(
     eventId: string,
     dto: CreateProgramParticipationDto,
     createdById: string,
+    options: { draft?: boolean } = {},
   ): Promise<ProgramParticipation> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     let userId = dto.userId ?? null;
@@ -123,8 +132,10 @@ export class ProgramsService {
       userId,
       aliasId: event.aliasId,
       createdById,
+      submittedAt: options.draft ? null : new Date(),
     });
     const saved = await this.participationsRepo.save(participation);
+    if (options.draft) return this.toProgramView(saved);
 
     // Todo programa vinculado ao evento já entra no roster de acessos
     // com o papel "programa" — é o que dá acesso de leitura às telas
@@ -132,10 +143,41 @@ export class ProgramsService {
     // padrão automático já usado por JudgesService pro papel "jurado".
     // Deliberadamente NÃO é SPECTATOR — espectador genérico não deve
     // ter acesso a essas telas (ver comentário no enum).
-    await this.eventsService.upsertMemberRole(
+    await this.grantProgramEventAccess(event.aliasId, saved);
+    await this.activityLogService.record(
       event.aliasId,
+      createdById,
+      EventActivityAction.PROGRAM_CREATED,
+      saved.name,
+    );
+
+    return this.toProgramView(saved);
+  }
+
+  // Inscrição pelo programa enviada (ProgramRegistrationService.submit):
+  // passa a valer como qualquer programa do evento.
+  async submitRegistration(participation: ProgramParticipation): Promise<void> {
+    if (participation.submittedAt) return;
+    participation.submittedAt = new Date();
+    await this.participationsRepo.save(participation);
+    await this.grantProgramEventAccess(participation.aliasId, participation);
+    await this.activityLogService.record(
+      participation.aliasId,
+      participation.userId ?? participation.createdById,
+      EventActivityAction.PROGRAM_CREATED,
+      participation.name,
+    );
+  }
+
+  private async grantProgramEventAccess(
+    aliasId: string,
+    saved: ProgramParticipation,
+  ): Promise<void> {
+    const userId = saved.userId;
+    await this.eventsService.upsertMemberRole(
+      aliasId,
       EventMemberRole.PROGRAM,
-      { userId, email: dto.email, firstName: dto.name },
+      { userId, email: saved.email, firstName: saved.name },
     );
 
     // Replica o acesso pra todo atleta já vinculado a este programa
@@ -145,18 +187,9 @@ export class ProgramsService {
     if (userId) {
       await this.athletesService.grantEventAccessForNewProgramEvent(
         userId,
-        event.aliasId,
+        aliasId,
       );
     }
-
-    await this.activityLogService.record(
-      event.aliasId,
-      createdById,
-      EventActivityAction.PROGRAM_CREATED,
-      saved.name,
-    );
-
-    return this.toProgramView(saved);
   }
 
   async findAllForEvent(eventId: string): Promise<ProgramParticipation[]> {
@@ -168,10 +201,15 @@ export class ProgramsService {
       .leftJoinAndSelect('participation.teams', 'team')
       .leftJoinAndSelect('team.categories', 'category')
       .where('participation.aliasId = :aliasId', { aliasId: event.aliasId })
+      // Inscrição do programa em rascunho não aparece pro produtor.
+      .andWhere('participation.submittedAt IS NOT NULL')
       .orderBy('participation.createdAt', 'DESC')
       .addOrderBy('team.createdAt', 'ASC')
       .getMany();
     const athleteCounts = await this.countAthletesByProgram(
+      participations.map((p) => p.id),
+    );
+    const pendingRequests = await this.countPendingRequestsByProgram(
       participations.map((p) => p.id),
     );
     for (const p of participations) {
@@ -181,8 +219,25 @@ export class ProgramsService {
         0,
       );
       p.athletesCount = athleteCounts.get(p.id) ?? 0;
+      p.pendingRequestsCount = pendingRequests.get(p.id) ?? 0;
     }
     return Promise.all(participations.map((p) => this.toProgramView(p)));
+  }
+
+  // Pedidos da ficha de inscrição ainda não resolvidos (selo na lista).
+  private async countPendingRequestsByProgram(
+    programIds: string[],
+  ): Promise<Map<string, number>> {
+    if (programIds.length === 0) return new Map();
+    const rows: { programId: string; count: string }[] = await this.requestsRepo
+      .createQueryBuilder('r')
+      .select('r.programId', 'programId')
+      .addSelect('COUNT(*)', 'count')
+      .where({ programId: In(programIds) })
+      .andWhere('r.resolvedAt IS NULL')
+      .groupBy('r.programId')
+      .getRawMany();
+    return new Map(rows.map((r) => [r.programId, Number(r.count)]));
   }
 
   private async countAthletesByProgram(
@@ -313,7 +368,37 @@ export class ProgramsService {
 
   async remove(eventId: string, id: string, userId: string): Promise<void> {
     const participation = await this.findProgramOrThrow(eventId, id);
+    const teams = await this.participationsRepo.manager
+      .getRepository(Team)
+      .findBy({ programId: participation.id });
+    // Antes de apagar: o cronograma tira as apresentações das equipes
+    // pelo caminho normal (sem deixar espera órfã); se falhar (ex.:
+    // apresentação com nota), nada é apagado. Ver
+    // ScheduleService.removeProgramPresentations.
+    await this.eventEmitter.emitAsync('program.removing', {
+      aliasId: participation.aliasId,
+      teamIds: teams.map((t) => t.id),
+    });
     await this.participationsRepo.remove(participation);
+    // Sem programa no evento, a conta dele vira espectador (continua
+    // acompanhando e pode se inscrever de novo; reenviar uma inscrição
+    // devolve o papel de programa, ver submitRegistration).
+    if (participation.userId) {
+      await this.eventsService.upsertMemberRole(
+        participation.aliasId,
+        EventMemberRole.SPECTATOR,
+        {
+          userId: participation.userId,
+          email: participation.email,
+          firstName: participation.name,
+        },
+      );
+    }
+    await this.eventsService.removeMemberRole(
+      participation.aliasId,
+      EventMemberRole.PROGRAM,
+      { userId: participation.userId, email: participation.email },
+    );
     await this.activityLogService.record(
       participation.aliasId,
       userId,
@@ -640,6 +725,15 @@ export class ProgramsService {
     }));
 
     return [...platformEntries, ...unclaimedOwnEntries];
+  }
+
+  // Cadastro de conta Programa (AuthService.register): perfil com
+  // cidade/UF informadas no próprio cadastro.
+  async createSignupProfile(
+    userId: string,
+    data: { name: string; contactEmail: string; city: string; state: string },
+  ): Promise<void> {
+    await this.getOrCreateProfile(userId, data);
   }
 
   private async getOrCreateProfile(

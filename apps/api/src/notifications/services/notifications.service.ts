@@ -1,3 +1,4 @@
+import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -54,6 +55,8 @@ export class NotificationsService {
     audience: NotificationAudience,
     title: string,
     scheduleEntryId?: string,
+    // Destinatário único (só essa conta vê).
+    recipientUserId?: string,
   ): Promise<void> {
     const saved = await this.notificationsRepo.save(
       this.notificationsRepo.create({
@@ -62,6 +65,7 @@ export class NotificationsService {
         audience,
         title,
         scheduleEntryId: scheduleEntryId ?? null,
+        userId: recipientUserId ?? null,
       }),
     );
     this.eventEmitter.emit('notification.created', {
@@ -71,6 +75,7 @@ export class NotificationsService {
       audience,
       title,
       scheduleEntryId: saved.scheduleEntryId,
+      recipientUserId: saved.userId,
     });
   }
 
@@ -149,11 +154,14 @@ export class NotificationsService {
     );
     const audiences = this.audiencesForMember(member);
 
-    const rows = await this.notificationsRepo.find({
-      where: audiences.map((audience) => ({ aliasId, audience })),
-      order: { createdAt: 'DESC' },
-      take: 50,
-    });
+    const rows = await this.notificationsRepo
+      .createQueryBuilder('n')
+      .where('n.aliasId = :aliasId', { aliasId })
+      .andWhere('n.audience IN (:...audiences)', { audiences })
+      .andWhere('(n.userId IS NULL OR n.userId = :userId)', { userId })
+      .orderBy('n.createdAt', 'DESC')
+      .take(50)
+      .getMany();
 
     const unreadCount = member.notificationsSeenAt
       ? rows.filter((r) => r.createdAt > member.notificationsSeenAt!).length
@@ -171,6 +179,38 @@ export class NotificationsService {
     };
   }
 
+  // Não lidas por evento (aliasId), pra todos os eventos do usuário —
+  // selo nos cards da Home e no item "Eventos" do menu (2026-10-05).
+  // Mesma regra de audiência de audiencesForMember.
+  async unreadCountsForUser(
+    userId: string,
+  ): Promise<{ total: number; byEvent: Record<string, number> }> {
+    const rows: { aliasId: string; count: string }[] =
+      await this.notificationsRepo.query(
+        `SELECT m.alias_id AS "aliasId", COUNT(n.id) AS count
+           FROM event_members m
+           JOIN notifications n
+             ON n.alias_id = m.alias_id
+            AND n.created_at > COALESCE(m.notifications_seen_at, '-infinity'::timestamptz)
+            AND (n.user_id IS NULL OR n.user_id = m.user_id)
+            AND (
+              n.audience = 'all'
+              OR (n.audience = 'staff' AND m.roles::text[] && ARRAY['admin','assessor','judge'])
+              OR (n.audience = 'managers' AND m.roles::text[] && ARRAY['admin','assessor'])
+            )
+          WHERE m.user_id = $1
+          GROUP BY m.alias_id`,
+        [userId],
+      );
+    const byEvent: Record<string, number> = {};
+    let total = 0;
+    for (const r of rows) {
+      byEvent[r.aliasId] = Number(r.count);
+      total += Number(r.count);
+    }
+    return { total, byEvent };
+  }
+
   async markSeen(eventId: string, userId: string): Promise<void> {
     const { member } = await this.resolveMemberOrThrow(eventId, userId);
     member.notificationsSeenAt = new Date();
@@ -179,9 +219,14 @@ export class NotificationsService {
 
   private audiencesForMember(member: EventMember): NotificationAudience[] {
     const isStaff = EVENT_STAFF_ROLES.some((r) => member.roles.includes(r));
-    return isStaff
-      ? [NotificationAudience.ALL, NotificationAudience.STAFF]
-      : [NotificationAudience.ALL];
+    const isManager =
+      member.roles.includes(EventMemberRole.ADMIN) ||
+      member.roles.includes(EventMemberRole.ASSESSOR);
+    return [
+      NotificationAudience.ALL,
+      ...(isStaff ? [NotificationAudience.STAFF] : []),
+      ...(isManager ? [NotificationAudience.MANAGERS] : []),
+    ];
   }
 
   private async resolveMemberOrThrow(

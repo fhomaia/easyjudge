@@ -76,6 +76,7 @@ export class TeamsService {
       .addSelect(['program.id', 'program.name'])
       .leftJoinAndSelect('team.categories', 'categories')
       .where('program.aliasId = :aliasId', { aliasId: event.aliasId })
+      .andWhere('program.submittedAt IS NOT NULL')
       .orderBy('team.createdAt', 'ASC')
       .getMany();
   }

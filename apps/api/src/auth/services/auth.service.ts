@@ -85,6 +85,16 @@ export class AuthService {
       }
     }
     const user = await this.usersService.createPendingUser(dto);
+    // Perfil do programa já nasce com cidade/UF (some junto com a conta
+    // pendente se o cadastro for refeito: FK CASCADE).
+    if (dto.role === UserRole.PROGRAM) {
+      await this.programsService.createSignupProfile(user.id, {
+        name: dto.firstName.trim(),
+        contactEmail: dto.email,
+        city: (dto.city ?? '').trim(),
+        state: (dto.state ?? '').trim().toUpperCase(),
+      });
+    }
     await this.issueVerificationCode(user.id, dto.email);
     return { userId: user.id };
   }

@@ -22,6 +22,7 @@ interface NotificationCreatedPayload {
   audience: string;
   title: string;
   scheduleEntryId: string | null;
+  recipientUserId?: string | null;
 }
 
 interface EventStatusChangedPayload {

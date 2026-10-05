@@ -16,4 +16,9 @@ export enum NotificationType {
   PRESENTATION_MOVED = 'presentation_moved',
   SPECIAL_EVENT_STARTED = 'special_event_started',
   SPECIAL_EVENT_ENDED = 'special_event_ended',
+  // Inscrição pelo programa (2026-10-05), audiência MANAGERS.
+  REGISTRATION_SUBMITTED = 'registration_submitted',
+  REGISTRATION_REQUEST = 'registration_request',
+  // Pro programa (destinatário único): organizador liberou a ficha.
+  REGISTRATION_REOPENED = 'registration_reopened',
 }

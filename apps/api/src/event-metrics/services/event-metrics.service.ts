@@ -107,6 +107,7 @@ export class EventMetricsService {
           .innerJoin('team.program', 'program')
           .innerJoin('team.categories', 'category')
           .where('program.aliasId = :aliasId', { aliasId })
+          .andWhere('program.submittedAt IS NOT NULL')
           .select('program.id', 'programId')
           .addSelect('program.name', 'programName')
           .addSelect('COUNT(DISTINCT category.id)::int', 'count')

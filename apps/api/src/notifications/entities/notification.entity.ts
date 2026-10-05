@@ -43,6 +43,11 @@ export class Notification {
   @Column({ name: 'schedule_entry_id', type: 'uuid', nullable: true })
   scheduleEntryId: string | null;
 
+  // Destinatário único (opcional): preenchido, só essa conta vê. Nulo =
+  // todo mundo da audiência (o normal).
+  @Column({ name: 'user_id', type: 'uuid', nullable: true })
+  userId: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

@@ -38,6 +38,12 @@ export class Event {
   @Column({ type: 'varchar', length: 300, nullable: true })
   address: string | null;
 
+  // Último dia (inclusive, até 23:59 de Brasília) em que o programa pode
+  // se inscrever sozinho; nulo = sem data limite. Ver
+  // events/registration-window.ts.
+  @Column({ name: 'registration_deadline', type: 'date', nullable: true })
+  registrationDeadline: string | null;
+
   @Column({ name: 'logo_url', type: 'varchar', nullable: true })
   logoUrl: string | null;
 

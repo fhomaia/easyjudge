@@ -1,12 +1,13 @@
 import { UserRole } from '../../common/enums/user-role.enum';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Not, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'crypto';
 import { generateEventCode } from '../../common/utils/generate-event-code';
@@ -143,6 +144,7 @@ export class EventsService {
   // membership de admin do criador, numa transação — as duas linhas
   // nascem juntas ou nenhuma nasce.
   async createEvent(dto: CreateEventDto, createdById: string): Promise<Event> {
+    assertRegistrationDeadline(dto.registrationDeadline ?? null, dto.startDate);
     const id = randomUUID();
     const creator = await this.usersService.findById(createdById);
     const saved = await this.dataSource.transaction(async (manager) => {
@@ -216,7 +218,8 @@ export class EventsService {
             .subQuery()
             .select('COUNT(*)', 'count')
             .from(ProgramParticipation, 'p')
-            .where('p.aliasId = event.aliasId'),
+            .where('p.aliasId = event.aliasId')
+            .andWhere('p.submittedAt IS NOT NULL'),
         'programs_count',
       )
       .addSelect(
@@ -289,7 +292,9 @@ export class EventsService {
 
     const [categories, programs, judgesCount] = await Promise.all([
       this.categoriesRepo.find({ where: { aliasId: event.aliasId } }),
-      this.programsRepo.find({ where: { aliasId: event.aliasId } }),
+      this.programsRepo.find({
+        where: { aliasId: event.aliasId, submittedAt: Not(IsNull()) },
+      }),
       this.judgesRepo.count({ where: { aliasId: event.aliasId } }),
     ]);
 
@@ -331,9 +336,10 @@ export class EventsService {
     }
 
     Object.assign(event, stripUndefined(dto));
-    if (event.status === EventStatus.PUBLISHED) {
-      event.status = EventStatus.CREATED;
-    }
+    assertRegistrationDeadline(event.registrationDeadline, event.startDate);
+    // Editar NÃO despublica (decisão do usuário, 2026-10-05): o evento
+    // publicado continua publicado. Despublicar só pelo "Reverter
+    // publicação" (unpublishEvent).
 
     const saved = await this.eventsRepo.save(event);
     await this.activityLogService.record(
@@ -383,6 +389,7 @@ export class EventsService {
         location: event.location,
         venue: event.venue,
         address: event.address,
+        registrationDeadline: event.registrationDeadline,
         logoUrl: event.logoUrl,
         createdById: event.createdById,
         eventCode,
@@ -688,6 +695,26 @@ export class EventsService {
       .getOne();
   }
 
+  // Emails de quem administra o evento (admin/assessor) e do dono (quem
+  // criou o evento, mesmo que tenha deixado de ser admin) — avisos da
+  // ficha de inscrição. Email da conta quando a linha não tem.
+  async findManagerEmails(aliasId: string): Promise<string[]> {
+    const event = await this.eventsRepo.findOneBy({ aliasId, active: true });
+    const owner = event ? await this.usersService.findById(event.createdById) : null;
+    const rows: { email: string | null }[] = await this.membersRepo
+      .createQueryBuilder('m')
+      .leftJoin('m.user', 'u')
+      .select('COALESCE(u.email, m.email)', 'email')
+      .where('m.aliasId = :aliasId', { aliasId })
+      .andWhere('m.roles && :roles', {
+        roles: [EventMemberRole.ADMIN, EventMemberRole.ASSESSOR],
+      })
+      .getRawMany();
+    const emails = rows.map((r) => r.email).filter((e): e is string => !!e);
+    if (owner?.email) emails.push(owner.email);
+    return [...new Set(emails.map((e) => e.toLowerCase()))];
+  }
+
   // Upsert idempotente de UM papel na pessoa identificada por userId
   // (se já tem conta) ou por email (convite pendente) — usado pela
   // sincronia automática jurados -> roster (ver JudgesService).
@@ -765,6 +792,11 @@ export class EventsService {
   ): Promise<void> {
     const existing = await this.findMemberByIdentity(aliasId, identity);
     if (!existing) return;
+    // O admin do dono do evento nunca sai (2026-10-05).
+    if (role === EventMemberRole.ADMIN) {
+      const event = await this.eventsRepo.findOneBy({ aliasId, active: true });
+      if (event && existing.userId === event.createdById) return;
+    }
     existing.roles = existing.roles.filter((r) => r !== role);
     if (existing.roles.length === 0) {
       await this.membersRepo.remove(existing);
@@ -920,5 +952,17 @@ export class EventsService {
       );
     }
     return event;
+  }
+}
+
+// A inscrição tem que fechar no máximo no dia em que o evento começa.
+function assertRegistrationDeadline(
+  deadline: string | null,
+  startDate: string,
+): void {
+  if (deadline !== null && deadline > startDate) {
+    throw new BadRequestException(
+      'A data limite de inscrição não pode ser depois do início do evento.',
+    );
   }
 }

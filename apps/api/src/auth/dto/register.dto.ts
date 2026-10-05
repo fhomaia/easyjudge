@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Length,
   MaxLength,
   ValidateIf,
 } from 'class-validator';
@@ -83,6 +84,20 @@ export class RegisterDto {
   @IsString()
   @MaxLength(150)
   teamOrInstitutionName?: string;
+
+  // Cidade e UF do programa (2026-10-05): obrigatórias só pra
+  // role=program, vão direto pro ProgramProfile (ver AuthService.register)
+  // e cobrem o que a inscrição em eventos precisa.
+  @ValidateIf((o: RegisterDto) => o.role === UserRole.PROGRAM)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  city?: string;
+
+  @ValidateIf((o: RegisterDto) => o.role === UserRole.PROGRAM)
+  @IsString()
+  @Length(2, 2)
+  state?: string;
 
   // Só relevante pra role=athlete — email do programa a que o atleta
   // quer se vincular (pedido fica pendente de confirmação, ver

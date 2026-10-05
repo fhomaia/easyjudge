@@ -192,14 +192,18 @@ export class ProgramAthletesService {
     userId: string,
   ): Promise<void> {
     try {
-      const event = await this.eventsService.findEventOrThrow(program.aliasId);
+      // O próprio programa inscrevendo o atleta não precisa confirmar.
+      const byProgram = program.userId !== null && program.userId === userId;
+      const event = byProgram
+        ? null
+        : await this.eventsService.findEventOrThrow(program.aliasId);
       await this.athletesService.requestLinkFromEvent({
         programUserId: program.userId,
         programEmail: program.email,
         firstName: athlete.firstName,
         lastName: athlete.lastName,
         email: athlete.email,
-        eventName: event.name,
+        eventName: event?.name ?? null,
         createdById: userId,
       });
     } catch (err) {

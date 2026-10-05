@@ -147,6 +147,49 @@ export class MailService {
 
     this.logger.log(`Mensagem de suporte enviada por ${user.email}`);
   }
+
+  // Aviso genérico com mensagem e link (pedidos da ficha de inscrição,
+  // 2026-10-05). Um envio por destinatário (ninguém vê o email dos
+  // outros). Melhor esforço: falha só vai pro log, quem chamou não
+  // depende do email (a notificação na plataforma já foi gravada).
+  async sendNotice(params: {
+    to: string[];
+    replyTo?: string;
+    subject: string;
+    heading: string;
+    lines: string[];
+    message?: string;
+    actionPath?: string;
+    actionLabel?: string;
+    // Evento do aviso: nome e foto (só URL pública http(s); em dev o
+    // upload é caminho local e fica de fora).
+    event?: { name: string; logoUrl: string | null };
+  }): Promise<void> {
+    const recipients = [...new Set(params.to.map((e) => e.trim()).filter(Boolean))];
+    if (recipients.length === 0) return;
+    const appUrl =
+      this.configService.get<string>('APP_URL') ?? 'https://cheercup.com.br';
+    const html = buildNoticeEmailHtml({
+      ...params,
+      actionUrl: params.actionPath ? `${appUrl}${params.actionPath}` : undefined,
+    });
+    for (const to of recipients) {
+      if (!this.resend) {
+        this.logger.log(`[STUB] Aviso "${params.subject}" para ${to}`);
+        continue;
+      }
+      const { error } = await this.resend.emails.send({
+        from: this.fromAddress,
+        to: this.overrideTo ?? to,
+        replyTo: params.replyTo,
+        subject: params.subject,
+        html,
+      });
+      if (error) {
+        this.logger.error(`Falha ao enviar aviso para ${to}: ${error.message}`);
+      }
+    }
+  }
 }
 
 // Domínio de produção fixo (não config de ambiente): o logo precisa ser
@@ -275,6 +318,98 @@ function buildSupportEmailHtml(
                     </td>
                   </tr>
                 </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+// Mesmo layout do email de código (buildVerificationEmailHtml): cabeçalho
+// navy com o logo, título e texto centralizados, rodapé "Cheer Cup". Logo
+// abaixo do cabeçalho, a foto e o nome do evento (quando há foto pública).
+export function buildNoticeEmailHtml(params: {
+  heading: string;
+  lines: string[];
+  message?: string;
+  actionUrl?: string;
+  actionLabel?: string;
+  event?: { name: string; logoUrl: string | null };
+}): string {
+  const font =
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
+  const eventLogo =
+    params.event?.logoUrl && /^https?:\/\//.test(params.event.logoUrl)
+      ? params.event.logoUrl
+      : null;
+  const eventBlock = params.event
+    ? `<tr>
+              <td align="center" style="padding:32px 40px 0;">
+                ${
+                  eventLogo
+                    ? `<img src="${escapeHtml(eventLogo)}" width="72" height="72" alt="" style="display:block;width:72px;height:72px;border-radius:12px;object-fit:cover;margin:0 auto 10px;" />`
+                    : ''
+                }
+                <p style="margin:0;font-size:13px;font-weight:600;color:#3d6485;">${escapeHtml(params.event.name)}</p>
+              </td>
+            </tr>`
+    : '';
+  const lines = params.lines
+    .map(
+      (l) =>
+        `<p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#3d6485;text-align:justify;">${escapeHtml(l)}</p>`,
+    )
+    .join('');
+  const message = params.message
+    ? `<tr>
+              <td style="padding:16px 40px 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf3e2;border:1px solid #f7a828;border-radius:8px;">
+                  <tr>
+                    <td style="padding:16px 20px;font-size:14px;line-height:1.6;color:#14293d;${font}">
+                      ${escapeHtml(params.message).replace(/\n/g, '<br>')}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>`
+    : '';
+  const action = params.actionUrl
+    ? `<tr>
+              <td align="center" style="padding:28px 40px 0;">
+                <a href="${escapeHtml(params.actionUrl)}" style="display:inline-block;background:#14293d;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 22px;border-radius:8px;${font}">${escapeHtml(params.actionLabel ?? 'Abrir no Cheer Cup')}</a>
+              </td>
+            </tr>`
+    : '';
+  return `<!doctype html>
+<html lang="pt-BR">
+  <body style="margin:0;padding:0;background:#f4f6f8;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:40px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="width:480px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;${font}">
+            <tr>
+              <td align="center" style="background:#14293d;padding:32px;">
+                <img src="${LOGO_URL}" width="64" height="64" alt="Cheer Cup" style="display:block;border-radius:9999px;width:64px;height:64px;" />
+              </td>
+            </tr>
+            ${eventBlock}
+            <tr>
+              <td style="padding:24px 40px 0;text-align:center;">
+                <h1 style="margin:0 0 12px;font-size:20px;color:#14293d;">${escapeHtml(params.heading)}</h1>
+                ${lines}
+              </td>
+            </tr>
+            ${message}
+            ${action}
+            <tr>
+              <td style="padding:32px 0 0;"></td>
+            </tr>
+            <tr>
+              <td style="padding:20px 40px;background:#f4f6f8;border-top:1px solid #e7ebee;text-align:center;">
+                <span style="font-size:12px;color:#8a97a6;">Cheer Cup</span>
               </td>
             </tr>
           </table>

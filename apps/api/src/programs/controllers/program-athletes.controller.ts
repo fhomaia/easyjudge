@@ -16,21 +16,14 @@ import { ProgramAthletesService } from '../services/program-athletes.service';
 import { CreateProgramAthleteDto } from '../dto/create-program-athlete.dto';
 import { UpdateProgramAthleteDto } from '../dto/update-program-athlete.dto';
 import { SetAthleteEntriesDto } from '../dto/set-athlete-entries.dto';
+import { ProgramAccessGuard } from '../guards/program-access.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../auth/guards/roles.guard';
-import { Roles } from '../../auth/decorators/roles.decorator';
-import { UserRole } from '../../common/enums/user-role.enum';
-import { EventMemberGuard } from '../../events/guards/event-member.guard';
-import { EventRoles } from '../../events/decorators/event-roles.decorator';
-import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
-// Atletas inscritos pelo programa no evento (ProgramAthlete). Mesmos
-// guards do ProgramsController: só admin/assessor do evento.
+// Atletas inscritos pelo programa no evento (ProgramAthlete).
 @Controller('events/:eventId/programs/:programId/athletes')
-@UseGuards(JwtAuthGuard, RolesGuard, EventMemberGuard)
-@Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
-@EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR)
+// Staff (admin/assessor) ou a própria conta Programa, ver ProgramAccessGuard.
+@UseGuards(JwtAuthGuard, ProgramAccessGuard)
 export class ProgramAthletesController {
   constructor(private readonly athletesService: ProgramAthletesService) {}
 

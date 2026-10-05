@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -125,6 +126,16 @@ export class EventStaffService {
       requesterId,
       'alterar os papéis de',
     );
+    // O dono é sempre admin (2026-10-05): pode acumular outros papéis,
+    // mas o admin nunca sai.
+    if (
+      member.userId === event.createdById &&
+      !dto.roles.includes(EventMemberRole.ADMIN)
+    ) {
+      throw new BadRequestException(
+        'O dono do evento é sempre admin; esse papel não pode ser removido.',
+      );
+    }
     member.roles = dto.roles;
     const saved = await this.membersRepo.save(member);
     await this.activityLogService.record(
@@ -143,12 +154,10 @@ export class EventStaffService {
   ): Promise<void> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     const member = await this.findMemberOrThrow(event.aliasId, memberId);
-    this.assertNotOwnerUnlessSelf(
-      member,
-      event.createdById,
-      requesterId,
-      'remover',
-    );
+    // O dono nunca sai do evento, nem por ele mesmo (2026-10-05).
+    if (member.userId === event.createdById) {
+      throw new ForbiddenException('O dono do evento não pode ser removido.');
+    }
     const name = `${member.firstName ?? ''} ${member.lastName ?? ''}`.trim();
     await this.membersRepo.remove(member);
     await this.activityLogService.record(

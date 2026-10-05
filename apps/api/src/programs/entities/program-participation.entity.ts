@@ -60,6 +60,17 @@ export class ProgramParticipation {
   @JoinColumn({ name: 'user_id' })
   user: User | null;
 
+  // Inscrição feita pelo próprio programa fica em rascunho (nulo) até ele
+  // enviar; rascunho não aparece pro produtor, no cronograma nem nas
+  // contagens. Cadastro pelo produtor já nasce enviado.
+  @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true })
+  submittedAt: Date | null;
+
+  // Organizador devolveu a ficha (já enviada) pro programa editar; volta
+  // a nulo quando o programa envia de novo.
+  @Column({ name: 'reopened_at', type: 'timestamptz', nullable: true })
+  reopenedAt: Date | null;
+
   @Column({ length: 150 })
   name: string;
 
@@ -86,6 +97,8 @@ export class ProgramParticipation {
   // (ProgramAthlete) e pares equipe+categoria, só pra listagem.
   athletesCount?: number;
   categoriesCount?: number;
+  // Pedidos da ficha de inscrição não resolvidos (só findAllForEvent).
+  pendingRequestsCount?: number;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

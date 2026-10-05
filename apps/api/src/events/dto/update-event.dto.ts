@@ -6,6 +6,7 @@ import {
   IsString,
   Min,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdateEventDto {
@@ -39,4 +40,10 @@ export class UpdateEventDto {
   @IsString()
   @MaxLength(300)
   address?: string;
+
+  // Sem data limite = null (ou ausente na criação).
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  registrationDeadline?: string | null;
 }

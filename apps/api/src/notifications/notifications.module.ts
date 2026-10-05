@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Notification } from './entities/notification.entity';
 import { Event } from '../events/entities/event.entity';
 import { EventMember } from '../events/entities/event-member.entity';
+import { NotificationsUnreadController } from './controllers/notifications-unread.controller';
 import { NotificationsController } from './controllers/notifications.controller';
 import { NotificationsService } from './services/notifications.service';
 
@@ -15,7 +16,7 @@ import { NotificationsService } from './services/notifications.service';
 // ScoringTemplatesModule/AthletesModule).
 @Module({
   imports: [TypeOrmModule.forFeature([Notification, Event, EventMember])],
-  controllers: [NotificationsController],
+  controllers: [NotificationsController, NotificationsUnreadController],
   providers: [NotificationsService],
   exports: [NotificationsService],
 })

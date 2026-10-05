@@ -234,7 +234,9 @@ export class AthletesService {
 
   // Produtor cadastrou o atleta num programa do evento (ProgramAthlete,
   // ver ProgramAthletesService): pede o vínculo em nome do evento, sem
-  // confirmar (decisão do usuário, 2026-10-05). O vínculo é global e dura
+  // confirmar (decisão do usuário, 2026-10-05). Se quem cadastrou foi o
+  // próprio programa (inscrição), `eventName` vem nulo e o vínculo nasce
+  // confirmado. O vínculo é global e dura
   // além do evento, então quem decide é o programa ("Confirmar vínculo"
   // ou a lixeira no elenco). Não faz nada se já existe vínculo ativo
   // entre os dois ou se o email é de uma conta Programa. Contas que ainda
@@ -246,7 +248,9 @@ export class AthletesService {
     firstName: string;
     lastName: string;
     email: string;
-    eventName: string;
+    // Nulo quando quem cadastra é o próprio programa (inscrição pelo
+    // programa): aí o vínculo já nasce confirmado, como em `create`.
+    eventName: string | null;
     createdById: string;
   }): Promise<void> {
     const email = params.email.trim();
@@ -288,8 +292,8 @@ export class AthletesService {
         firstName: athleteUser?.firstName ?? params.firstName,
         lastName: athleteUser?.lastName ?? params.lastName,
         email: athleteUser?.email ?? email,
-        confirmedAt: null,
-        requestedFromEvent: params.eventName.slice(0, 200),
+        confirmedAt: params.eventName === null ? new Date() : null,
+        requestedFromEvent: params.eventName?.slice(0, 200) ?? null,
         createdById: params.createdById,
       }),
     );
