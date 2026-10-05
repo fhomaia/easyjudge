@@ -22,7 +22,7 @@ const STATUS_FILTER_LABELS: Record<CategoryStatusFilter, string> = {
 };
 
 const MODALITY_FILTER_LABELS: Record<CategoryModalityFilter, string> = {
-  all: "Todas as modalidades",
+  all: "Todas as divisões",
   ...MODALITY_LABELS,
 };
 

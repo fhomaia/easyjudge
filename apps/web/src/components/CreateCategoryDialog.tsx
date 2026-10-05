@@ -130,7 +130,7 @@ export function CreateCategoryDialog({
     }
 
     if (form.categoryFormat === "custom" && !form.customFormatLabel.trim()) {
-      setError("Informe o nome do formato customizado.");
+      setError("Informe o nome da modalidade customizada.");
       return;
     }
 

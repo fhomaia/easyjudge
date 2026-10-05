@@ -38,3 +38,12 @@ export const TEAM_SITUATION_LABELS: Record<TeamSituation, string> = {
 export function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
+
+// Programa que se inscreveu sozinho pela própria conta (não foi o
+// produtor que cadastrou): excluir o programa mostra um aviso a mais.
+export function isSelfRegistered(program: { userId: string | null; createdById?: string }): boolean {
+  return program.userId !== null && program.createdById === program.userId;
+}
+
+export const SELF_REGISTERED_WARNING =
+  "Atenção: Ao continuar, a inscrição do programa no evento será cancelada.";

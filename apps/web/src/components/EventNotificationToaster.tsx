@@ -31,6 +31,7 @@ export function EventNotificationToaster() {
   const location = useLocation();
   const navigate = useNavigate();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const myUserId = useAuthStore((s) => s.userId);
 
   const [roles, setRoles] = useState<EventMemberRole[] | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -71,6 +72,14 @@ export function EventNotificationToaster() {
     onNotification: (payload) => {
       if (!aliasId || !roles) return;
       if (payload.audience === "staff" && !hasEventStaffRole(roles)) return;
+      if (payload.recipientUserId && payload.recipientUserId !== myUserId) return;
+      if (
+        payload.audience === "managers" &&
+        !roles.includes("admin") &&
+        !roles.includes("assessor")
+      ) {
+        return;
+      }
       // Na própria tela de notificações a lista já atualiza sozinha.
       if (location.pathname.endsWith("/live/notifications")) return;
       // Quem está na súmula da apresentação em questão acabou de causar

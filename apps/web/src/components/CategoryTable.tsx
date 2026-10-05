@@ -40,7 +40,7 @@ export function CategoryTable({
             <th className="px-4 py-3 font-medium">Categoria</th>
             <th className="px-4 py-3 font-medium">Modalidade</th>
             <th className="px-4 py-3 font-medium">Divisão</th>
-            <th className="px-4 py-3 font-medium">Formato</th>
+            <th className="px-4 py-3 font-medium">Gênero</th>
             <th className="px-4 py-3 font-medium">Nível</th>
             <th className="px-4 py-3 font-medium">Tempo</th>
             <th className="px-4 py-3 font-medium">Sistema de pontuação</th>
@@ -80,13 +80,13 @@ export function CategoryTable({
                 </div>
               </td>
               <td className="px-4 py-3 text-muted-foreground">
+                {formatLabelFor(category.categoryFormat, category.customFormatLabel)}
+              </td>
+              <td className="px-4 py-3 text-muted-foreground">
                 {MODALITY_LABELS[category.modality]}
               </td>
               <td className="px-4 py-3 text-muted-foreground">
                 {DIVISION_LABELS[category.division]}
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {formatLabelFor(category.categoryFormat, category.customFormatLabel)}
               </td>
               <td className="px-4 py-3 text-muted-foreground">Nível {category.level}</td>
               <td className="px-4 py-3 text-muted-foreground">

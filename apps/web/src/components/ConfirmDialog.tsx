@@ -16,6 +16,8 @@ interface ConfirmDialogProps {
   description: string;
   confirmLabel?: string;
   confirmingLabel?: string;
+  // "default" pra ações que não destroem nada (ex.: enviar inscrição).
+  confirmVariant?: "destructive" | "default";
   onConfirm: () => Promise<void>;
 }
 
@@ -26,6 +28,7 @@ export function ConfirmDialog({
   description,
   confirmLabel = "Confirmar",
   confirmingLabel = "Confirmando...",
+  confirmVariant = "destructive",
   onConfirm,
 }: ConfirmDialogProps) {
   const [loading, setLoading] = useState(false);
@@ -54,7 +57,7 @@ export function ConfirmDialog({
       <DialogContent className="gap-6 p-8 sm:max-w-md">
         <div className="grid gap-1.5">
           <DialogTitle className="text-xl font-medium">{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription className="whitespace-pre-line">{description}</DialogDescription>
         </div>
 
         <FormError message={error} />
@@ -63,7 +66,7 @@ export function ConfirmDialog({
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
+          <Button variant={confirmVariant} onClick={handleConfirm} disabled={loading}>
             {loading ? confirmingLabel : confirmLabel}
           </Button>
         </div>

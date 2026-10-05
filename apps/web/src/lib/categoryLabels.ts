@@ -5,6 +5,12 @@ import type {
   CategoryStatus,
 } from "@/api/client";
 
+// Nomenclatura da plataforma (2026-10-05) x nomes no código:
+// - "Modalidade" na tela = `categoryFormat` (FORMAT_LABELS: Team Cheer,
+//   Group Stunt, Elite Stunt...);
+// - "Divisão" = `modality` (MODALITY_LABELS: All Star, Universitário,
+//   Escolar);
+// - "Gênero" = `division` (DIVISION_LABELS: COED, All Girl, All Boy).
 export const MODALITY_LABELS: Record<CategoryModality, string> = {
   all_star: "All Star",
   university: "Universitário",

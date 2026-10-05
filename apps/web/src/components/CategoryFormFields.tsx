@@ -58,7 +58,7 @@ export function CategoryFormFields({
   return (
     <>
       <div className="grid gap-2">
-        <Label>Formato</Label>
+        <Label>Modalidade</Label>
         <Select
           value={form.categoryFormat}
           onValueChange={(value) => onChange("categoryFormat", value as string)}
@@ -78,7 +78,7 @@ export function CategoryFormFields({
 
       {form.categoryFormat === "custom" && (
         <div className="grid gap-2">
-          <Label htmlFor="category-custom-format-label">Nome do formato</Label>
+          <Label htmlFor="category-custom-format-label">Nome da modalidade</Label>
           <Input
             id="category-custom-format-label"
             placeholder="Ex.: Freestyle Pom"
@@ -91,7 +91,7 @@ export function CategoryFormFields({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
-          <Label>Modalidade</Label>
+          <Label>Divisão</Label>
           <Select
             value={form.modality}
             onValueChange={(value) => onChange("modality", value as string)}
@@ -112,7 +112,7 @@ export function CategoryFormFields({
         </div>
 
         <div className="grid gap-2">
-          <Label>Divisão</Label>
+          <Label>Gênero</Label>
           <Select
             value={form.division}
             onValueChange={(value) => onChange("division", value as string)}

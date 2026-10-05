@@ -31,7 +31,9 @@ import {
   athleteInitials,
   athleteName,
   entryKey,
+  isSelfRegistered,
   pluralize,
+  SELF_REGISTERED_WARNING,
   teamSituation,
 } from "@/lib/programAthletes";
 import { useIsMobile } from "@/lib/useIsMobile";
@@ -265,7 +267,11 @@ export function ProgramDetailPage() {
         open={deleteProgramOpen}
         onOpenChange={setDeleteProgramOpen}
         title="Excluir programa"
-        description={`Tem certeza que quer excluir "${program?.name}"? Todas as ${program?.teams.length ?? 0} equipes e os ${athletes?.length ?? 0} atletas dele também serão apagados. Essa ação não pode ser desfeita.`}
+        description={`${
+          program && isSelfRegistered(program)
+            ? `${SELF_REGISTERED_WARNING} `
+            : ""
+        }Tem certeza que quer excluir "${program?.name}"? Todas as ${program?.teams.length ?? 0} equipes e os ${athletes?.length ?? 0} atletas dele também serão apagados. Essa ação não pode ser desfeita.`}
         confirmLabel="Excluir"
         confirmingLabel="Excluindo..."
         onConfirm={handleDeleteProgram}

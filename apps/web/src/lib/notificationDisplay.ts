@@ -6,6 +6,9 @@ import {
   Gavel,
   Hourglass,
   Megaphone,
+  MessageSquare,
+  Unlock,
+  Send,
   Play,
   Trophy,
   XCircle,
@@ -30,6 +33,9 @@ export const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   presentation_moved: ArrowRightLeft,
   special_event_started: Megaphone,
   special_event_ended: Flag,
+  registration_submitted: Send,
+  registration_request: MessageSquare,
+  registration_reopened: Unlock,
 };
 
 export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/formatRelativeTime";
@@ -69,6 +75,14 @@ export function notificationHref(
     case "special_event_started":
     case "special_event_ended":
       return `/events/${eventId}/live/schedule`;
+    // Inscrição/pedidos do programa: tela de Programas do Setup.
+    case "registration_submitted":
+      return `/events/${eventId}/programs`;
+    case "registration_request":
+      return `/events/${eventId}/programs?tab=requests`;
+    // Pro programa: abre a ficha dele.
+    case "registration_reopened":
+      return `/events/${eventId}/registration`;
     default:
       return null;
   }

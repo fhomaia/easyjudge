@@ -47,6 +47,7 @@ const SIGNUP_ROLE_ORDER: SignupRole[] = [
 const STEPS = [
   "role",
   "name",
+  "location",
   "document",
   "birthDate",
   "email",
@@ -77,6 +78,9 @@ function isStepApplicable(
 ): boolean {
   const role = form.role;
   if (key === "programEmail") return role === "athlete";
+  // Cidade/UF só pra programa (2026-10-05): é o que a inscrição em
+  // eventos precisa, sem perguntar de novo depois.
+  if (key === "location") return role === "program";
   if (key === "team") {
     return role !== "spectator" && role !== "athlete" && role !== "program";
   }
@@ -176,6 +180,8 @@ const INITIAL_STATE = {
   email: "",
   teamOrInstitutionName: "",
   programEmail: "",
+  city: "",
+  state: "",
   acceptedTerms: false,
   code: "",
   password: "",
@@ -308,6 +314,8 @@ export function RegisterDialog({
         teamOrInstitutionName: form.teamOrInstitutionName || undefined,
         programEmail:
           form.role === "athlete" ? form.programEmail || undefined : undefined,
+        city: form.role === "program" ? form.city.trim() : undefined,
+        state: form.role === "program" ? form.state : undefined,
         acceptedTerms: form.acceptedTerms,
       });
       setUserId(userId);
@@ -696,6 +704,46 @@ export function RegisterDialog({
                   </form>
                 )}
 
+                {step === "location" && (
+                  <form
+                    onSubmit={submitSimpleStep}
+                    className="grid grid-cols-[minmax(0,1fr)] gap-5 short:gap-3"
+                  >
+                    <h3 className="text-xl font-medium short:text-lg">
+                      Onde fica o seu programa?
+                    </h3>
+                    <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-3">
+                      <Input
+                        autoFocus
+                        aria-label="Cidade"
+                        placeholder="Cidade"
+                        value={form.city}
+                        onChange={(e) => update("city", e.target.value)}
+                        maxLength={100}
+                        required
+                      />
+                      <Input
+                        aria-label="UF"
+                        placeholder="UF"
+                        value={form.state}
+                        onChange={(e) =>
+                          update(
+                            "state",
+                            e.target.value.replace(/[^a-zA-Z]/g, "").toUpperCase(),
+                          )
+                        }
+                        minLength={2}
+                        maxLength={2}
+                        required
+                      />
+                    </div>
+                    <FormError message={error} />
+                    <Button type="submit" className="w-full">
+                      Continuar
+                    </Button>
+                  </form>
+                )}
+
                 {step === "team" && (
                   <form
                     onSubmit={submitSimpleStep}
@@ -783,7 +831,13 @@ export function RegisterDialog({
                         />
                       )}
                       <SummaryRow label="Email" value={form.email} />
-                      {form.role !== "spectator" && form.role !== "athlete" && (
+                      {form.role === "program" && (
+                        <SummaryRow
+                          label="Cidade"
+                          value={`${form.city.trim()} - ${form.state}`}
+                        />
+                      )}
+                      {form.role !== "spectator" && form.role !== "athlete" && form.role !== "program" && (
                         <SummaryRow
                           label="Equipe/instituição"
                           value={form.teamOrInstitutionName || "Não informado"}

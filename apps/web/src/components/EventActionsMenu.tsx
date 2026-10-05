@@ -70,7 +70,9 @@ export function EventActionsMenu({
 
   const canTogglePublish =
     isAdmin && (event.status === "created" || event.status === "published");
-  const canShare = isAdmin && event.status !== "created";
+  // Rascunho também compartilha (2026-10-05): o código existe desde a
+  // criação e é por ele que os programas chegam na inscrição.
+  const canShare = isAdmin && event.eventCode !== null;
 
   return (
     <div className="flex items-center gap-1">

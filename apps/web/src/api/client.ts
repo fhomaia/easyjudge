@@ -176,6 +176,9 @@ export interface RegisterPayload {
   birthDate?: string;
   email: string;
   teamOrInstitutionName?: string;
+  // Só conta Programa (obrigatórios pra ela).
+  city?: string;
+  state?: string;
   // Só relevante pra role="athlete" — email do programa a que o atleta
   // quer se vincular (fica pendente de confirmação do programa).
   programEmail?: string;
@@ -334,6 +337,9 @@ export interface Event {
   location: string;
   venue: string | null;
   address: string | null;
+  // Último dia (até 23:59 de Brasília) da inscrição pelo próprio
+  // programa; null = sem data limite. Ver lib/registrationWindow.ts.
+  registrationDeadline: string | null;
   logoUrl: string | null;
   // Código de compartilhamento (QR + texto) — só existe a partir do
   // primeiro publish, estável através das versões (ver
@@ -369,6 +375,7 @@ export interface CreateEventPayload {
   location: string;
   venue?: string;
   address?: string;
+  registrationDeadline?: string | null;
 }
 
 export type UpdateEventPayload = Partial<CreateEventPayload>;
@@ -597,6 +604,15 @@ export interface Program {
   city: string;
   state: string;
   logoUrl: string | null;
+  // Inscrição feita pelo próprio programa: nulo enquanto rascunho.
+  submittedAt?: string | null;
+  // Organizador devolveu a ficha enviada pro programa editar.
+  reopenedAt?: string | null;
+  // Só na listagem: pedidos da ficha ainda não resolvidos.
+  pendingRequestsCount?: number;
+  // Quem cadastrou: igual a `userId` quando o próprio programa se
+  // inscreveu (ver isSelfRegistered).
+  createdById?: string;
   teamsCount?: number;
   // Só na listagem (programsApi.list) e no detalhe (get): atletas
   // inscritos no evento e pares equipe+categoria.
@@ -647,6 +663,147 @@ export interface ProgramAthletePayload {
   cpf: string | null;
   birthDate: string | null;
 }
+
+// Inscrição de um evento pela própria conta Programa (2026-10-05). Equipes,
+// categorias e atletas usam teamsApi/programAthletesApi com o programId
+// devolvido aqui (a API libera essas rotas pro dono enquanto a inscrição
+// está aberta).
+export interface ProgramRegistrationView {
+  event: {
+    id: string;
+    name: string;
+    startDate: string;
+    competitionDays: number;
+    location: string;
+    venue: string | null;
+    logoUrl: string | null;
+    status: EventStatus;
+    registrationDeadline: string | null;
+  };
+  open: boolean;
+  program: ProgramWithTeams | null;
+  profile: {
+    name: string;
+    email: string;
+    city: string | null;
+    state: string | null;
+    logoUrl: string | null;
+  };
+  categories: Category[];
+  // Equipes de inscrições anteriores do programa que ainda não estão
+  // nesta (atalhos pra reaproveitar).
+  previousTeamNames: string[];
+  // Pode mexer na ficha agora (rascunho no prazo, ou ficha liberada).
+  canEdit: boolean;
+  // Ficha enviada e evento não iniciado: pode pedir alteração/cancelamento.
+  canRequest: boolean;
+  requests: RegistrationRequestView[];
+}
+
+export type RegistrationRequestType = "change" | "cancel";
+
+export interface RegistrationRequestView {
+  id: string;
+  type: RegistrationRequestType;
+  message: string;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+// Pedido com o programa (aba Solicitações da tela de Programas).
+export interface EventRegistrationRequestView extends RegistrationRequestView {
+  program: {
+    id: string;
+    name: string;
+    submittedAt: string | null;
+    reopenedAt: string | null;
+    selfRegistered: boolean;
+  };
+}
+
+// Lado do organizador: pedidos e "Liberar edição".
+export const programRegistrationAdminApi = {
+  listEventRequests: (eventId: string) =>
+    authRequest<EventRegistrationRequestView[]>(`/events/${eventId}/registration-requests`),
+
+  listRequests: (eventId: string, programId: string) =>
+    authRequest<RegistrationRequestView[]>(
+      `/events/${eventId}/programs/${programId}/registration/requests`,
+    ),
+
+  resolve: (eventId: string, programId: string, requestId: string) =>
+    authRequest<RegistrationRequestView>(
+      `/events/${eventId}/programs/${programId}/registration/requests/${requestId}/resolve`,
+      { method: "PATCH" },
+    ),
+
+  // Aceita o pedido de cancelamento: exclui o programa do evento (equipes,
+  // atletas e apresentações) e avisa o programa por email.
+  acceptCancel: (eventId: string, programId: string, requestId: string) =>
+    authRequest<void>(
+      `/events/${eventId}/programs/${programId}/registration/requests/${requestId}/accept-cancel`,
+      { method: "POST" },
+    ),
+
+  reopen: (eventId: string, programId: string) =>
+    authRequest<ProgramWithTeams>(
+      `/events/${eventId}/programs/${programId}/registration/reopen`,
+      { method: "POST" },
+    ),
+};
+
+export const registrationApi = {
+  get: (eventId: string) =>
+    authRequest<ProgramRegistrationView>(`/events/${eventId}/registration`),
+
+  // Cria a inscrição com os dados do perfil; os campos corrigem o perfil
+  // antes (conta sem cidade/UF).
+  register: (eventId: string, payload: { name?: string; city?: string; state?: string } = {}) =>
+    authRequest<ProgramRegistrationView>(`/events/${eventId}/registration`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // Pedido ao organizador depois de enviada (ficha travada).
+  createRequest: (eventId: string, type: RegistrationRequestType, message: string) =>
+    authRequest<ProgramRegistrationView>(`/events/${eventId}/registration/requests`, {
+      method: "POST",
+      body: JSON.stringify(message ? { type, message } : { type }),
+    }),
+
+  // Envia a inscrição (sai do rascunho e aparece pro organizador).
+  submit: (eventId: string) =>
+    authRequest<ProgramRegistrationView>(`/events/${eventId}/registration/submit`, {
+      method: "POST",
+    }),
+
+  // Arrastar a equipe de uma categoria pra outra: os atletas vão junto.
+  moveTeamCategory: (eventId: string, teamId: string, fromCategoryId: string, toCategoryId: string) =>
+    authRequest<ProgramRegistrationView>(
+      `/events/${eventId}/registration/teams/${teamId}/categories/${fromCategoryId}/move`,
+      { method: "POST", body: JSON.stringify({ toCategoryId }) },
+    ),
+
+  setTeamCategories: (eventId: string, teamId: string, categoryIds: string[]) =>
+    authRequest<ProgramRegistrationView>(
+      `/events/${eventId}/registration/teams/${teamId}/categories`,
+      { method: "PUT", body: JSON.stringify({ categoryIds }) },
+    ),
+
+  // Atletas do ELENCO (ids de AthleteLinkView) da equipe na categoria;
+  // inscreve a equipe na categoria se ainda não estava.
+  setPairAthletes: (eventId: string, teamId: string, categoryId: string, linkIds: string[]) =>
+    authRequest<ProgramRegistrationView>(
+      `/events/${eventId}/registration/teams/${teamId}/categories/${categoryId}/athletes`,
+      { method: "PUT", body: JSON.stringify({ linkIds }) },
+    ),
+
+  setAthleteEntries: (eventId: string, linkId: string, entries: ProgramAthleteEntry[]) =>
+    authRequest<ProgramRegistrationView>(
+      `/events/${eventId}/registration/athletes/${linkId}/entries`,
+      { method: "PUT", body: JSON.stringify({ entries }) },
+    ),
+};
 
 export const programAthletesApi = {
   list: (eventId: string, programId: string) =>
@@ -2210,7 +2367,10 @@ export type NotificationType =
   | "presentation_cancelled"
   | "presentation_moved"
   | "special_event_started"
-  | "special_event_ended";
+  | "special_event_ended"
+  | "registration_submitted"
+  | "registration_request"
+  | "registration_reopened";
 
 export interface NotificationView {
   id: string;
@@ -2230,6 +2390,10 @@ export const notificationsApi = {
     authRequest<void>(`/events/${eventId}/notifications/seen`, {
       method: "POST",
     }),
+
+  // Não lidas de todos os eventos do usuário (por aliasId).
+  unread: () =>
+    authRequest<{ total: number; byEvent: Record<string, number> }>("/notifications/unread"),
 };
 
 export const supportApi = {

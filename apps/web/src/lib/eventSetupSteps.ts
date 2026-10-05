@@ -19,6 +19,9 @@ export interface SetupStep {
   // não tem nenhuma).
   inProgress?: boolean;
   detail: string;
+  // Aviso que pede ação (ex.: solicitações de programas pendentes),
+  // destacado em amarelo no card.
+  alert?: string | null;
   updatedAt?: string | null;
   actionLabel: string;
   // Só definido para etapas que já têm uma tela de cadastro construída
@@ -89,6 +92,8 @@ export interface ProgramsSummary {
   hasAnyTeamInCategory: boolean;
   allProgramsHaveTeams: boolean;
   allTeamsInCategory: boolean;
+  // Solicitações (ficha de inscrição) ainda não resolvidas.
+  pendingRequestsCount: number;
   updatedAt: string | null;
 }
 
@@ -232,9 +237,24 @@ export function buildSetupSteps(
       completed: programsCompleted,
       inProgress: !programsCompleted && programs.programsCount > 0,
       detail: programsDetail(programs, programsCompleted),
+      alert:
+        programs.pendingRequestsCount > 0
+          ? programs.pendingRequestsCount === 1
+            ? "1 solicitação de programa pendente"
+            : `${programs.pendingRequestsCount} solicitações de programas pendentes`
+          : null,
       updatedAt: programs.updatedAt,
-      actionLabel: programs.programsCount > 0 ? "Editar programas" : "Iniciar cadastro",
-      href: `/events/${event.aliasId}/programs`,
+      actionLabel:
+        programs.pendingRequestsCount > 0
+          ? "Ver solicitações"
+          : programs.programsCount > 0
+            ? "Editar programas"
+            : "Iniciar cadastro",
+      // Com solicitação pendente, o card já abre a aba Solicitações.
+      href:
+        programs.pendingRequestsCount > 0
+          ? `/events/${event.aliasId}/programs?tab=requests`
+          : `/events/${event.aliasId}/programs`,
     },
     {
       // Cronograma vem antes de Painel de jurados nesta lista (pedido

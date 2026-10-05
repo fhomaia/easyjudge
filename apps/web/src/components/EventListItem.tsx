@@ -4,7 +4,13 @@ import { useNavigate } from "react-router-dom";
 import { CalendarDays, Users } from "lucide-react";
 import { EventActionsMenu } from "@/components/EventActionsMenu";
 import { EventLifecycleAction } from "@/components/EventLifecycleAction";
+import {
+  EventRegistrationAction,
+  showsRegistrationAction,
+} from "@/components/EventRegistrationAction";
+import { useAuthStore } from "@/store/auth";
 import { EventStatusIndicator } from "@/components/EventStatusArea";
+import { EventUnreadBadge } from "@/components/EventUnreadBadge";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { formatDate } from "@/lib/formatDate";
 import { listItemVariants } from "@/lib/motionVariants";
@@ -25,6 +31,8 @@ interface EventListItemProps {
   // primeiro (ver HomePage.handleOpenLive) — por isso não navega direto
   // daqui como "created" (setup) continua fazendo.
   onOpenLive: (event: Event) => void;
+  // Abre a ficha de inscrição (conta Programa) com o raio, ver HomePage.
+  onOpenRegistration?: (event: Event) => void;
 }
 
 export function EventListItem({
@@ -37,12 +45,14 @@ export function EventListItem({
   onTogglePublish,
   onShare,
   onOpenLive,
+  onOpenRegistration,
 }: EventListItemProps) {
   const isAdmin = event.currentUserRole === "admin";
   const isAssessor = event.currentUserRole === "assessor";
   const canManage = isAdmin || isAssessor;
   const isStaffViewer = hasEventStaffRole(event.currentUserRoles);
   const navigate = useNavigate();
+  const accountRole = useAuthStore((s) => s.role);
   const isConfigurable = event.status === "created";
   // Concluído também abre (só para consulta, 2026-09-27).
   const isLive =
@@ -74,11 +84,15 @@ export function EventListItem({
         isClickable && "cursor-pointer",
       )}
     >
-      <EventThumbnail
-        name={event.name}
-        logoUrl={event.logoUrl}
-        className="size-20 rounded-xl text-lg"
-      />
+      <span className="relative shrink-0">
+        <EventThumbnail
+          name={event.name}
+          logoUrl={event.logoUrl}
+          className="size-20 rounded-xl text-lg"
+        />
+        {/* Conta Programa com botão de inscrição: o número vai no botão. */}
+          {!showsRegistrationAction(event, accountRole) && <EventUnreadBadge aliasId={event.aliasId} />}
+      </span>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-foreground">{event.name}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -94,10 +108,11 @@ export function EventListItem({
         </div>
       </div>
 
-      <EventStatusIndicator event={event} />
+      {!showsRegistrationAction(event, accountRole) && <EventStatusIndicator event={event} />}
 
       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         <EventLifecycleAction event={event} starting={starting} onStart={() => onStart(event)} />
+        <EventRegistrationAction event={event} onOpen={onOpenRegistration} />
 
         <EventActionsMenu
           event={event}

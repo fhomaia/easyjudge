@@ -144,7 +144,7 @@ export function AthletesManagementPage() {
                             variant="outline"
                             className="border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400"
                           >
-                            Convite pendente
+                            Aguardando cadastro
                           </Badge>
                         )}
                       </p>

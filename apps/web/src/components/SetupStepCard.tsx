@@ -6,6 +6,7 @@ import {
   Check,
   Circle,
   Gavel,
+  MessageSquare,
   Pencil,
   Trophy,
   Users,
@@ -40,17 +41,36 @@ export function SetupStepCard({ step, stepNumber, recommended }: SetupStepCardPr
   const content = (
     <>
       <div className="flex items-center gap-2">
+        {/* Com aviso pendente (ex.: solicitação de programa), o círculo vira
+            "!" em amarelo, mesmo com a etapa concluída. */}
         <span
           className={cn(
             "flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-            step.completed ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground",
+            step.alert
+              ? "bg-amber-500 text-white"
+              : step.completed
+                ? "bg-emerald-500 text-white"
+                : "bg-muted text-muted-foreground",
           )}
         >
-          {step.completed ? <Check className="size-4" /> : stepNumber}
+          {step.alert ? (
+            <span className="text-base leading-none font-bold">!</span>
+          ) : step.completed ? (
+            <Check className="size-4" />
+          ) : (
+            stepNumber
+          )}
         </span>
         {recommended && (
           <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
             RECOMENDADO
+          </span>
+        )}
+        {/* Na linha do número, pra não mudar a altura do card. */}
+        {step.alert && (
+          <span className="ml-auto flex min-w-0 items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+            <MessageSquare className="size-3.5 shrink-0" />
+            <span className="truncate">{step.alert}</span>
           </span>
         )}
       </div>

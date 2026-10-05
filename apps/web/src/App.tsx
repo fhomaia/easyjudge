@@ -80,6 +80,9 @@ const ProgramTeamPage = lazy(() =>
 const JudgingPage = lazy(() =>
   import("@/pages/JudgingPage").then((m) => ({ default: m.JudgingPage })),
 );
+const EventRegistrationPage = lazy(() =>
+  import("@/pages/EventRegistrationPage").then((m) => ({ default: m.EventRegistrationPage })),
+);
 const SchedulePage = lazy(() =>
   import("@/pages/SchedulePage").then((m) => ({ default: m.SchedulePage })),
 );
@@ -171,6 +174,7 @@ function App() {
           <Route path="/events/:id/regulation" element={<RegulationPage />} />
           <Route path="/events/:id/categories" element={<CategoriesPage />} />
           <Route path="/events/:id/programs" element={<ProgramsPage />} />
+          <Route path="/events/:id/registration" element={<EventRegistrationPage />} />
           <Route
             path="/events/:id/programs/:programId"
             element={<ProgramDetailPage />}

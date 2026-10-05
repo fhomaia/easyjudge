@@ -210,6 +210,8 @@ export function EventStaffPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   variant="destructive"
+                                  // O dono do evento nunca é removido.
+                                  disabled={member.isOwner}
                                   onClick={() => setRemovingMember(member)}
                                 >
                                   <Trash2 data-icon="inline-start" />

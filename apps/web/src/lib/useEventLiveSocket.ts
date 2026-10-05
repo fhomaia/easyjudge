@@ -6,6 +6,8 @@ export interface NotificationCreatedPayload {
   id: string;
   type: string;
   audience: string;
+  // Notificação pra uma conta só (ex.: ficha liberada pro programa).
+  recipientUserId?: string | null;
   title: string;
   scheduleEntryId: string | null;
 }

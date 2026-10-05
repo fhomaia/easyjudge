@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNotificationsUnread } from "@/store/notificationsUnread";
+import { registrationPathAfterJoin } from "@/lib/registrationWindow";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -45,6 +47,12 @@ function sortEvents(events: Event[], sort: EventSortOption): Event[] {
 export function HomePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
+  // Mesmas contas que a API deixa criar evento (@Roles(JUDGE,
+  // ORGANIZATION) em POST /events); Programa e Atleta não veem o botão.
+  const accountRole = useAuthStore((s) => s.role);
+  // Selos de não lidas dos cards: sempre atualizados ao abrir a Home.
+  useNotificationsUnread(true);
+  const canCreateEvents = accountRole === "judge" || accountRole === "organization";
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [events, setEvents] = useState<Event[] | null>(null);
@@ -62,7 +70,9 @@ export function HomePage() {
   // login/cadastro: navegar primeiro faria a tela ao vivo começar a
   // montar/buscar dados ao mesmo tempo que a animação, competindo pelo
   // mesmo thread e deixando tudo travado.
-  const [pendingOpenEvent, setPendingOpenEvent] = useState<Event | null>(null);
+  // Destino que espera o raio terminar (evento ao vivo ou ficha de
+  // inscrição, 2026-10-05).
+  const [pendingPath, setPendingPath] = useState<string | null>(null);
   // Evento recém-iniciado (clique em "Iniciar evento") — celebração com
   // mensagem (EventCelebrationOverlay), CTA leva pra tela ao vivo.
   const [startCelebrationTarget, setStartCelebrationTarget] = useState<Event | null>(null);
@@ -121,6 +131,11 @@ export function HomePage() {
   // código) — atualiza em vez de duplicar, diferente de
   // handleEventCreated (que só é chamado pra evento genuinamente novo).
   function handleEventJoined(event: Event) {
+    const registrationPath = registrationPathAfterJoin(event, useAuthStore.getState().role);
+    if (registrationPath) {
+      navigate(registrationPath);
+      return;
+    }
     setEvents((prev) => {
       if (!prev) return [event];
       const alreadyInList = prev.some((e) => e.aliasId === event.aliasId);
@@ -168,10 +183,15 @@ export function HomePage() {
   }
 
   // Clique no card de um evento publicado/iniciado — ver comentário do
-  // estado `pendingOpenEvent` acima sobre por que a navegação só
+  // estado `pendingPath` acima sobre por que a navegação só
   // acontece depois do raio (BrandBackdrop.onDone), nunca antes.
   function handleOpenLive(event: Event) {
-    setPendingOpenEvent(event);
+    setPendingPath(`/events/${event.aliasId}/live`);
+  }
+
+  // "Inscreva-se aqui!"/"Minha inscrição" também abre com o raio.
+  function handleOpenRegistration(event: Event) {
+    setPendingPath(`/events/${event.aliasId}/registration`);
   }
 
   async function handlePublish(event: Event) {
@@ -259,7 +279,7 @@ export function HomePage() {
                           CLAUDE.md, "Uso inicial"). No mobile pedimos
                           pra usar o computador em vez de simplesmente
                           esconder sem explicação. */}
-                      {!isMobile && (
+                      {!isMobile && canCreateEvents && (
                         <Button onClick={() => setCreateOpen(true)}>
                           <Plus data-icon="inline-start" />
                           Novo evento
@@ -314,6 +334,7 @@ export function HomePage() {
                                 onTogglePublish={handleTogglePublish}
                                 onShare={setShareTarget}
                                 onOpenLive={handleOpenLive}
+                                onOpenRegistration={handleOpenRegistration}
                               />
                             ) : (
                               <EventGridItem
@@ -327,6 +348,7 @@ export function HomePage() {
                                 onTogglePublish={handleTogglePublish}
                                 onShare={setShareTarget}
                                 onOpenLive={handleOpenLive}
+                                onOpenRegistration={handleOpenRegistration}
                               />
                             ),
                           )}
@@ -344,7 +366,12 @@ export function HomePage() {
                     </>
                   ) : (
                     <div className="flex min-h-[50vh] items-center justify-center">
-                      {isMobile ? (
+                      {!canCreateEvents ? (
+                        <p className="max-w-xs text-center text-sm text-muted-foreground">
+                          Você ainda não está em nenhum evento. Use "Tenho um código" para entrar
+                          com o código ou o QR do evento.
+                        </p>
+                      ) : isMobile ? (
                         <p className="max-w-xs text-center text-sm text-muted-foreground">
                           Para criar um novo evento, acesse cheercup.com.br em um
                           computador.
@@ -405,15 +432,15 @@ export function HomePage() {
 
       {/* Sem mensagem — só o raio+clarão, igual ao fix de login/cadastro.
           Só navega no onDone, nunca antes (ver comentário do estado
-          `pendingOpenEvent` acima). */}
-      {pendingOpenEvent && (
+          `pendingPath` acima). */}
+      {pendingPath && (
         <BrandBackdrop
           variant="plain"
           className="z-50"
           onDone={() => {
-            const target = pendingOpenEvent;
-            setPendingOpenEvent(null);
-            if (target) navigate(`/events/${target.aliasId}/live`);
+            const target = pendingPath;
+            setPendingPath(null);
+            if (target) navigate(target);
           }}
         />
       )}

@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { savePendingJoinCode } from "@/lib/pendingJoinCode";
 import { eventsApi, ApiError } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+import { registrationPathAfterJoin } from "@/lib/registrationWindow";
 
 // Destino do QR/código de um evento (ver ShareEventDialog) — precisa
 // funcionar tanto logado quanto deslogado, por isso não fica dentro de
@@ -36,8 +37,10 @@ export function JoinEventPage() {
         // ao vivo (EventMemberGuard bloqueia). Manda pra Home, onde o
         // evento já aparece como "Em breve", em vez de passar pelo
         // painel só pra ser barrada e voltar.
+        // Conta Programa com inscrição aberta vai direto pra inscrição.
         navigate(
-          event.status === "created" ? "/" : `/events/${event.aliasId}/live/results`,
+          registrationPathAfterJoin(event, useAuthStore.getState().role) ??
+            (event.status === "created" ? "/" : `/events/${event.aliasId}/live/results`),
           { replace: true },
         );
       })

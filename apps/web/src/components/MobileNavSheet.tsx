@@ -29,6 +29,7 @@ import {
 import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
 import { useAuthStore } from "@/store/auth";
 import { usePendingAthleteLinksCount } from "@/store/pendingAthleteLinks";
+import { useNotificationsUnread } from "@/store/notificationsUnread";
 import type { UserProfile, UserRole } from "@/api/client";
 
 // `mobile: false` tira o item do menu hambúrguer sem afetar a sidebar de
@@ -90,7 +91,8 @@ export function NavIconBadge({ count }: { count: number }) {
 // itens ficam escondidos até abrir o menu.
 export function MenuButtonDot() {
   const count = usePendingAthleteLinksCount();
-  if (count <= 0) return null;
+  const { total: unread } = useNotificationsUnread();
+  if (count <= 0 && unread <= 0) return null;
   return (
     <span className="absolute top-1 right-1 size-2 rounded-full bg-blue-500 ring-2 ring-brand-navy" />
   );
@@ -175,6 +177,7 @@ export function MobileNavSheet({
 }: MobileNavSheetProps) {
   const location = useLocation();
   const pendingAthleteLinks = usePendingAthleteLinksCount();
+  const { total: unreadNotifications } = useNotificationsUnread();
   const [helpOpen, setHelpOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [impersonateOpen, setImpersonateOpen] = useState(false);
@@ -275,6 +278,7 @@ export function MobileNavSheet({
                 <span className="relative flex">
                   <Icon className="size-4" />
                   {href === "/athletes" && <NavIconBadge count={pendingAthleteLinks} />}
+                  {href === "/" && <NavIconBadge count={unreadNotifications} />}
                 </span>
                 {label}
               </button>

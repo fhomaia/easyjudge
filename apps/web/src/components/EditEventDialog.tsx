@@ -9,7 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FormError } from "@/components/FormError";
-import { EventFormFields, type EventFormValues } from "@/components/EventFormFields";
+import {
+  EventFormFields,
+  registrationDeadlineError,
+  type EventFormValues,
+} from "@/components/EventFormFields";
 import { EventPhotoField } from "@/components/EventPhotoField";
 import { eventsApi, ApiError, type Event } from "@/api/client";
 
@@ -26,11 +30,13 @@ function toFormValues(event: Event): EventFormValues {
     location: event.location,
     venue: event.venue ?? "",
     address: event.address ?? "",
+    registrationDeadline: event.registrationDeadline,
   };
 }
 
-// Evento publicado/iniciado não pode ser editado direto (2026-07-27, a
-// pedido do usuário) — campos ficam travados e o botão de salvar vira
+// Evento iniciado não pode ser editado direto (2026-07-27; publicado
+// passou a editar normalmente sem despublicar em 2026-10-05) — campos
+// ficam travados e o botão de salvar vira
 // "Reverter publicação", que abre o mesmo ConfirmDialog usado na tela
 // Início/menu "⋯". Depois de reverter com sucesso, este popup
 // PERMANECE aberto (só o ConfirmDialog fecha) — `onUpdated` também
@@ -46,7 +52,9 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
-  const isLocked = event?.status === "published" || event?.status === "started";
+  // Publicado edita normalmente e continua publicado (2026-10-05: nada
+  // despublica sozinho). Iniciado continua travado (a API recusa).
+  const isLocked = event?.status === "started";
 
   useEffect(() => {
     if (event) {
@@ -60,7 +68,7 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
     }
   }, [event]);
 
-  function update(key: keyof EventFormValues, value: string) {
+  function update<K extends keyof EventFormValues>(key: K, value: EventFormValues[K]) {
     setForm((f) => (f ? { ...f, [key]: value } : f));
   }
 
@@ -77,6 +85,11 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
       setError("Selecione a data de início.");
       return;
     }
+    const deadlineError = registrationDeadlineError(form);
+    if (deadlineError) {
+      setError(deadlineError);
+      return;
+    }
     setLoading(true);
     try {
       let updated = await eventsApi.update(event.aliasId, {
@@ -85,6 +98,7 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
         location: form.location,
         venue: form.venue,
         address: form.address,
+        registrationDeadline: form.registrationDeadline,
       });
       if (photo) {
         try {

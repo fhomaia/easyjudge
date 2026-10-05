@@ -28,6 +28,7 @@ import { PlatformFeedbackDialog } from "@/components/PlatformFeedbackDialog";
 import { useAuthStore } from "@/store/auth";
 import { useSidebarCollapseStore } from "@/store/sidebarCollapse";
 import { usePendingAthleteLinksCount } from "@/store/pendingAthleteLinks";
+import { useNotificationsUnread } from "@/store/notificationsUnread";
 import type { UserProfile } from "@/api/client";
 
 interface AppSidebarProps {
@@ -60,6 +61,7 @@ function NavLinks({
 }) {
   const location = useLocation();
   const pendingAthleteLinks = usePendingAthleteLinksCount();
+  const { total: unreadNotifications } = useNotificationsUnread();
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
       {eventNavItems && eventNavItems.length > 0 && (
@@ -124,6 +126,7 @@ function NavLinks({
           <span className="relative flex">
             <Icon className="size-4" />
             {href === "/athletes" && <NavIconBadge count={pendingAthleteLinks} />}
+            {href === "/" && <NavIconBadge count={unreadNotifications} />}
           </span>
           {!collapsed && label}
         </button>

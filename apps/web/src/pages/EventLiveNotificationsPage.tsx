@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNotificationsUnreadStore } from "@/store/notificationsUnread";
 import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 import { useNavigate, useParams } from "react-router-dom";
@@ -33,7 +34,10 @@ export function EventLiveNotificationsPage() {
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
     // Visitar a tela inteira conta como "visto" — mesmo raciocínio de
     // abrir o sino/popup, só que aqui é a própria tela.
-    notificationsApi.markSeen(id).catch(() => {});
+    notificationsApi
+      .markSeen(id)
+      .then(() => useNotificationsUnreadStore.getState().refresh(true))
+      .catch(() => {});
   }, [id]);
 
   const refreshNotifications = useCallback(() => {

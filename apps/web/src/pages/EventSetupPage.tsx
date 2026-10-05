@@ -289,6 +289,7 @@ export function EventSetupPage() {
         programs.every((p) => eventTeams.some((t) => t.programId === p.id)),
       allTeamsInCategory:
         eventTeams.length > 0 && eventTeams.every((t) => t.categories.length > 0),
+      pendingRequestsCount: programs.reduce((sum, p) => sum + (p.pendingRequestsCount ?? 0), 0),
       updatedAt: latestUpdatedAt,
     };
   }, [programs, eventTeams]);

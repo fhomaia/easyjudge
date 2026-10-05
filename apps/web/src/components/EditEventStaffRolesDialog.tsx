@@ -98,6 +98,8 @@ export function EditEventStaffRolesDialog({
               <Checkbox
                 className="mt-0.5"
                 checked={roles.has(role)}
+                // O dono do evento é sempre admin (não dá pra desmarcar).
+                disabled={role === "admin" && !!member?.isOwner}
                 onCheckedChange={(value) => toggleRole(role, value === true)}
               />
               <span className="grid gap-0.5">
