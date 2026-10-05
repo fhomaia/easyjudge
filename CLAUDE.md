@@ -312,7 +312,8 @@ chegou lá.
   via `ConfirmDialog`) fecha a transição que faltava. "Publicar"/
   "Concluir" saíram da listagem da Home (só "Iniciar evento" continua
   lá); concluir só pela tela "Início" do evento ao vivo.
-  `EditEventDialog` trava campos pra evento `published`/`started` e
+  `EditEventDialog` trava campos pra evento `started` (desde
+  2026-10-05, `published` edita normalmente e continua publicado) e
   oferece "Reverter publicação" (`unpublishEvent` aceita
   `started → created` também, zerando `startedAt`) — reverter um
   `started` com `ScoreEvent` já lançado não é bloqueado (decisão
@@ -1332,8 +1333,8 @@ qualquer evento, unidade = categoria em um dia.
   Home mostra o item em qualquer status menos concluído, e
   `EventSetupPage` só redireciona pro ao vivo se concluído. As rotas das
   etapas nunca travaram por status (só as travas de sempre: template em
-  uso, apresentação com nota). "Dados do evento" continua despublicando
-  ao editar publicado, mas só o popup da Home chama essa rota.
+  uso, apresentação com nota). "Dados do evento" NÃO despublica mais
+  (2026-10-05, ver abaixo).
 
 ## Avaliações do evento e da plataforma (2026-09-24)
 
@@ -1989,6 +1990,336 @@ e nada mudou nas telas ao vivo, nas súmulas ou no acesso do atleta.
 
   Conta e evento apagados no fim. **Não testado**: escrita em evento
   concluído (coberta pelo `CompletedEventLockGuard` genérico).
+
+## Excluir programa limpa o cronograma + "Aceitar cancelamento" (2026-10-05)
+
+- **`ProgramsService.remove`**:
+  - antes de apagar, dispara `emitAsync('program.removing', { aliasId,
+    teamIds })`;
+  - `ScheduleService.removeProgramPresentations` (`@OnEvent`,
+    `suppressErrors: false`) remove cada apresentação das equipes pelo
+    `removeEntry` normal, que leva aquecimento, esperas e intervalos e
+    reconcilia a pista;
+  - apresentação com nota dá erro e nada é apagado;
+  - depois a conta do programa vira ESPECTADOR (ganha SPECTATOR, perde
+    PROGRAM; decisão do usuário): continua acompanhando o evento e pode
+    se inscrever de novo, e reenviar a inscrição devolve o PROGRAM
+    (`submitRegistration`).
+
+  Antes, a FK em cascata apagava as apresentações e deixava esperas
+  órfãs ("Aguardando...", `linkedEntryId` SET NULL), e o programa
+  mantinha o papel de programa. Vale também pra exclusão comum pelo
+  Setup.
+- **"Aceitar cancelamento"**:
+  - rota `POST .../programs/:programId/registration/requests/:id/accept-cancel`
+    (`acceptCancel`, só pedido de cancelamento pendente);
+  - chama o mesmo `remove` e manda email ao programa ("Inscrição
+    cancelada"); o pedido some junto, em cascata;
+  - na tela, botão vermelho no pedido, na aba Solicitações, com
+    confirmação.
+- **Testado** por script HTTP: cronograma gerado com 3 equipes;
+  excluir o programa de 2 delas tirou as apresentações delas sem espera
+  órfã, a do outro programa ficou e o programa virou espectador. O
+  "Aceitar" de verdade não foi executado (mandaria email real); só o
+  404 de pedido inexistente.
+
+## Notificação com destinatário único (2026-10-05)
+
+- **Modelo:** `notifications.user_id` (migration
+  `AddNotificationRecipient`). Preenchida, só essa conta vê, além da
+  regra de audiência. Filtro aplicado em `listForUser`,
+  `unreadCountsForUser` e no `EventNotificationToaster`
+  (`recipientUserId` no payload do socket).
+  `NotificationsService.create(..., recipientUserId)`.
+- **Primeiro uso:** "Liberar edição" cria `registration_reopened` ("O
+  organizador liberou sua ficha de inscrição para edição") só pro
+  programa, além do email. Ela leva pra `/events/:id/registration`, e a
+  tela de inscrição ganhou o `NotificationBell` (popup).
+- **Testado** por script (destinatário vê; outro programa e organizador
+  não; contagem só pro destinatário).
+
+## Dono do evento é sempre admin (2026-10-05)
+
+Decisão do usuário. O dono (`Event.createdById`):
+- **nunca é removido** do evento, nem por ele mesmo
+  (`EventStaffService.remove`, 403);
+- **pode acumular papéis**, mas o admin nunca sai
+  (`updateRoles`, 400 sem `admin`);
+- **sincronias automáticas** (`EventsService.removeMemberRole`) ignoram
+  pedido de tirar o admin dele;
+- **outros admins** continuam sem poder mexer nos papéis dele (403).
+
+Na tela "Gerenciar equipe", o checkbox Admin do dono fica desabilitado e
+"Remover" some (fica desabilitado). Testado por script HTTP (6
+verificações).
+
+## Notificações: sino clicável e selos de não lidas (2026-10-05)
+
+- `NotificationBell`: nas telas com `:id` de evento (Setup e etapas)
+  abre um popover com as notificações, que ao abrir marca como lidas.
+  Antes o sino só mostrava o número, sem fazer nada.
+- `GET /notifications/unread` (`NotificationsUnreadController`,
+  `unreadCountsForUser`): não lidas de todos os eventos do usuário, numa
+  única consulta SQL com a mesma regra de audiência
+  (`all`/`staff`/`managers`).
+- O store `notificationsUnread` busca esse número no máximo uma vez por
+  minuto, sem polling, e é forçado ao abrir a Home e ao marcar como
+  lidas. Ele alimenta:
+  - a bolinha com o número no canto da foto do card do evento
+    (`EventUnreadBadge`); pra conta Programa com botão de inscrição no
+    card, a bolinha (amarela) vai no canto desse botão, não na foto;
+  - o `NavIconBadge` no item "Eventos" do menu;
+  - o ponto no botão do menu do celular.
+
+## Nomenclatura de categoria (2026-10-05)
+
+Decisão do usuário: os nomes na TELA seguem a plataforma, os do código e
+do banco não mudaram.
+- **Modalidade** = `categoryFormat` (`FORMAT_LABELS`: Team Cheer, Group
+  Stunt, Elite Stunt, Partner Stunt, Custom).
+- **Divisão** = `modality` (`MODALITY_LABELS`: All Star, Universitário,
+  Escolar).
+- **Gênero** = `division` (`DIVISION_LABELS`: COED, All Girl, All Boy).
+
+Aplicado no formulário de categoria, na tabela (colunas Modalidade |
+Divisão | Gênero), no filtro da tela de Categorias ("Todas as divisões")
+e nos filtros da inscrição. O modal de geração automática do Cronograma
+continua chamando a modalidade de "categoria" (pedido antigo do
+usuário).
+
+## Inscrição de campeonato pelo próprio programa (2026-10-05)
+
+Fase 2 da inscrição (a fase 1 é "Programas e equipes com atletas por
+categoria" acima). Decisões do usuário: sem aprovação do produtor (enviou
+no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
+"Sem data limite"; inscrição aberta com o evento em rascunho OU publicado.
+
+- **Prazo**: `Event.registrationDeadline` (date, nulo = sem limite,
+  migration `AddEventRegistrationDeadline`), copiado no `publishEvent`.
+  Não pode ser depois de `startDate` (400). Regra em
+  `events/registration-window.ts` (`isRegistrationOpen`: status
+  created/published e hoje em Brasília <= prazo), espelhada em
+  `web/src/lib/registrationWindow.ts`. No form do evento
+  (`EventFormFields`): data + checkbox "Sem data limite"; um dos dois é
+  obrigatório ao salvar (`registrationDeadlineError`). Eventos antigos
+  ficam com nulo (= inscrição aberta enquanto rascunho/publicado).
+- **Nada despublica sozinho** (decisão do usuário, 2026-10-05):
+  `updateEvent` não troca mais `published -> created`; edita a versão
+  ativa e ela continua publicada (versão não muda). Despublicar só pelos
+  botões "Reverter publicação" (`unpublishEvent`). Evento iniciado
+  continua sem edição (409).
+- **"Novo evento"/"Criar evento" da Home** só pra conta Jurado/
+  Organização (mesmas da API). Conta Programa/Atleta sem eventos vê a
+  dica de usar "Tenho um código".
+- **Rotas** (`ProgramRegistrationService`, só conta Programa, sem
+  `EventMemberGuard` porque o evento pode estar em rascunho, mas exige
+  algum `EventMember` ou inscrição já existente):
+  - `GET /events/:eventId/registration`: evento, `open`, a inscrição
+    (`findOneForEvent`) ou null, perfil (com logo) e categorias ativas.
+    Traz também `previousTeamNames`: nomes de equipes de outras
+    inscrições do programa, que viram atalhos.
+  - `POST` (corpo opcional `name/city/state`): corrige o perfil e cria a
+    `ProgramParticipation` (via `ProgramsService.create`, que dá o papel
+    PROGRAM). Sem cidade/UF no perfil, 400. A inscrição só nasce quando
+    o programa adiciona a primeira equipe (o front chama o POST nessa
+    hora), então abrir a tela não inscreve ninguém.
+  - `PUT .../registration/teams/:teamId/categories` `{categoryIds}`:
+    categorias da equipe.
+  - `PUT .../teams/:teamId/categories/:categoryId/athletes` `{linkIds}`:
+    atletas da equipe+categoria. Inscreve a equipe na categoria se ainda
+    não estava.
+  - `PUT .../registration/athletes/:linkId/entries` `{entries}`:
+    equipe+categoria de um atleta do elenco.
+- **Atletas da inscrição vêm do ELENCO do programa** (`AthleteLink`
+  confirmado, decisão do usuário 2026-10-05): o atleta só vira
+  `ProgramAthlete` do evento quando é marcado numa categoria (casamento
+  por email) e sai do evento quando fica sem nenhuma
+  (`removeUnassignedRosterAthletes`). Atleta cadastrado pelo produtor
+  sem vínculo no elenco não é tocado. Pedido de vínculo pendente não
+  pode ser usado (404).
+- **Cidade e UF no cadastro da conta Programa**: etapa nova "location"
+  no `RegisterDialog`. `RegisterDto.city/state` são obrigatórios pra
+  role=program, e `AuthService.register` já cria o `ProgramProfile` com
+  eles (FK CASCADE some junto com a conta pendente refeita). Conta
+  antiga sem cidade/UF vê "Informe a cidade e a UF" no cabeçalho da
+  inscrição (`LocationDialog`).
+- **Rascunho e envio** (decisão do usuário, 2026-10-05):
+  `ProgramParticipation.submittedAt` (migration
+  `AddProgramRegistrationSubmittedAt`; os programas que já existiam
+  ficaram como enviados). Inscrição criada pelo programa nasce em
+  rascunho (`ProgramsService.create(..., { draft: true })`), sem o papel
+  PROGRAM e invisível pro produtor. O rascunho é filtrado em
+  `ProgramsService.findAllForEvent`, `TeamsService.findAllForEvent`,
+  no cronograma (pares não agendados e validação de par), nas Métricas
+  e na contagem de programas dos eventos. Cadastro pelo produtor nasce
+  enviado. `POST /events/:eventId/registration/submit` exige ao menos
+  uma equipe numa categoria e atletas em TODA equipe+categoria (400
+  listando as pendentes; na tela o botão fica desativado com "Para
+  enviar, escolha os atletas de: ...") e chama `ProgramsService.submitRegistration`,
+  que dá o papel PROGRAM, o acesso dos atletas e registra a atividade.
+  Depois de enviada, a inscrição continua editável até o prazo. Na tela,
+  `SubmitPanel` no fim da aba Inscrição: "Enviar inscrição" com
+  confirmação, que avisa de equipes sem categoria e atletas pendentes;
+  depois de enviada, mostra "Inscrição enviada em...". Cuidado: programa
+  com rascunho + produtor cadastrando o mesmo email dá 409 de email
+  duplicado sem que o produtor veja o rascunho.
+- **Ficha travada depois de enviada + pedidos ao organizador**
+  (decisão do usuário, 2026-10-05; migration
+  `CreateRegistrationRequests`):
+  - **Regra** (`programs/registration-edit.ts`):
+    `programCanEditRegistration`: rascunho = enquanto
+    `isRegistrationOpen`; enviada = não, a menos que
+    `ProgramParticipation.reopenedAt` (organizador liberou), aí até o
+    evento iniciar. Usada no `ProgramAccessGuard` (403 "Sua inscrição já
+    foi enviada. Para mudar algo, envie um pedido ao organizador.") e nas
+    rotas de inscrição (409). A view traz `canEdit`/`canRequest`/
+    `requests`.
+  - **Pedidos** (`registration_requests`, `RegistrationRequest`: tipo
+    `change`/`cancel`, mensagem até 2000, `resolvedAt`):
+    `POST /events/:id/registration/requests`, com a ficha enviada e até
+    o evento iniciar. Gera notificação de tipo `registration_request`
+    com audiência nova `managers` (só admin/assessor: back em
+    `audiencesForMember`, front no `EventNotificationToaster`) e email
+    pra cada admin/assessor (`EventsService.findManagerEmails`,
+    `MailService.sendNotice`, `replyTo` = email do programa, link pra
+    tela do programa; `APP_URL` opcional, padrão produção). O envio e o
+    reenvio da ficha também notificam (`registration_submitted`) e mandam
+    email com o resumo (equipes e categorias). Destinatários
+    (`findManagerEmails`): admins, assessores e o dono do evento
+    (`createdById`, mesmo sem papel), cada email uma vez só (um
+    `EventMember` por pessoa; lista sem repetição).
+  - **Organizador** (`ProgramRegistrationAdminController`, admin/
+    assessor):
+    - `GET /events/:id/registration-requests` (todos os pedidos do
+      evento, pendentes primeiro, com nome do programa e se ele se
+      inscreveu sozinho);
+    - `GET .../programs/:programId/registration/requests`;
+    - `PATCH .../requests/:id/resolve`;
+    - `POST .../programs/:programId/registration/reopen` ("Liberar
+      edição": seta `reopenedAt` e manda email ao programa; reenviar
+      zera e trava de novo).
+
+    Na tela: aba **Solicitações** na tela de Programas e equipes
+    (`EventRequestsTab`, `?tab=requests`, `&program=<id>` filtra), com o
+    número de pendentes na aba. O selo "N solicitações pendentes" do
+    cartão do programa (`pendingRequestsCount`) abre essa aba já
+    filtrada, e a notificação de pedido leva pra lá. A aba saiu da tela
+    do programa (ficava duplicada). No Setup, o card "Programas e equipes" mostra o
+    selo amarelo "N solicitações de programas pendentes" na linha do
+    número da etapa, sem mudar a altura do card
+    (`SetupStep.alert`, `ProgramsSummary.pendingRequestsCount`) e, nesse
+    caso, abre direto a aba Solicitações ("Ver solicitações").
+    No topo da tela de Programas, o convite `RegistrationInvite`
+    ("Receba inscrições dos programas") explica o fluxo e tem
+    "Compartilhar evento", que abre o `ShareEventDialog` (código, link e
+    QR). Embaixo do texto ficam o selo "Inscrições abertas"/"Inscrições
+    encerradas" e a data limite clicável ("Data limite: dd/mm, 23:59" ou
+    "Sem data limite", com lápis). O clique abre `DeadlineDialog`, que
+    salva só `registrationDeadline` via `PATCH /events/:id` (não
+    despublica).
+  - **Programa** (`RegistrationStatusPanel`, topo da ficha): rascunho
+    com "Enviar inscrição"; enviada com "Solicitar alteração"/"Solicitar
+    cancelamento" (popup com mensagem) e a lista "Seus pedidos";
+    liberada com "Reenviar inscrição". Ficha enviada e travada:
+    `LockedOverlay` deixa o conteúdo legível (sem camada nem desfoque,
+    que atrapalhavam conferir a inscrição), com o selo de cadeado "Ficha
+    enviada: edição bloqueada" no topo. Os botões de editar somem;
+    clicar numa equipe dentro da categoria abre o popup de atletas só
+    pra leitura (`PairAthletesDialog readOnly`, lista nome/email +
+    Fechar).
+  - Email dos pedidos e da liberação (`MailService.sendNotice`,
+    `buildNoticeEmailHtml`) no mesmo layout do email de código, com foto
+    e nome do evento logo abaixo do cabeçalho. A foto só aparece quando é
+    uma URL pública http(s); em dev, o upload é caminho local e fica de
+    fora.
+  - `MailModule` (`auth/mail.module.ts`) existe porque `ProgramsModule`
+    não pode importar `AuthModule` (ciclo).
+  - `ConfirmDialog` ganhou `confirmVariant` (`default` pra enviar e
+    liberar).
+  - **Testado**: script HTTP com 23 verificações (API com
+    `RESEND_API_KEY=` vazio, email em stub, pra não mandar email de
+    verdade a endereços de teste), e navegador em `127.0.0.1` (enviar →
+    ficha travada → popup de pedido). Pedido pela tela não foi enviado
+    no navegador (dispararia email real).
+- **Aviso ao produtor ao excluir** (2026-10-05): ao excluir um programa
+  que se inscreveu sozinho (`isSelfRegistered`: `userId ===
+  createdById`), a confirmação começa com "Atenção: Ao continuar, a
+  inscrição do programa no evento será cancelada." Só na exclusão do
+  programa (decisão do usuário); equipe, atleta e categoria ficam com
+  as confirmações de sempre.
+- **`ProgramAccessGuard`** (`programs/guards`) substituiu
+  RolesGuard+EventMemberGuard em `TeamsController` e
+  `ProgramAthletesController`: staff (conta Jurado/Organização com
+  admin/assessor no evento) como antes, OU a conta Programa dona do
+  `programId` (lê sempre; escreve só com `isRegistrationOpen`, senão 403
+  "As inscrições deste evento estão encerradas."). Assim a tela do
+  programa reaproveita os popups do Setup sem rotas novas.
+  `ProgramsController` continua só staff.
+- Atleta cadastrado pelo PRÓPRIO programa gera vínculo já confirmado
+  (`requestLinkFromEvent` com `eventName: null`), sem o aviso
+  "Adicionado pelo produtor".
+- **Front**: `EventRegistrationPage` (`/events/:id/registration`).
+  Segunda versão, a pedido do usuário: a primeira, em 4 etapas, foi
+  descartada. É uma tela só:
+  - cabeçalho com os dados do programa, nome do evento e prazo;
+  - aba **Inscrição**: equipes (+ Nova equipe e atalhos das anteriores)
+    e, abaixo, as categorias do evento. Arrastar a equipe até a
+    categoria (dnd-kit; no celular segurando o dedo) já inscreve a
+    equipe nela e abre o popup de atletas; sem atletas, a equipe aparece
+    na categoria com o selo "Atletas pendentes". Equipes dentro da
+    categoria usam o mesmo cartão da lista (`TeamCardView`), com "N
+    atletas" / "Atletas pendentes" no lugar das categorias.
+    `DragOverlay dropAnimation={null}`: sem a animação de volta ao
+    soltar, que parecia erro. Arrastar a equipe de uma categoria pra outra usa
+    `POST .../registration/teams/:teamId/categories/:categoryId/move`
+    (`moveTeamCategory`, numa transação), e os atletas marcados vão junto
+    pra categoria nova. Clicar na equipe
+    abre o popup de categorias, com renomear e excluir. Clicar na equipe
+    dentro da categoria reabre os atletas (com "Tirar da categoria");
+    As categorias ficam agrupadas por modalidade (ordem padrão, Customs
+    pelo nome) e cada grupo por nível. Acima delas, busca por nome e um
+    botão "Filtros" (`CategoryFilters`) com Modalidade, Nível, Divisão e
+    Gênero, combinados com E (vazio = sem restrição). Só aparecem as
+    opções que existem no evento;
+  - aba **Atletas** (texto "Atletas vinculados ao seu programa."): duas
+    listas, "Atletas competindo" (em alguma categoria) e "Todos os
+    atletas", cada uma com busca própria por nome ou email
+    (`AthleteRosterSection`). Antes era uma lista só, que mostrava
+    equipe+categoria cada um está, com "Escolher categorias" e
+    "Adicionar atleta" (vai pro elenco, `CreateAthleteDialog`).
+
+  Tudo salva na hora, e depois do prazo a tela vira só consulta. Botão
+  no card da Home (`EventRegistrationAction`, só conta Programa):
+  "Inscreva-se aqui!" / "Minha inscrição", no lugar do selo de status
+  ("Em breve") quando aparece (`showsRegistrationAction`). Entrar pelo link/QR/código com
+  conta Programa e inscrição aberta leva direto pra inscrição
+  (`registrationPathAfterJoin`, em `JoinEventPage` e no "Tenho um
+  código" da Home). "Compartilhar evento" (menu ⋯ da Home) agora aparece
+  também com o evento em rascunho (antes só a partir de publicado).
+- **Testado (2ª versão)**: script HTTP com 17 verificações:
+  - cadastro sem cidade/UF dá 400;
+  - POST sem perfil completo dá 400; POST que corrige o perfil funciona;
+  - atalho de equipe aparece e some depois de usado;
+  - categorias da equipe;
+  - elenco → atletas do evento, e quem fica sem categoria sai;
+  - pedido pendente barrado;
+  - outro programa barrado;
+  - prazo vencido.
+
+  No navegador, em `127.0.0.1` com conta descartável: atalho "Bravo",
+  arrastar até a categoria, escolher atletas, popup de categorias da
+  equipe, aba Atletas, e 412px sem rolagem horizontal. **Não testado**:
+  a etapa de cidade/UF do cadastro no navegador (o cadastro de verdade
+  manda email pelo Resend).
+- **Testado (1ª versão, backend continua valendo)**: script HTTP com contas descartáveis (30 verificações:
+  prazo inválido, sem vínculo, conta errada, criar/atualizar inscrição,
+  equipe/categoria/atleta pelo programa, outro programa barrado, staff
+  ok, prazo vencido/hoje, sem limite, publicar mantém prazo, evento
+  iniciado) e no navegador em `127.0.0.1` com conta Programa descartável
+  (link do código → login → inscrição → 4 etapas → "Minha inscrição" na
+  Home; etapas em 412px sem rolagem horizontal). Tudo apagado no fim.
+  **Não testado**: QR pela câmera e a tela de inscrição encerrada no
+  navegador (só pela API).
 
 ## Próximos passos (não iniciados ainda)
 
