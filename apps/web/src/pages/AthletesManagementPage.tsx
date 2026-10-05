@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePendingAthleteLinksStore } from "@/store/pendingAthleteLinks";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Plus, Trash2, Users } from "lucide-react";
@@ -42,9 +43,13 @@ export function AthletesManagementPage() {
       .catch(() => navigate("/", { replace: true }));
   }, [navigate]);
 
+  const refreshPendingCount = usePendingAthleteLinksStore((s) => s.refresh);
+
   useEffect(() => {
     athletesApi.list().then(setAthletes);
-  }, []);
+    // A lista acabou de ser lida: alinha o selo do menu com ela.
+    void refreshPendingCount(true);
+  }, [refreshPendingCount]);
 
   function handleLogout() {
     logout();
@@ -55,6 +60,7 @@ export function AthletesManagementPage() {
     if (!removing) return;
     await athletesApi.remove(removing.id);
     setAthletes((prev) => (prev ?? []).filter((a) => a.id !== removing.id));
+    void refreshPendingCount(true);
   }
 
   async function handleConfirmLink(id: string) {
@@ -62,6 +68,7 @@ export function AthletesManagementPage() {
     try {
       const updated = await athletesApi.confirm(id);
       setAthletes((prev) => (prev ?? []).map((a) => (a.id === id ? updated : a)));
+      void refreshPendingCount(true);
     } finally {
       setConfirming(null);
     }
@@ -142,6 +149,11 @@ export function AthletesManagementPage() {
                         )}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">{athlete.email}</p>
+                      {athlete.requestedFromEvent && !athlete.confirmed && (
+                        <p className="text-xs text-muted-foreground">
+                          Adicionado pelo produtor do evento {athlete.requestedFromEvent}
+                        </p>
+                      )}
                     </div>
                   </div>
 

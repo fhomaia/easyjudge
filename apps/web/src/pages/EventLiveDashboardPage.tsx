@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MenuButtonDot } from "@/components/MobileNavSheet";
 import { EventFeedbackHeaderButton } from "@/components/EventFeedbackHeaderButton";
 import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
@@ -485,7 +486,7 @@ export function EventLiveDashboardPage() {
                   : undefined
               }
               aria-label="Documentos do regulamento"
-              className="flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+              className="relative flex size-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
             />
           }
         >
@@ -553,6 +554,7 @@ export function EventLiveDashboardPage() {
           className="flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Menu className="size-5" />
+              <MenuButtonDot />
         </button>
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600">
           <Trophy className="size-5 text-white" />

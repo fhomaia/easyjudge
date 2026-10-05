@@ -11,6 +11,7 @@ import {
   Trash2,
   Undo2,
   UserCog,
+  UserRound,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +35,9 @@ export const EVENT_ACTIVITY_ACTION_ICONS: Record<EventActivityAction, LucideIcon
   team_created: Users,
   team_updated: Users,
   team_deleted: Users,
+  athlete_created: UserRound,
+  athlete_updated: UserRound,
+  athlete_deleted: UserRound,
   regulation_document_uploaded: FileText,
   regulation_document_removed: FileText,
   regulation_deductions_updated: Percent,

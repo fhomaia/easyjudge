@@ -17,7 +17,9 @@ import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
 import {
   BrandMark,
   MobileNavSheet,
+  MenuButtonDot,
   NAV_ITEMS,
+  NavIconBadge,
   type EventNavItem,
 } from "@/components/MobileNavSheet";
 import { ImpersonateDialog } from "@/components/ImpersonateDialog";
@@ -25,6 +27,7 @@ import { HelpDialog } from "@/components/HelpDialog";
 import { PlatformFeedbackDialog } from "@/components/PlatformFeedbackDialog";
 import { useAuthStore } from "@/store/auth";
 import { useSidebarCollapseStore } from "@/store/sidebarCollapse";
+import { usePendingAthleteLinksCount } from "@/store/pendingAthleteLinks";
 import type { UserProfile } from "@/api/client";
 
 interface AppSidebarProps {
@@ -56,6 +59,7 @@ function NavLinks({
   collapsed: boolean;
 }) {
   const location = useLocation();
+  const pendingAthleteLinks = usePendingAthleteLinksCount();
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
       {eventNavItems && eventNavItems.length > 0 && (
@@ -117,7 +121,10 @@ function NavLinks({
               : "text-white/60 hover:bg-white/5 hover:text-white",
           )}
         >
-          <Icon className="size-4" />
+          <span className="relative flex">
+            <Icon className="size-4" />
+            {href === "/athletes" && <NavIconBadge count={pendingAthleteLinks} />}
+          </span>
           {!collapsed && label}
         </button>
       ))}
@@ -323,9 +330,10 @@ export function AppSidebar({
           type="button"
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menu"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="relative flex size-8 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Menu className="size-5" />
+          <MenuButtonDot />
         </button>
         <BrandMark compact />
       </div>

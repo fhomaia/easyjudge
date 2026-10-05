@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { MenuButtonDot } from "@/components/MobileNavSheet";
 import { EventFeedbackHeaderButton } from "@/components/EventFeedbackHeaderButton";
 import { useMinimumLoading } from "@/lib/useMinimumLoading";
 import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
@@ -400,9 +401,10 @@ export function EventLiveNotesPage() {
           type="button"
           onClick={() => setNavOpen(true)}
           aria-label="Abrir menu"
-          className="flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Menu className="size-5" />
+          <MenuButtonDot />
         </button>
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600">
           <Trophy className="size-5 text-white" />

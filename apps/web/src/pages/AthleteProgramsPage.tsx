@@ -85,6 +85,11 @@ export function AthleteProgramsPage() {
                         Aguardando esse programa se cadastrar na plataforma.
                       </p>
                     )}
+                    {link.requestedFromEvent && !link.confirmed && (
+                      <p className="text-xs text-muted-foreground">
+                        Pedido pelo produtor do evento {link.requestedFromEvent}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">

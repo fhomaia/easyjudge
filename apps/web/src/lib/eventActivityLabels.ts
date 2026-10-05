@@ -24,4 +24,7 @@ export const EVENT_ACTIVITY_ACTION_LABELS: Record<EventActivityAction, string> =
   staff_member_updated: "Papéis de acesso alterados",
   staff_member_removed: "Pessoa removida dos acessos",
   presentation_moved: "Apresentação remanejada no cronograma",
+  athlete_created: "Atleta cadastrado",
+  athlete_updated: "Atleta editado",
+  athlete_deleted: "Atleta excluído",
 };

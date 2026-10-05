@@ -396,7 +396,10 @@ export type EventActivityAction =
   | "staff_member_added"
   | "staff_member_updated"
   | "staff_member_removed"
-  | "presentation_moved";
+  | "presentation_moved"
+  | "athlete_created"
+  | "athlete_updated"
+  | "athlete_deleted";
 
 export interface EventActivityLogEntry {
   id: string;
@@ -527,6 +530,9 @@ export type CategoryFormat =
 export interface Category {
   id: string;
   eventId: string;
+  // Só nas categorias de uma equipe vindas de programsApi.get: quantos
+  // atletas a equipe marcou nesta categoria.
+  athletesCount?: number;
   name: string;
   modality: CategoryModality;
   division: CategoryDivision;
@@ -592,6 +598,11 @@ export interface Program {
   state: string;
   logoUrl: string | null;
   teamsCount?: number;
+  // Só na listagem (programsApi.list) e no detalhe (get): atletas
+  // inscritos no evento e pares equipe+categoria.
+  athletesCount?: number;
+  categoriesCount?: number;
+  teams?: Team[];
   createdAt: string;
   updatedAt: string;
 }
@@ -609,6 +620,84 @@ export type UpdateProgramPayload = Partial<ProgramPayload>;
 export interface ProgramWithTeams extends Program {
   teams: Team[];
 }
+
+// Atleta inscrito pelo programa NESTE evento (não é o elenco global do
+// programa, AthleteLinkView). `entries` = equipe+categoria em que compete.
+export interface ProgramAthleteEntry {
+  teamId: string;
+  categoryId: string;
+}
+
+export interface ProgramAthlete {
+  id: string;
+  programId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  cpf: string | null;
+  birthDate: string | null;
+  createdAt: string;
+  entries: ProgramAthleteEntry[];
+}
+
+export interface ProgramAthletePayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  cpf: string | null;
+  birthDate: string | null;
+}
+
+export const programAthletesApi = {
+  list: (eventId: string, programId: string) =>
+    authRequest<ProgramAthlete[]>(`/events/${eventId}/programs/${programId}/athletes`),
+
+  create: (eventId: string, programId: string, payload: ProgramAthletePayload) =>
+    authRequest<ProgramAthlete>(`/events/${eventId}/programs/${programId}/athletes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  update: (
+    eventId: string,
+    programId: string,
+    athleteId: string,
+    payload: Partial<ProgramAthletePayload>,
+  ) =>
+    authRequest<ProgramAthlete>(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
+  remove: (eventId: string, programId: string, athleteId: string) =>
+    authRequest<void>(`/events/${eventId}/programs/${programId}/athletes/${athleteId}`, {
+      method: "DELETE",
+    }),
+
+  setEntries: (
+    eventId: string,
+    programId: string,
+    athleteId: string,
+    entries: ProgramAthleteEntry[],
+  ) =>
+    authRequest<ProgramAthlete>(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}/entries`,
+      { method: "PUT", body: JSON.stringify({ entries }) },
+    ),
+
+  // Lista completa de atletas de uma equipe numa categoria.
+  setTeamCategoryAthletes: (
+    eventId: string,
+    programId: string,
+    teamId: string,
+    categoryId: string,
+    athleteIds: string[],
+  ) =>
+    authRequest<{ athleteIds: string[] }>(
+      `/events/${eventId}/programs/${programId}/teams/${teamId}/categories/${categoryId}/athletes`,
+      { method: "PUT", body: JSON.stringify({ athleteIds }) },
+    ),
+};
 
 export interface ProgramCatalogEntry {
   source: "platform" | "own";
@@ -674,6 +763,9 @@ export interface AthleteLinkView {
   // Convite pendente cujo email virou uma conta Programa (nunca vai ser
   // aceito). Só vem true no elenco do programa (athletesApi.list).
   emailIsProgramAccount: boolean;
+  // Nome do evento quando o pedido veio do produtor, ao cadastrar o
+  // atleta num programa do evento; nulo nos outros casos.
+  requestedFromEvent: string | null;
   createdAt: string;
 }
 
@@ -681,6 +773,8 @@ export interface AthleteLinkView {
 // evento (guard @Roles(PROGRAM) no backend).
 export const athletesApi = {
   list: () => authRequest<AthleteLinkView[]>("/athletes"),
+
+  pendingCount: () => authRequest<{ count: number }>("/athletes/pending-count"),
 
   create: (payload: { firstName: string; lastName: string; email: string }) =>
     authRequest<AthleteLinkView>("/athletes", {

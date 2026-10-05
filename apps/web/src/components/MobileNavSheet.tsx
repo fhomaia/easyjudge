@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IMPERSONATOR_EMAIL } from "@/lib/impersonation";
 import { useAuthStore } from "@/store/auth";
+import { usePendingAthleteLinksCount } from "@/store/pendingAthleteLinks";
 import type { UserProfile, UserRole } from "@/api/client";
 
 // `mobile: false` tira o item do menu hambúrguer sem afetar a sidebar de
@@ -72,6 +73,28 @@ export const NAV_ITEMS: {
     roles: ["athlete", "judge", "organization"],
   },
 ];
+
+// Selo de contagem sobre o ícone de um item do menu (mesmo visual dos
+// itens "Neste evento"). Hoje só "Gerenciar atletas" usa: pedidos de
+// vínculo esperando a confirmação do programa.
+export function NavIconBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="absolute -top-1.5 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-500 px-0.5 text-[9px] font-semibold text-white">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+// Ponto no botão do menu (celular) quando algum item tem selo, já que os
+// itens ficam escondidos até abrir o menu.
+export function MenuButtonDot() {
+  const count = usePendingAthleteLinksCount();
+  if (count <= 0) return null;
+  return (
+    <span className="absolute top-1 right-1 size-2 rounded-full bg-blue-500 ring-2 ring-brand-navy" />
+  );
+}
 
 function getUserInitials(profile: UserProfile): string {
   return `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase();
@@ -151,6 +174,7 @@ export function MobileNavSheet({
   eventNavItems,
 }: MobileNavSheetProps) {
   const location = useLocation();
+  const pendingAthleteLinks = usePendingAthleteLinksCount();
   const [helpOpen, setHelpOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [impersonateOpen, setImpersonateOpen] = useState(false);
@@ -248,7 +272,10 @@ export function MobileNavSheet({
                     : "text-white/60 hover:bg-white/5 hover:text-white",
                 )}
               >
-                <Icon className="size-4" />
+                <span className="relative flex">
+                  <Icon className="size-4" />
+                  {href === "/athletes" && <NavIconBadge count={pendingAthleteLinks} />}
+                </span>
                 {label}
               </button>
             ))}
