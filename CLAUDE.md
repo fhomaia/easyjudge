@@ -1887,6 +1887,109 @@ avaliação têm valor digitado; o grupo é sempre a soma dos filhos.
   nunca passa da nota máxima; a cópia local do USS tinha "Stunt
   Difficulty (Coed)" com máximo 19 e faixa até 20).
 
+## Programas e equipes com atletas por categoria (2026-10-04)
+
+Fase 1 da inscrição de campeonato: o produtor marca, no Setup, quais
+atletas competem em cada equipe+categoria. A fase 2 (link de inscrição
+pelo próprio programa) ainda não começou e deve reaproveitar estas
+rotas e telas. Tudo é opcional: sem atletas, o evento funciona como antes,
+e nada mudou nas telas ao vivo, nas súmulas ou no acesso do atleta.
+
+- **Atletas são por evento, não o elenco global** (`AthleteLink`):
+  decisão do usuário, por LGPD, de não importar nem reaproveitar aquele
+  elenco. `ProgramAthlete` (`program_athletes`, FK CASCADE pro
+  `ProgramParticipation`, `aliasId` em `EVENT_SCOPED_ENTITIES`): nome e
+  email obrigatórios, CPF (só dígitos, validado) e nascimento opcionais.
+  Email e CPF são únicos dentro do programa (índices da migration +
+  checagem com 409). A mesma pessoa em dois programas vira duas linhas.
+  Não concede acesso nem `EventMember` por si só (mas pede o vínculo,
+  ver o item abaixo).
+- **Cadastrar atleta pede o vínculo com o programa** (2026-10-05,
+  decisão do usuário): `ProgramAthletesService.create` (e `update`,
+  quando o email muda) chama `AthletesService.requestLinkFromEvent`, que
+  cria um `AthleteLink` SEM confirmar (o vínculo é global e dura além do
+  evento, então quem decide é o programa: "Confirmar vínculo" ou a
+  lixeira no elenco). Guarda o nome do evento em
+  `athlete_links.requested_from_event` (migration
+  `AddAthleteLinkRequestedFromEvent`), mostrado no elenco do programa
+  ("Adicionado pelo produtor do evento X") e em "Meus programas" do
+  atleta enquanto não confirmado. Não cria se já existe vínculo ativo
+  entre os dois (por conta ou email, sem diferenciar maiúsculas) nem
+  para email de conta Programa; conta inexistente de qualquer lado fica
+  pendente e é reclamada no cadastro. Excluir o atleta do evento ou
+  trocar o email não mexe no vínculo já criado. Melhor esforço: falha
+  só vai pro log, o atleta do evento é salvo igual. Como em qualquer
+  vínculo com as duas contas, o papel ATHLETE nos eventos do programa
+  sai na hora (só as notas esperam a confirmação). Testado com script
+  descartável (11 verificações, dados apagados).
+- **Selo de pedidos pendentes no menu do Programa** (2026-10-05):
+  `GET /athletes/pending-count` (vínculos ativos com `confirmedAt`
+  nulo, mesmo critério do botão "Confirmar vínculo"). No front,
+  `store/pendingAthleteLinks.ts` busca quando um menu monta, no máximo
+  uma vez por minuto (sem polling, por causa da cota de transferência
+  do Neon), e `AthletesManagementPage` força a atualização ao abrir,
+  confirmar e remover. `NavIconBadge` no ícone de "Gerenciar atletas"
+  (sidebar e menu do celular, "9+" acima de 9) e `MenuButtonDot` no
+  botão do menu do celular (`AppSidebar` e os 3 cabeçalhos próprios do
+  evento ao vivo).
+- **`TeamCategoryAthlete`** (`team_category_athletes`, chave primária
+  equipe+categoria+atleta, 3 FKs CASCADE). Tirar a categoria da equipe
+  não apaga nenhuma das três pontas, por isso
+  `TeamsService.removeCategory` apaga essas linhas na mão.
+- **API** (admin/assessor, mesmos guards de programas):
+  `events/:eventId/programs/:programId/athletes` (CRUD +
+  `PUT :athleteId/entries`, visão do atleta) e
+  `PUT .../teams/:teamId/categories/:categoryId/athletes` (visão da
+  equipe). As duas substituem a lista inteira e exigem que o par
+  equipe+categoria exista e seja do programa. `GET /programs` passou a
+  trazer `athletesCount`, `categoriesCount` e `teams` (com categorias);
+  `GET /programs/:id` traz `category.athletesCount` por equipe. Log de
+  atividade ganhou `athlete_created/updated/deleted` (migration
+  `CreateProgramAthletes`, que também cria as tabelas).
+- **Telas**: `ProgramsPage` virou lista de cards. Novas
+  `ProgramDetailPage` (`/events/:id/programs/:programId`, abas Equipes e
+  Atletas via `?tab=`) e `ProgramTeamPage` (`.../teams/:teamId`).
+  Casca comum em `ProgramsSetupShell`. Popups:
+  - `ProgramAthleteDialog`: cadastrar/editar atleta;
+  - `TeamCategoryAthletesDialog`: adicionar categoria ou editar atletas
+    dela, com atalho "Novo atleta";
+  - `AthleteEntriesDialog`: categorias de um atleta.
+
+  `AthleteChecklist` é a lista com busca usada pelos dois últimos.
+  Lista de programas (2026-10-05, a partir de um mock do usuário): um
+  cartão por linha (no desktop identidade | atletas/equipes/categorias |
+  3 primeiras equipes com "(N categorias)" e "+ N equipes" | Gerenciar;
+  empilhado no celular). SÓ o botão "Gerenciar" abre o programa; os
+  números de atletas, equipes e categorias (e o "+ N equipes") abrem
+  `ProgramOverviewDialog`, só de consulta (atletas buscados ao abrir).
+  Banner "Próxima etapa recomendada" fica no pé da tela quando a lista
+  é curta (`fillHeight` no `ProgramsSetupShell` + `mt-auto`); com lista
+  longa, logo depois dela. O número de categorias do
+  cartão é de categorias DISTINTAS (`programCategories`), não o
+  `categoriesCount` da API (pares equipe+categoria). Aba Equipes do
+  programa mostra as categorias de cada equipe como etiquetas
+  (`CategoryTags`). Aba Categorias do atleta lista só as que ele
+  participa. Aba Atletas no celular (`useIsMobile`) é em etapas: lista
+  OU atleta escolhido com "Todos os atletas" pra voltar; no computador
+  lado a lado. Na tela da equipe, cada categoria mostra só os 3
+  primeiros atletas; "+ N atletas" abre o mesmo popup de "Editar
+  atletas" (`TeamCategoryAthletesDialog`), que lista primeiro quem já
+  estava na categoria ao abrir (ordem fixa enquanto aberto). A
+  situação da equipe ("Sem categoria"/"Sem atletas"/"Completa") é só
+  informativa. Na UI o termo é "categoria", nunca "participação" (pedido
+  do usuário). `AddTeamCategoryPopover` foi removido.
+- **Testado**:
+  - script descartável contra a API local (31 verificações: CRUD,
+    409/400, os dois lados de entries, outro programa recusado, limpeza
+    ao remover categoria/equipe/programa/evento);
+  - no navegador em `127.0.0.1` com conta descartável: fluxo lista →
+    programa → equipe → adicionar categoria com atletas → editar
+    categorias pelo atleta, e as 3 telas em iframe de 412px sem rolagem
+    horizontal.
+
+  Conta e evento apagados no fim. **Não testado**: escrita em evento
+  concluído (coberta pelo `CompletedEventLockGuard` genérico).
+
 ## Próximos passos (não iniciados ainda)
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
