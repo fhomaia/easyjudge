@@ -21,6 +21,10 @@ export enum EventActivityAction {
   TEAM_CREATED = 'team_created',
   TEAM_UPDATED = 'team_updated',
   TEAM_DELETED = 'team_deleted',
+  // Atletas inscritos pelo programa no evento (2026-10-04, ProgramAthlete).
+  ATHLETE_CREATED = 'athlete_created',
+  ATHLETE_UPDATED = 'athlete_updated',
+  ATHLETE_DELETED = 'athlete_deleted',
   REGULATION_DOCUMENT_UPLOADED = 'regulation_document_uploaded',
   REGULATION_DOCUMENT_REMOVED = 'regulation_document_removed',
   // 'regulation_deductions_updated' foi removido (2026-09-23, deduções

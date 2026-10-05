@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Team } from '../entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
+import { TeamCategoryAthlete } from '../../programs/entities/team-category-athlete.entity';
 import { CreateTeamDto } from '../dto/create-team.dto';
 import { UpdateTeamDto } from '../dto/update-team.dto';
 import { ProgramsService } from '../../programs/services/programs.service';
@@ -18,6 +19,8 @@ export class TeamsService {
     private readonly teamsRepo: Repository<Team>,
     @InjectRepository(Category)
     private readonly categoriesRepo: Repository<Category>,
+    @InjectRepository(TeamCategoryAthlete)
+    private readonly teamCategoryAthletesRepo: Repository<TeamCategoryAthlete>,
     private readonly programsService: ProgramsService,
     private readonly eventsService: EventsService,
     private readonly activityLogService: EventActivityLogService,
@@ -158,6 +161,9 @@ export class TeamsService {
       .relation(Team, 'categories')
       .of(teamId)
       .remove(categoryId);
+    // Atletas marcados nesse par (a FK não cobre: equipe e categoria
+    // continuam existindo).
+    await this.teamCategoryAthletesRepo.delete({ teamId, categoryId });
 
     return this.findTeamWithCategories(teamId);
   }

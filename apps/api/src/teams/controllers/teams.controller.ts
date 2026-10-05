@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -15,6 +16,8 @@ import { TeamsService } from '../services/teams.service';
 import { CreateTeamDto } from '../dto/create-team.dto';
 import { UpdateTeamDto } from '../dto/update-team.dto';
 import { AddTeamCategoryDto } from '../dto/add-team-category.dto';
+import { SetTeamCategoryAthletesDto } from '../../programs/dto/set-athlete-entries.dto';
+import { ProgramAthletesService } from '../../programs/services/program-athletes.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -29,7 +32,10 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
 @EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR)
 export class TeamsController {
-  constructor(private readonly teamsService: TeamsService) {}
+  constructor(
+    private readonly teamsService: TeamsService,
+    private readonly programAthletesService: ProgramAthletesService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -110,6 +116,24 @@ export class TeamsController {
       programId,
       teamId,
       categoryId,
+    );
+  }
+
+  // Atletas que competem por esta equipe nesta categoria (lista completa).
+  @Put(':teamId/categories/:categoryId/athletes')
+  setCategoryAthletes(
+    @Param('eventId') eventId: string,
+    @Param('programId') programId: string,
+    @Param('teamId') teamId: string,
+    @Param('categoryId') categoryId: string,
+    @Body() dto: SetTeamCategoryAthletesDto,
+  ) {
+    return this.programAthletesService.setTeamCategoryAthletes(
+      eventId,
+      programId,
+      teamId,
+      categoryId,
+      dto.athleteIds,
     );
   }
 }

@@ -22,6 +22,7 @@ import { EventActivityLogService } from './event-activity-log.service';
 import { UsersService } from '../../users/services/users.service';
 import { Category } from '../../categories/entities/category.entity';
 import { ProgramParticipation } from '../../programs/entities/program-participation.entity';
+import { ProgramAthlete } from '../../programs/entities/program-athlete.entity';
 import { ScheduleDay } from '../../schedule/entities/schedule-day.entity';
 import { ScheduleAutoSettings } from '../../schedule/entities/schedule-auto-settings.entity';
 import { Regulation } from '../../regulations/entities/regulation.entity';
@@ -50,6 +51,9 @@ import { EVENT_STAFF_ROLES } from '../constants/event-staff-roles';
 // (que são excluídas aqui).
 const EVENT_SCOPED_ENTITIES = [
   Category,
+  // Antes de ProgramParticipation (a FK apagaria em cascata de qualquer
+  // jeito; explícito pra não depender disso).
+  ProgramAthlete,
   ProgramParticipation,
   ScheduleDay,
   ScheduleAutoSettings,

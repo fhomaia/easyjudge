@@ -83,7 +83,19 @@ export class AthleteLink {
   @Column({ name: 'ended_at', type: 'timestamptz', nullable: true })
   endedAt: Date | null;
 
-  // Quem criou a linha (o programa ou o próprio atleta) — só auditoria.
+  // Nome do evento cujo produtor cadastrou o atleta no programa e com
+  // isso pediu o vínculo (ver AthletesService.requestLinkFromEvent).
+  // Nulo nos vínculos criados pelo programa ou pelo atleta.
+  @Column({
+    name: 'requested_from_event',
+    type: 'varchar',
+    length: 200,
+    nullable: true,
+  })
+  requestedFromEvent: string | null;
+
+  // Quem criou a linha (o programa, o próprio atleta ou o produtor de um
+  // evento) — só auditoria.
   @Column({ name: 'created_by_id', type: 'varchar', nullable: true })
   createdById: string | null;
 

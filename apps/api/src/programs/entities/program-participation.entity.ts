@@ -82,6 +82,11 @@ export class ProgramParticipation {
   // ProgramsService.findAllForEvent, só para a listagem.
   teamsCount?: number;
 
+  // Também não são colunas (2026-10-04): atletas inscritos
+  // (ProgramAthlete) e pares equipe+categoria, só pra listagem.
+  athletesCount?: number;
+  categoriesCount?: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

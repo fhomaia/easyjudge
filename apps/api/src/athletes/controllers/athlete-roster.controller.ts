@@ -30,6 +30,17 @@ export class AthleteRosterController {
     return this.athletesService.listForProgram(req.user.userId);
   }
 
+  // Selo do menu "Gerenciar atletas": quantos vínculos esperam a
+  // confirmação do programa.
+  @Get('pending-count')
+  async pendingCount(@Req() req: AuthenticatedRequest) {
+    return {
+      count: await this.athletesService.countPendingForProgram(
+        req.user.userId,
+      ),
+    };
+  }
+
   @Post()
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateAthleteLinkDto) {
     return this.athletesService.create(req.user.userId, dto);

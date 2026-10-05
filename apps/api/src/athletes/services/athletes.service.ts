@@ -26,6 +26,9 @@ export interface AthleteLinkView {
   // convite: nunca vai ser aceito (Programa não pode ser atleta). Só o
   // elenco do programa preenche; nas outras respostas é sempre false.
   emailIsProgramAccount: boolean;
+  // Nome do evento quando o pedido veio do produtor (ver
+  // requestLinkFromEvent); nulo nos outros casos.
+  requestedFromEvent: string | null;
   createdAt: string;
 }
 
@@ -61,6 +64,15 @@ export class AthletesService {
           programEmails.has(l.email.toLowerCase()),
       ),
     );
+  }
+
+  // Vínculos ativos do programa esperando confirmação (pedidos do atleta
+  // ou do produtor de um evento; os criados pelo programa já nascem
+  // confirmados). Mesmo critério do botão "Confirmar vínculo" do elenco.
+  countPendingForProgram(programUserId: string): Promise<number> {
+    return this.linksRepo.count({
+      where: { programUserId, endedAt: IsNull(), confirmedAt: IsNull() },
+    });
   }
 
   // Programa adiciona um atleta por nome/sobrenome/email — nasce já
@@ -218,6 +230,72 @@ export class AthletesService {
     if (programUserId) await this.syncEventAccessForLink(saved);
 
     return this.toView(saved);
+  }
+
+  // Produtor cadastrou o atleta num programa do evento (ProgramAthlete,
+  // ver ProgramAthletesService): pede o vínculo em nome do evento, sem
+  // confirmar (decisão do usuário, 2026-10-05). O vínculo é global e dura
+  // além do evento, então quem decide é o programa ("Confirmar vínculo"
+  // ou a lixeira no elenco). Não faz nada se já existe vínculo ativo
+  // entre os dois ou se o email é de uma conta Programa. Contas que ainda
+  // não existem ficam pendentes e são reclamadas no cadastro, como nas
+  // outras duas direções.
+  async requestLinkFromEvent(params: {
+    programUserId: string | null;
+    programEmail: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    eventName: string;
+    createdById: string;
+  }): Promise<void> {
+    const email = params.email.trim();
+    const programUser = params.programUserId
+      ? await this.usersService.findById(params.programUserId)
+      : await this.usersService.findByEmailInsensitive(params.programEmail);
+    const programUserId =
+      programUser?.role === UserRole.PROGRAM ? programUser.id : null;
+    const programEmail = programUserId
+      ? (programUser as NonNullable<typeof programUser>).email
+      : params.programEmail.trim();
+
+    const athleteUser = await this.usersService.findByEmailInsensitive(email);
+    if (athleteUser?.role === UserRole.PROGRAM) return;
+    const athleteUserId = athleteUser?.id ?? null;
+
+    const query = this.linksRepo
+      .createQueryBuilder('link')
+      .where('link.endedAt IS NULL')
+      .andWhere(
+        programUserId
+          ? '(link.programUserId = :programUserId OR LOWER(link.programEmail) = LOWER(:programEmail))'
+          : 'LOWER(link.programEmail) = LOWER(:programEmail)',
+        { programUserId, programEmail },
+      )
+      .andWhere(
+        athleteUserId
+          ? '(link.athleteUserId = :athleteUserId OR LOWER(link.email) = LOWER(:email))'
+          : 'LOWER(link.email) = LOWER(:email)',
+        { athleteUserId, email },
+      );
+    if (await query.getExists()) return;
+
+    const saved = await this.linksRepo.save(
+      this.linksRepo.create({
+        programUserId,
+        programEmail,
+        athleteUserId,
+        firstName: athleteUser?.firstName ?? params.firstName,
+        lastName: athleteUser?.lastName ?? params.lastName,
+        email: athleteUser?.email ?? email,
+        confirmedAt: null,
+        requestedFromEvent: params.eventName.slice(0, 200),
+        createdById: params.createdById,
+      }),
+    );
+    if (programUserId && athleteUserId) {
+      await this.syncEventAccessForLink(saved);
+    }
   }
 
   async listMyPrograms(athleteUserId: string): Promise<AthleteLinkView[]> {
@@ -405,6 +483,7 @@ export class AthletesService {
       programResolved: link.programUserId !== null,
       confirmed: link.confirmedAt !== null,
       emailIsProgramAccount,
+      requestedFromEvent: link.requestedFromEvent,
       createdAt: link.createdAt.toISOString(),
     };
   }

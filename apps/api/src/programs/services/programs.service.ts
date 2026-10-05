@@ -5,8 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ProgramParticipation } from '../entities/program-participation.entity';
+import { ProgramAthlete } from '../entities/program-athlete.entity';
+import { TeamCategoryAthlete } from '../entities/team-category-athlete.entity';
 import { ProgramProfile } from '../entities/program-profile.entity';
 import { CreateProgramParticipationDto } from '../dto/create-program-participation.dto';
 import { UpdateProgramParticipationDto } from '../dto/update-program-participation.dto';
@@ -60,6 +62,10 @@ export class ProgramsService {
     private readonly participationsRepo: Repository<ProgramParticipation>,
     @InjectRepository(ProgramProfile)
     private readonly profilesRepo: Repository<ProgramProfile>,
+    @InjectRepository(ProgramAthlete)
+    private readonly athletesRepo: Repository<ProgramAthlete>,
+    @InjectRepository(TeamCategoryAthlete)
+    private readonly teamCategoryAthletesRepo: Repository<TeamCategoryAthlete>,
     private readonly eventsService: EventsService,
     private readonly usersService: UsersService,
     private readonly athletesService: AthletesService,
@@ -155,16 +161,42 @@ export class ProgramsService {
 
   async findAllForEvent(eventId: string): Promise<ProgramParticipation[]> {
     const event = await this.eventsService.findEventOrThrow(eventId);
+    // Equipes e categorias vêm junto pros cards da tela de Programas e
+    // equipes (nome de cada equipe e quantas categorias ela tem).
     const participations = await this.participationsRepo
       .createQueryBuilder('participation')
-      .loadRelationCountAndMap(
-        'participation.teamsCount',
-        'participation.teams',
-      )
+      .leftJoinAndSelect('participation.teams', 'team')
+      .leftJoinAndSelect('team.categories', 'category')
       .where('participation.aliasId = :aliasId', { aliasId: event.aliasId })
       .orderBy('participation.createdAt', 'DESC')
+      .addOrderBy('team.createdAt', 'ASC')
       .getMany();
+    const athleteCounts = await this.countAthletesByProgram(
+      participations.map((p) => p.id),
+    );
+    for (const p of participations) {
+      p.teamsCount = p.teams.length;
+      p.categoriesCount = p.teams.reduce(
+        (sum, t) => sum + t.categories.length,
+        0,
+      );
+      p.athletesCount = athleteCounts.get(p.id) ?? 0;
+    }
     return Promise.all(participations.map((p) => this.toProgramView(p)));
+  }
+
+  private async countAthletesByProgram(
+    programIds: string[],
+  ): Promise<Map<string, number>> {
+    if (programIds.length === 0) return new Map();
+    const rows: { programId: string; count: string }[] = await this.athletesRepo
+      .createQueryBuilder('a')
+      .select('a.programId', 'programId')
+      .addSelect('COUNT(*)', 'count')
+      .where({ programId: In(programIds) })
+      .groupBy('a.programId')
+      .getRawMany();
+    return new Map(rows.map((r) => [r.programId, Number(r.count)]));
   }
 
   async findOneForEvent(
@@ -175,8 +207,37 @@ export class ProgramsService {
     const participation = await this.participationsRepo.findOne({
       where: { id, aliasId: event.aliasId },
       relations: ['teams', 'teams.categories'],
+      order: { teams: { createdAt: 'ASC' } },
     });
     if (!participation) throw new NotFoundException('Programa não encontrado');
+    // Quantos atletas cada equipe tem marcados em cada categoria
+    // (`category.athletesCount`, não é coluna).
+    const teamIds = participation.teams.map((t) => t.id);
+    const rows: { teamId: string; categoryId: string; count: string }[] =
+      teamIds.length
+        ? await this.teamCategoryAthletesRepo
+            .createQueryBuilder('e')
+            .select('e.teamId', 'teamId')
+            .addSelect('e.categoryId', 'categoryId')
+            .addSelect('COUNT(*)', 'count')
+            .where({ teamId: In(teamIds) })
+            .groupBy('e.teamId')
+            .addGroupBy('e.categoryId')
+            .getRawMany()
+        : [];
+    const counts = new Map(
+      rows.map((r) => [`${r.teamId}:${r.categoryId}`, Number(r.count)]),
+    );
+    participation.teams = participation.teams.map((team) => ({
+      ...team,
+      categories: team.categories.map((category) => ({
+        ...category,
+        athletesCount: counts.get(`${team.id}:${category.id}`) ?? 0,
+      })),
+    }));
+    participation.athletesCount = await this.athletesRepo.countBy({
+      programId: participation.id,
+    });
     return this.toProgramView(participation);
   }
 
