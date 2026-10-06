@@ -3,7 +3,9 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  SetMetadata,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { EventsService } from '../../events/services/events.service';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 import { isRegistrationOpen } from '../../events/registration-window';
@@ -14,6 +16,12 @@ import {
 import { UserRole } from '../../common/enums/user-role.enum';
 import { ProgramsService } from '../services/programs.service';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
+
+const DOCUMENT_WRITE_KEY = 'programAccess:documentWrite';
+// Rota de envio de documento de atleta: o programa dono escreve até o
+// prazo de inscrição mesmo com a ficha enviada (canSendDocuments), não só
+// quando a ficha está editável.
+export const DocumentWrite = () => SetMetadata(DOCUMENT_WRITE_KEY, true);
 
 const STAFF_ACCOUNT_ROLES: string[] = [UserRole.JUDGE, UserRole.ORGANIZATION];
 const STAFF_EVENT_ROLES = [EventMemberRole.ADMIN, EventMemberRole.ASSESSOR];
@@ -33,13 +41,16 @@ export class ProgramAccessGuard implements CanActivate {
   constructor(
     private readonly eventsService: EventsService,
     private readonly programsService: ProgramsService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const { eventId, programId } = req.params;
     if (typeof eventId !== 'string' || typeof programId !== 'string') {
-      throw new ForbiddenException('Você não tem permissão para isso neste evento.');
+      throw new ForbiddenException(
+        'Você não tem permissão para isso neste evento.',
+      );
     }
     const { userId, role } = req.user;
 
@@ -60,9 +71,17 @@ export class ProgramAccessGuard implements CanActivate {
         programId,
       );
       if (program.userId === userId) {
-        if (req.method === 'GET' || programCanEditRegistration(event, program)) {
+        if (
+          req.method === 'GET' ||
+          programCanEditRegistration(event, program)
+        ) {
           return true;
         }
+        const documentWrite = this.reflector.getAllAndOverride<boolean>(
+          DOCUMENT_WRITE_KEY,
+          [context.getHandler(), context.getClass()],
+        );
+        if (documentWrite && isRegistrationOpen(event)) return true;
         throw new ForbiddenException(
           program.submittedAt && isRegistrationOpen(event)
             ? REGISTRATION_LOCKED_MESSAGE
@@ -71,6 +90,8 @@ export class ProgramAccessGuard implements CanActivate {
       }
     }
 
-    throw new ForbiddenException('Você não tem permissão para isso neste evento.');
+    throw new ForbiddenException(
+      'Você não tem permissão para isso neste evento.',
+    );
   }
 }

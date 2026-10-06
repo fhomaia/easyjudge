@@ -40,6 +40,8 @@ export interface ProgramAthleteView {
   // (uma data/CPF por atleta, 2026-10-06).
   accountCpf: string | null;
   accountBirthDate: string | null;
+  // O próprio atleta enviou a parte dele (ver ProgramAthlete).
+  athleteSubmittedAt: Date | null;
   createdAt: Date;
   entries: ProgramAthleteEntryView[];
 }
@@ -413,6 +415,7 @@ export class ProgramAthletesService {
       birthDate: a.birthDate,
       accountCpf: null,
       accountBirthDate: null,
+      athleteSubmittedAt: a.athleteSubmittedAt,
       createdAt: a.createdAt,
       entries,
     };

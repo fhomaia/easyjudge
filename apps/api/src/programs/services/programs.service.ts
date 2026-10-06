@@ -269,6 +269,11 @@ export class ProgramsService {
       .select('a.programId', 'programId')
       .addSelect('COUNT(*)', 'count')
       .where({ programId: In(programIds) })
+      // Só quem compete: atleta sem categoria (já mandou dados antes de
+      // ter categoria, ou saiu de todas) fica no evento mas não conta.
+      .andWhere(
+        'EXISTS (SELECT 1 FROM team_category_athletes e WHERE e.athlete_id = a.id)',
+      )
       .groupBy('a.programId')
       .getRawMany();
     return new Map(rows.map((r) => [r.programId, Number(r.count)]));
@@ -310,9 +315,10 @@ export class ProgramsService {
         athletesCount: counts.get(`${team.id}:${category.id}`) ?? 0,
       })),
     }));
-    participation.athletesCount = await this.athletesRepo.countBy({
-      programId: participation.id,
-    });
+    participation.athletesCount =
+      (await this.countAthletesByProgram([participation.id])).get(
+        participation.id,
+      ) ?? 0;
     return this.toProgramView(participation);
   }
 

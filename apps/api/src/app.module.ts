@@ -21,6 +21,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { CommonModule } from './common/common.module';
+import { DocumentsModule } from './documents/documents.module';
 import { SupportModule } from './support/support.module';
 import { EventMetricsModule } from './event-metrics/event-metrics.module';
 
@@ -52,6 +53,7 @@ import { EventMetricsModule } from './event-metrics/event-metrics.module';
     // com fallback pra disco local) é usado por 3 domínios diferentes
     // (events, programs, regulations) sem relação entre si.
     CommonModule,
+    DocumentsModule,
     AuthModule,
     UsersModule,
     EventsModule,

@@ -21,4 +21,7 @@ export enum NotificationType {
   REGISTRATION_REQUEST = 'registration_request',
   // Pro programa (destinatário único): organizador liberou a ficha.
   REGISTRATION_REOPENED = 'registration_reopened',
+  // Pro programa (destinatário único): produtor contestou um documento de
+  // atleta (2026-10-06).
+  DOCUMENT_CONTESTED = 'document_contested',
 }

@@ -54,6 +54,16 @@ export class ProgramAthlete {
   @Column({ name: 'birth_date', type: 'date', nullable: true })
   birthDate: string | null;
 
+  // O próprio atleta enviou a parte dele (dados e documentos) enquanto a
+  // ficha do programa estava em rascunho (2026-10-06). Opcional e só
+  // informativo: o programa pode fazer tudo pelo atleta.
+  @Column({
+    name: 'athlete_submitted_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  athleteSubmittedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

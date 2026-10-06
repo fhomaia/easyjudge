@@ -15,6 +15,7 @@ import { Category } from '../../categories/entities/category.entity';
 import { CategoryCriteriaService } from '../../categories/services/category-criteria.service';
 import { RegistrationSettingsService } from './registration-settings.service';
 import { AthleteRequirementValue } from '../entities/athlete-requirement-value.entity';
+import { AthleteRequirementDocument } from '../../documents/entities/athlete-requirement-document.entity';
 import { AthleteLink } from '../../athletes/entities/athlete-link.entity';
 import { requirementApplies } from '../registration-requirements';
 import type { CategoryRules } from '../../categories/entities/category.entity';
@@ -99,7 +100,12 @@ export interface ProgramRegistrationView {
 }
 
 export interface RegistrationIssue {
-  kind: 'athletes_count' | 'age' | 'missing_birth_date' | 'missing_requirement';
+  kind:
+    | 'athletes_count'
+    | 'age'
+    | 'missing_birth_date'
+    | 'missing_requirement'
+    | 'missing_document';
   teamId: string;
   categoryId: string;
   // Atleta do evento (ProgramAthlete), nos problemas de idade e de dados.
@@ -190,6 +196,8 @@ export class ProgramRegistrationService {
     private readonly registrationSettingsService: RegistrationSettingsService,
     @InjectRepository(AthleteRequirementValue)
     private readonly requirementValuesRepo: Repository<AthleteRequirementValue>,
+    @InjectRepository(AthleteRequirementDocument)
+    private readonly requirementDocumentsRepo: Repository<AthleteRequirementDocument>,
     @InjectRepository(AthleteLink)
     private readonly linksRepo: Repository<AthleteLink>,
     private readonly dataSource: DataSource,
@@ -708,24 +716,8 @@ export class ProgramRegistrationService {
       throw new ConflictException('A equipe já está na categoria de destino.');
     }
     await this.assertEventCategories(event, [toCategoryId]);
-    const moving = await this.entriesRepo.find({
-      where: { teamId: team.id, categoryId: fromCategoryId },
-    });
-    const movingAthletes = moving.length
-      ? await this.athletesRepo.findBy({
-          id: In(moving.map((e) => e.athleteId)),
-        })
-      : [];
-    await this.assertAgeEligible(
-      event,
-      userId,
-      participation.id,
-      [toCategoryId],
-      movingAthletes.map((a) => ({
-        name: `${a.firstName} ${a.lastName}`.trim(),
-        email: a.email,
-      })),
-    );
+    // Idade fora da regra da categoria nova não impede (2026-10-06): vira
+    // pendência que barra o envio (computeIssues), como o nº de atletas.
     await this.dataSource.transaction(async (manager) => {
       const relation = manager
         .createQueryBuilder()
@@ -755,19 +747,6 @@ export class ProgramRegistrationService {
     const { event, participation } = await this.loadOwnedOpen(eventId, userId);
     const team = await this.findOwnTeam(participation, teamId);
     await this.assertEventCategories(event, [categoryId]);
-    const roster = await this.roster(userId);
-    await this.assertAgeEligible(
-      event,
-      userId,
-      participation.id,
-      [categoryId],
-      roster
-        .filter((l) => linkIds.includes(l.id))
-        .map((l) => ({
-          name: `${l.firstName} ${l.lastName}`.trim(),
-          email: l.email,
-        })),
-    );
     if (!team.categories.some((c) => c.id === categoryId)) {
       await this.teamsRepo
         .createQueryBuilder()
@@ -799,22 +778,7 @@ export class ProgramRegistrationService {
     linkId: string,
     entries: AthleteEntryDto[],
   ): Promise<ProgramRegistrationView> {
-    const { event, participation } = await this.loadOwnedOpen(eventId, userId);
-    const link = (await this.roster(userId)).find((l) => l.id === linkId);
-    if (link) {
-      await this.assertAgeEligible(
-        event,
-        userId,
-        participation.id,
-        entries.map((e) => e.categoryId),
-        [
-          {
-            name: `${link.firstName} ${link.lastName}`.trim(),
-            email: link.email,
-          },
-        ],
-      );
-    }
+    const { participation } = await this.loadOwnedOpen(eventId, userId);
     const [athleteId] = await this.athleteIdsForLinks(
       eventId,
       participation,
@@ -968,7 +932,9 @@ export class ProgramRegistrationService {
 
   // Atleta do elenco que ficou sem nenhuma categoria sai do evento
   // ("só quem está numa categoria participa"). Atleta cadastrado pelo
-  // produtor sem vínculo no elenco não é tocado.
+  // produtor sem vínculo no elenco não é tocado. Também fica quem já
+  // mandou dado, documento ou a própria inscrição (o atleta pode fazer
+  // isso antes de ter categoria, 2026-10-06): apagar levaria tudo junto.
   private async removeUnassignedRosterAthletes(
     participation: ProgramParticipation,
     userId: string,
@@ -984,6 +950,14 @@ export class ProgramRegistrationService {
       .andWhere('LOWER(a.email) IN (:...emails)', { emails: rosterEmails })
       .andWhere(
         'NOT EXISTS (SELECT 1 FROM team_category_athletes e WHERE e.athlete_id = a.id)',
+      )
+      .andWhere('a.athleteSubmittedAt IS NULL')
+      .andWhere('a.cpf IS NULL AND a.birthDate IS NULL')
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM athlete_requirement_values v WHERE v.program_athlete_id = a.id)',
+      )
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM athlete_requirement_documents d WHERE d.program_athlete_id = a.id)',
       )
       .getRawMany();
     if (orphans.length) {
@@ -1047,38 +1021,6 @@ export class ProgramRegistrationService {
     };
   }
 
-  // Trava (2026-10-06): atleta que não cumpre a regra de idade não entra
-  // na categoria (recusado com o motivo de cada um). Número de atletas
-  // só é conferido no envio (a ficha é montada aos poucos).
-  private async assertAgeEligible(
-    event: Event,
-    userId: string,
-    participationId: string,
-    categoryIds: string[],
-    athletes: { name: string; email: string }[],
-  ): Promise<void> {
-    if (athletes.length === 0 || categoryIds.length === 0) return;
-    const categories = await this.categoriesRepo.findBy({
-      id: In([...new Set(categoryIds)]),
-    });
-    const criteria = await this.categoryCriteriaService.getByAlias(
-      event.aliasId,
-    );
-    const { birthDateOf } = await this.birthDateLookup(userId, participationId);
-    const problems: string[] = [];
-    for (const category of categories) {
-      const rules = this.categoryCriteriaService.rulesFor(category, criteria);
-      for (const athlete of athletes) {
-        const problem = ageProblem(rules, birthDateOf(athlete.email));
-        if (problem)
-          problems.push(`${athlete.name} (${category.name}): ${problem}`);
-      }
-    }
-    if (problems.length > 0) {
-      throw new BadRequestException(problems.join(' '));
-    }
-  }
-
   // Problemas da ficha pelas regras das categorias (ver
   // CategoryCriteriaService.rulesFor) e dos dados pedidos na inscrição.
   private async computeIssues(
@@ -1133,9 +1075,10 @@ export class ProgramRegistrationService {
   //   do atleta: conta, elenco do programa ou atleta do evento);
   // - dados obrigatórios pedidos na inscrição que faltam (sempre impedem
   //   o envio);
-  // - documentos obrigatórios que faltam: por enquanto só contados
-  //   (`documentsPendingCount`); quando houver envio, viram pendência que
-  //   impede o envio salvo se o produtor permitir (allowSubmitWithoutDocuments).
+  // - documentos obrigatórios que faltam ou foram contestados
+  //   (`missing_document`, contados em `documentsPendingCount`): impedem o
+  //   envio, salvo se o produtor permitir (allowSubmitWithoutDocuments),
+  //   quando viram aviso.
   // Equipe sem nenhum atleta não entra (já barrada como "escolha os atletas").
   private async computeIssuesBatch(
     event: Event,
@@ -1181,6 +1124,12 @@ export class ProgramRegistrationService {
           programAthleteId: In(athletes.map((a) => a.id)),
         })
       : [];
+    const documents =
+      athletes.length && requiredDocuments.length
+        ? await this.requirementDocumentsRepo.findBy({
+            programAthleteId: In(athletes.map((a) => a.id)),
+          })
+        : [];
     const emails = [...new Set(athletes.map((a) => a.email.toLowerCase()))];
     const accountDates = await this.usersService.findBirthDatesByEmails(emails);
     const accountCpfs = await this.usersService.findCpfsByEmails(emails);
@@ -1338,10 +1287,28 @@ export class ProgramRegistrationService {
               message: `${name}: falta ${requirement.label.toLowerCase()}.`,
             });
           }
-          // Documentos: sem envio ainda, todo obrigatório que vale conta.
-          documentsPendingCount += requiredDocuments.filter((r) =>
-            requirementApplies(r, athleteCategories),
-          ).length;
+          for (const requirement of requiredDocuments) {
+            if (!requirementApplies(requirement, athleteCategories)) continue;
+            const doc = documents.find(
+              (d) =>
+                d.programAthleteId === athlete.id &&
+                d.requirementId === requirement.id,
+            );
+            if (doc && doc.status !== 'contested') continue;
+            documentsPendingCount += 1;
+            issues.push({
+              kind: 'missing_document',
+              teamId: first.teamId,
+              categoryId: first.categoryId,
+              athleteId: athlete.id,
+              linkId: linkIdOf(athlete.email),
+              requirementId: requirement.id,
+              blocking: !settings.allowSubmitWithoutDocuments,
+              message: doc
+                ? `${name}: ${requirement.label.toLowerCase()} contestado (${doc.contestReason ?? 'sem motivo'}).`
+                : `${name}: falta ${requirement.label.toLowerCase()}.`,
+            });
+          }
         }
       }
 
