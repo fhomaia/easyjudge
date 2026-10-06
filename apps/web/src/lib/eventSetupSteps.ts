@@ -244,17 +244,21 @@ export function buildSetupSteps(
             : `${programs.pendingRequestsCount} solicitações de programas pendentes`
           : null,
       updatedAt: programs.updatedAt,
+      // Sem inscrições: configurar e divulgar (aba Configurações); com
+      // inscrições: acompanhar a lista; com solicitação pendente: a aba
+      // Solicitações (2026-10-06).
       actionLabel:
         programs.pendingRequestsCount > 0
           ? "Ver solicitações"
           : programs.programsCount > 0
-            ? "Editar programas"
-            : "Iniciar cadastro",
-      // Com solicitação pendente, o card já abre a aba Solicitações.
+            ? "Ver inscrições"
+            : "Configurar inscrições",
       href:
         programs.pendingRequestsCount > 0
           ? `/events/${event.aliasId}/programs?tab=requests`
-          : `/events/${event.aliasId}/programs`,
+          : programs.programsCount > 0
+            ? `/events/${event.aliasId}/programs`
+            : `/events/${event.aliasId}/programs?tab=registration`,
     },
     {
       // Cronograma vem antes de Painel de jurados nesta lista (pedido

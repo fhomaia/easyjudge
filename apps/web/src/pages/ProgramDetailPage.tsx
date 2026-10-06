@@ -13,6 +13,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
+import { AthleteRequirementsPanel } from "@/components/AthleteRequirementsPanel";
 import { ProgramsSetupShell } from "@/components/ProgramsSetupShell";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { EditProgramDialog } from "@/components/EditProgramDialog";
@@ -22,10 +23,15 @@ import { AthleteEntriesDialog } from "@/components/AthleteEntriesDialog";
 import { TeamSituationBadge } from "@/components/TeamSituationBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/Pagination";
 import { getAvatarColor } from "@/lib/avatarColor";
-import { formatCpf } from "@/lib/masks";
 import {
   athleteAge,
   athleteInitials,
@@ -39,12 +45,14 @@ import {
 import { useIsMobile } from "@/lib/useIsMobile";
 import {
   programAthletesApi,
+  programRegistrationAdminApi,
   programsApi,
   type ProgramAthlete,
+  type ProgramRegistrationIssues,
   type ProgramWithTeams,
 } from "@/api/client";
 
-type Tab = "teams" | "athletes";
+type Tab = "teams" | "athletes" | "issues";
 type AthleteFilter = "all" | "with" | "without";
 
 const ATHLETES_PAGE_SIZE = 10;
@@ -55,10 +63,14 @@ export function ProgramDetailPage() {
   const { id, programId } = useParams<{ id: string; programId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab: Tab = searchParams.get("tab") === "athletes" ? "athletes" : "teams";
+  const tabParam = searchParams.get("tab");
+  const tab: Tab =
+    tabParam === "athletes" ? "athletes" : tabParam === "issues" ? "issues" : "teams";
 
   const [program, setProgram] = useState<ProgramWithTeams | null>(null);
   const [athletes, setAthletes] = useState<ProgramAthlete[] | null>(null);
+  // Pendências da ficha (aba Pendências): o que impede o envio.
+  const [issues, setIssues] = useState<ProgramRegistrationIssues | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [editProgramOpen, setEditProgramOpen] = useState(false);
@@ -74,12 +86,23 @@ export function ProgramDetailPage() {
         setAthletes(a);
       })
       .catch(() => setError("Não foi possível carregar o programa."));
+    programRegistrationAdminApi
+      .programIssues(id, programId)
+      .then(setIssues)
+      .catch(() => setIssues(null));
   }, [id, programId]);
 
   useEffect(load, [load]);
 
   function setTab(next: Tab) {
     setSearchParams(next === "teams" ? {} : { tab: next }, { replace: true });
+    // Pendências recalculadas ao abrir a aba (dados mudam nas outras).
+    if (next === "issues" && id && programId) {
+      programRegistrationAdminApi
+        .programIssues(id, programId)
+        .then(setIssues)
+        .catch(() => {});
+    }
   }
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -97,6 +120,7 @@ export function ProgramDetailPage() {
   }
 
   const categoriesCount = program?.teams.reduce((sum, t) => sum + t.categories.length, 0) ?? 0;
+  const blockingCount = issues?.issues.filter((i) => i.blocking).length ?? 0;
 
   return (
     <ProgramsSetupShell
@@ -204,6 +228,7 @@ export function ProgramDetailPage() {
               [
                 ["teams", "Equipes"],
                 ["athletes", "Atletas"],
+                ["issues", "Pendências"],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -217,11 +242,18 @@ export function ProgramDetailPage() {
                 }`}
               >
                 {label}
+                {key === "issues" && blockingCount > 0 && (
+                  <span className="ml-1.5 rounded-full bg-destructive/10 px-1.5 py-0.5 text-xs font-medium text-destructive">
+                    {blockingCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>
 
-          {tab === "teams" ? (
+          {tab === "issues" ? (
+            <IssuesTab eventId={id} programId={programId} issues={issues} onChanged={load} />
+          ) : tab === "teams" ? (
             <TeamsTab
               program={program}
               athletes={athletes}
@@ -277,6 +309,108 @@ export function ProgramDetailPage() {
         onConfirm={handleDeleteProgram}
       />
     </ProgramsSetupShell>
+  );
+}
+
+// Aba Pendências: o que impede o envio da ficha (as mesmas que o programa
+// vê) e os documentos que faltam. Dado de atleta faltando abre os dados
+// dele pra preencher aqui mesmo.
+function IssuesTab({
+  eventId,
+  programId,
+  issues,
+  onChanged,
+}: {
+  eventId: string;
+  programId: string;
+  issues: ProgramRegistrationIssues | null;
+  onChanged: () => void;
+}) {
+  const [dataTarget, setDataTarget] = useState<{ athleteId: string; name: string } | null>(null);
+  if (!issues) return <p className="text-sm text-muted-foreground">Carregando pendências...</p>;
+  const blocking = issues.issues.filter((i) => i.blocking);
+  const warnings = issues.issues.filter((i) => !i.blocking);
+
+  return (
+    <section className="grid gap-5">
+      {blocking.length === 0 && warnings.length === 0 && issues.documentsPendingCount === 0 ? (
+        <p className="rounded-xl border border-dashed border-border/60 py-8 text-center text-sm text-muted-foreground">
+          Nenhuma pendência nesta ficha.
+        </p>
+      ) : (
+        <>
+          {blocking.length > 0 && (
+            <div className="grid gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+              <p className="font-medium text-foreground">
+                {pluralize(blocking.length, "pendência impede", "pendências impedem")} o envio da ficha
+              </p>
+              <ul className="list-disc space-y-1.5 pl-5 text-foreground">
+                {blocking.map((issue, index) => (
+                  <li key={index}>
+                    {issue.message}
+                    {issue.kind === "missing_requirement" && issue.athleteId && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDataTarget({
+                            athleteId: issue.athleteId as string,
+                            name: issue.message.split(":")[0],
+                          })
+                        }
+                        className="ml-2 text-xs font-medium text-primary hover:underline"
+                      >
+                        Preencher
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <div className="grid gap-2 rounded-xl border border-border/60 p-4 text-sm">
+              <p className="font-medium text-foreground">Podem ser completadas até o prazo</p>
+              <ul className="list-disc space-y-1.5 pl-5 text-muted-foreground">
+                {warnings.map((issue, index) => (
+                  <li key={index}>{issue.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {issues.documentsPendingCount > 0 && (
+            <p className="rounded-xl border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300">
+              {issues.documentsPendingCount === 1
+                ? "1 documento obrigatório dos atletas ainda não foi enviado."
+                : `${issues.documentsPendingCount} documentos obrigatórios dos atletas ainda não foram enviados.`}
+            </p>
+          )}
+        </>
+      )}
+
+      <Dialog open={dataTarget !== null} onOpenChange={(open) => !open && setDataTarget(null)}>
+        <DialogContent className="max-h-[92dvh] gap-5 overflow-y-auto p-6 sm:max-w-lg sm:p-8">
+          <div className="grid gap-1.5">
+            <DialogTitle className="text-xl font-medium">
+              {dataTarget ? `Dados da inscrição: ${dataTarget.name}` : ""}
+            </DialogTitle>
+            <DialogDescription>O que o evento pede de cada atleta.</DialogDescription>
+          </div>
+          {dataTarget && (
+            <dl>
+              <AthleteRequirementsPanel
+                eventId={eventId}
+                programId={programId}
+                athleteId={dataTarget.athleteId}
+                onChanged={onChanged}
+              />
+            </dl>
+          )}
+          <Button variant="outline" className="justify-self-end" onClick={() => setDataTarget(null)}>
+            Fechar
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }
 
@@ -498,7 +632,7 @@ function AthletesTab({
                 <span>Categorias</span>
               </div>
               {paginated.map((athlete) => {
-                const age = athleteAge(athlete.birthDate);
+                const age = athleteAge(athlete.accountBirthDate ?? athlete.birthDate);
                 return (
                   <button
                     key={athlete.id}
@@ -554,8 +688,15 @@ function AthletesTab({
           )}
           {selected ? (
             <AthleteDetail
+              eventId={eventId}
               athlete={selected}
               program={program}
+              onPersonalDataChanged={() =>
+                programAthletesApi
+                  .list(eventId, program.id)
+                  .then(onAthletesChange)
+                  .catch(() => {})
+              }
               tab={detailTab}
               onTabChange={setDetailTab}
               onEditEntries={() => setEntriesTarget(selected)}
@@ -626,23 +767,28 @@ function AthleteAvatar({ athlete, large }: { athlete: ProgramAthlete; large?: bo
 }
 
 function AthleteDetail({
+  eventId,
   athlete,
   program,
+  onPersonalDataChanged,
   tab,
   onTabChange,
   onEditEntries,
   onEdit,
   onDelete,
 }: {
+  eventId: string;
   athlete: ProgramAthlete;
   program: ProgramWithTeams;
+  // Data de nascimento/CPF mudados na aba Dados pessoais (idade no topo).
+  onPersonalDataChanged: () => void;
   tab: "categories" | "personal";
   onTabChange: (tab: "categories" | "personal") => void;
   onEditEntries: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const age = athleteAge(athlete.birthDate);
+  const age = athleteAge(athlete.accountBirthDate ?? athlete.birthDate);
   const entries = new Set(athlete.entries.map((e) => entryKey(e.teamId, e.categoryId)));
   const pairs = program.teams.flatMap((team) =>
     team.categories.map((category) => ({ team, category })),
@@ -746,29 +892,16 @@ function AthleteDetail({
           )}
         </div>
       ) : (
-        <dl className="grid gap-3 text-sm">
-          <PersonalField label="Nome completo" value={athleteName(athlete)} />
-          <PersonalField label="Email" value={athlete.email} />
-          <PersonalField label="CPF" value={athlete.cpf ? formatCpf(athlete.cpf) : null} />
-          <PersonalField
-            label="Nascimento"
-            value={
-              athlete.birthDate
-                ? athlete.birthDate.split("-").reverse().join("/")
-                : null
-            }
+        // Nome, email e os dados pedidos na inscrição (aba Configurações).
+        <dl>
+          <AthleteRequirementsPanel
+            eventId={eventId}
+            programId={program.id}
+            athleteId={athlete.id}
+            onChanged={onPersonalDataChanged}
           />
         </dl>
       )}
-    </div>
-  );
-}
-
-function PersonalField({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="grid gap-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="break-words text-foreground">{value ?? "Não informado"}</dd>
     </div>
   );
 }

@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   Building2,
   Mail,
   MapPin,
-  Pencil,
   Plus,
   QrCode,
   Search,
@@ -25,13 +24,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/Pagination";
-import { pluralize } from "@/lib/programAthletes";
+import { isSelfRegistered, pluralize } from "@/lib/programAthletes";
+import { RegistrationRequirementsSection } from "@/components/RegistrationRequirementsSection";
 import { EventRequestsTab } from "@/components/EventRequestsTab";
 import { ShareEventDialog } from "@/components/ShareEventDialog";
 import { DatePicker } from "@/components/DatePicker";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { formatDeadline, isRegistrationOpen } from "@/lib/registrationWindow";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { isRegistrationOpen } from "@/lib/registrationWindow";
 import { cn } from "@/lib/utils";
 import {
   ApiError,
@@ -41,6 +47,7 @@ import {
   type Event,
   type EventRegistrationRequestView,
   type Program,
+  type ProgramRegistrationIssues,
 } from "@/api/client";
 
 const PAGE_SIZE = 8;
@@ -54,9 +61,10 @@ export function ProgramsPage() {
   const navigate = useNavigate();
 
   const [programs, setPrograms] = useState<Program[] | null>(null);
-  // Abas: Inscrições (?tab=registration: convite/compartilhar e, no
-  // futuro, documentos exigidos e pagamento) | Programas (padrão, sem
-  // ?tab) | Solicitações (?tab=requests, ?program=<id> filtra).
+  // Abas: Configurações (?tab=registration: convite, prazo e dados/documentos
+  // pedidos aos atletas; depois, pagamento) | Inscrições (lista de
+  // programas, padrão, sem ?tab) | Solicitações (?tab=requests,
+  // ?program=<id> filtra).
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const tab: Tab =
@@ -87,6 +95,8 @@ export function ProgramsPage() {
       .catch(() => setRequests([]));
   }
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [issues, setIssues] = useState<Record<string, ProgramRegistrationIssues>>({});
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [createProgramOpen, setCreateProgramOpen] = useState(false);
@@ -102,13 +112,21 @@ export function ProgramsPage() {
     eventsApi.get(id).then(setEvent).catch(() => setEvent(null));
   }, [id]);
 
-  useEffect(() => {
+  // Aba Inscrições: todas as fichas, inclusive rascunhos, e as pendências
+  // de cada uma (calculadas de uma vez no servidor).
+  const loadPrograms = useCallback(() => {
     if (!id) return;
     programsApi
-      .list(id)
+      .list(id, { includeDrafts: true })
       .then(setPrograms)
       .catch(() => setError("Não foi possível carregar os programas."));
+    programRegistrationAdminApi
+      .listIssues(id)
+      .then(setIssues)
+      .catch(() => setIssues({}));
   }, [id]);
+
+  useEffect(loadPrograms, [loadPrograms]);
 
   function openProgram(programId: string) {
     navigate(`/events/${id}/programs/${programId}`);
@@ -118,8 +136,9 @@ export function ProgramsPage() {
   const filteredPrograms = (programs ?? [])
     .filter(
       (p) =>
-        p.name.toLowerCase().includes(query) ||
-        (p.teams ?? []).some((t) => t.name.toLowerCase().includes(query)),
+        (statusFilter === "all" || registrationStatus(p) === statusFilter) &&
+        (p.name.toLowerCase().includes(query) ||
+          (p.teams ?? []).some((t) => t.name.toLowerCase().includes(query))),
     )
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   const totalPages = Math.max(1, Math.ceil(filteredPrograms.length / PAGE_SIZE));
@@ -129,9 +148,12 @@ export function ProgramsPage() {
     currentPage * PAGE_SIZE,
   );
 
+  // Contadores só com fichas enviadas (rascunho ainda não participa).
+  const submitted = (programs ?? []).filter((p) => p.submittedAt);
+  const draftsCount = (programs?.length ?? 0) - submitted.length;
   const totalPrograms = programs?.length ?? 0;
-  const totalTeams = (programs ?? []).reduce((sum, p) => sum + (p.teamsCount ?? 0), 0);
-  const totalAthletes = (programs ?? []).reduce((sum, p) => sum + (p.athletesCount ?? 0), 0);
+  const totalTeams = submitted.reduce((sum, p) => sum + (p.teamsCount ?? 0), 0);
+  const totalAthletes = submitted.reduce((sum, p) => sum + (p.athletesCount ?? 0), 0);
 
   return (
     <ProgramsSetupShell
@@ -157,26 +179,31 @@ export function ProgramsPage() {
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Building2 className="size-4" />
-                  {pluralize(totalPrograms, "programa", "programas")}
+                  {pluralize(submitted.length, "programa", "programas")}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Users className="size-4" />
                   {pluralize(totalTeams, "equipe", "equipes")}
                 </span>
                 <span>{pluralize(totalAthletes, "atleta", "atletas")}</span>
+                {draftsCount > 0 && (
+                  <span>
+                    {pluralize(draftsCount, "ficha em rascunho", "fichas em rascunho")}
+                  </span>
+                )}
               </div>
             </div>
             <Button className="w-full sm:w-auto" onClick={() => setCreateProgramOpen(true)}>
               <Plus data-icon="inline-start" />
-              Cadastrar programa
+              Inscrever programa
             </Button>
           </div>
 
           <div className="flex gap-6 border-b border-border">
             {(
               [
-                ["registration", "Inscrições"],
-                ["programs", "Programas"],
+                ["registration", "Configurações"],
+                ["programs", "Inscrições"],
                 ["requests", "Solicitações"],
               ] as const
             ).map(([key, label]) => (
@@ -202,15 +229,21 @@ export function ProgramsPage() {
           </div>
 
           {tab === "registration" ? (
-            // Configuração da inscrição. Por enquanto só o convite com
-            // compartilhar e prazo; depois, documentos exigidos e pagamento.
-            event?.eventCode ? (
-              <RegistrationInvite
-                event={event}
-                onShare={() => setShareOpen(true)}
-                onEventChange={setEvent}
-              />
-            ) : null
+            // Configuração da inscrição: convite (compartilhar e prazo) e
+            // dados/documentos pedidos aos atletas; depois, pagamento.
+            <div className="grid gap-6">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Configurações da inscrição
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Prazo, compartilhamento e o que cada atleta precisa informar ou enviar.
+                </p>
+              </div>
+              {event?.eventCode && <RegistrationInvite onShare={() => setShareOpen(true)} />}
+              {event && <DeadlineSection event={event} onSaved={setEvent} />}
+              {id && <RegistrationRequirementsSection eventId={id} />}
+            </div>
           ) : tab === "requests" && id ? (
             <EventRequestsTab
               eventId={id}
@@ -219,22 +252,42 @@ export function ProgramsPage() {
               onClearFilter={() => showTab("requests")}
               onChanged={() => {
                 loadRequests();
-                programsApi.list(id).then(setPrograms).catch(() => {});
+                loadPrograms();
               }}
             />
           ) : totalPrograms > 0 ? (
             <>
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Buscar programa ou equipe..."
+                    className="pl-11"
+                  />
+                </div>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => {
+                    setStatusFilter(value as StatusFilter);
                     setPage(1);
                   }}
-                  placeholder="Buscar programa ou equipe..."
-                  className="pl-11"
-                />
+                >
+                  <SelectTrigger className="w-full min-w-0 sm:w-56">
+                    <SelectValue>{(value: StatusFilter) => STATUS_FILTER_LABELS[value]}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(STATUS_FILTER_LABELS) as StatusFilter[]).map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {STATUS_FILTER_LABELS[key]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <p className="-mb-2 text-sm text-muted-foreground">
@@ -246,6 +299,8 @@ export function ProgramsPage() {
                   <ProgramCard
                     key={program.id}
                     program={program}
+                    issues={issues[program.id] ?? null}
+                    onShowIssues={() => navigate(`/events/${id}/programs/${program.id}?tab=issues`)}
                     onOpen={() => openProgram(program.id)}
                     onShow={(mode) => setOverview({ program, mode })}
                     onShowRequests={() => showTab("requests", program.id)}
@@ -319,20 +374,8 @@ export function ProgramsPage() {
 
 // Convite pra inscrição pelo próprio programa (2026-10-05): os programas
 // entram pelo link/QR do evento, montam a ficha e enviam; a inscrição
-// aparece aqui sozinha. Selo de abertas/encerradas e data limite editável
-// ali mesmo (DeadlineDialog).
-function RegistrationInvite({
-  event,
-  onShare,
-  onEventChange,
-}: {
-  event: Event;
-  onShare: () => void;
-  onEventChange: (event: Event) => void;
-}) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  const open = isRegistrationOpen(event);
+// aparece aqui sozinha. O prazo fica na seção própria (DeadlineSection).
+function RegistrationInvite({ onShare }: { onShare: () => void }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
       <div className="flex items-start gap-3">
@@ -341,44 +384,12 @@ function RegistrationInvite({
         </div>
         <div className="grid gap-1 text-sm">
           <p className="font-semibold text-foreground">Receba inscrições dos programas</p>
-          {/* Celular: explicação recolhida atrás de "Como funciona?" (o bloco
-              ficava carregado); desktop sempre mostra. */}
-          <p className={cn("text-muted-foreground", !showHelp && "hidden sm:block")}>
-            Compartilhe o link ou o QR do evento. O programa entra com a conta dele, monta a ficha
-            (equipes, categorias e atletas) e envia.
+          <p className="text-muted-foreground">
+            Compartilhe o link ou o QR do evento para receber inscritos!
           </p>
-          <button
-            type="button"
-            onClick={() => setShowHelp((v) => !v)}
-            className="justify-self-start text-xs font-medium text-primary hover:underline sm:hidden"
-          >
-            {showHelp ? "Ocultar" : "Como funciona?"}
-          </button>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span
-              className={cn(
-                "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                open
-                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                  : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-              )}
-            >
-              {open ? "Inscrições abertas" : "Inscrições encerradas"}
-            </span>
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {event.registrationDeadline
-                ? `Data limite: ${formatDeadline(event.registrationDeadline)}, 23:59`
-                : "Sem data limite"}
-              <Pencil className="size-3.5" />
-            </button>
-          </div>
         </div>
       </div>
-      {/* Secundário, no mesmo estilo do "Gerenciar" dos cards: "Cadastrar
+      {/* Secundário, no mesmo estilo do "Abrir ficha de inscrição" dos cards: "Inscrever
           programa" é a ação principal da tela. */}
       <Button
         variant="outline"
@@ -388,47 +399,35 @@ function RegistrationInvite({
         <QrCode data-icon="inline-start" />
         Compartilhar evento
       </Button>
-      <DeadlineDialog
-        event={editOpen ? event : null}
-        onOpenChange={setEditOpen}
-        onSaved={onEventChange}
-      />
     </div>
   );
 }
 
-// Editar só a data limite das inscrições (mesma regra do "Dados do
-// evento": um dia até o início do evento, ou sem data limite).
-function DeadlineDialog({
+// Prazo de inscrição em destaque na aba Inscrições (2026-10-06): um dia
+// (até 23:59 de Brasília, no máximo o início do evento) ou sem data
+// limite. Salva assim que uma data válida é escolhida ou "Sem data limite"
+// é marcado.
+function DeadlineSection({
   event,
-  onOpenChange,
   onSaved,
 }: {
-  event: Event | null;
-  onOpenChange: (open: boolean) => void;
+  event: Event;
   onSaved: (event: Event) => void;
 }) {
-  const [deadline, setDeadline] = useState<string | null>("");
-  const [error, setError] = useState<string | null>(null);
+  // "" = sem data ainda (checkbox desmarcado esperando escolher).
+  const [deadline, setDeadline] = useState<string | null>(event.registrationDeadline);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const open = isRegistrationOpen(event);
 
-  useEffect(() => {
-    if (!event) return;
-    setDeadline(event.registrationDeadline);
-    setError(null);
-  }, [event]);
-
-  async function save() {
-    if (!event) return;
-    if (deadline === "") {
-      setError('Escolha a data ou marque "Sem data limite".');
-      return;
-    }
+  async function save(value: string | null) {
     setSaving(true);
+    setSaved(false);
     setError(null);
     try {
-      onSaved(await eventsApi.update(event.aliasId, { registrationDeadline: deadline }));
-      onOpenChange(false);
+      onSaved(await eventsApi.update(event.aliasId, { registrationDeadline: value }));
+      setSaved(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar.");
     } finally {
@@ -436,50 +435,148 @@ function DeadlineDialog({
     }
   }
 
-  const [y, m, d] = (event?.startDate ?? "").split("-").map(Number);
+  const [y, m, d] = event.startDate.split("-").map(Number);
   return (
-    <Dialog open={event !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 sm:max-w-sm">
-        <DialogTitle>Data limite das inscrições</DialogTitle>
-        <DatePicker
-          value={deadline ?? ""}
-          onChange={setDeadline}
-          maxDate={y && m && d ? new Date(y, m - 1, d) : undefined}
-          disabled={deadline === null}
-        />
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+    <section className="grid gap-3 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h2 className="font-semibold text-foreground">Prazo de inscrição</h2>
+        <span
+          className={cn(
+            "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+            open
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+              : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+          )}
+        >
+          {open ? "Inscrições abertas" : "Inscrições encerradas"}
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Os programas montam e enviam a ficha até as 23:59 (horário de Brasília) do dia escolhido.
+        O prazo não pode passar da data de início do evento.
+      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="w-full sm:w-56">
+          <DatePicker
+            value={deadline ?? ""}
+            onChange={(value) => {
+              setDeadline(value);
+              if (value) void save(value);
+            }}
+            maxDate={y && m && d ? new Date(y, m - 1, d) : undefined}
+            disabled={deadline === null || saving}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-foreground">
           <Checkbox
             checked={deadline === null}
-            onCheckedChange={(value) => setDeadline(value === true ? null : "")}
+            disabled={saving}
+            onCheckedChange={(value) => {
+              if (value === true) {
+                setDeadline(null);
+                void save(null);
+              } else {
+                setDeadline("");
+                setSaved(false);
+              }
+            }}
           />
           Sem data limite
         </label>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={() => void save()} disabled={saving}>
-            {saving ? "Salvando..." : "Salvar"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        <span className="text-xs text-muted-foreground" aria-live="polite">
+          {saving ? "Salvando..." : saved ? "Salvo" : deadline === "" ? "Escolha a data." : ""}
+        </span>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+type RegistrationStatus = "draft" | "submitted" | "reopened";
+type StatusFilter = "all" | RegistrationStatus;
+
+const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
+  all: "Todos os status",
+  draft: "Rascunho",
+  submitted: "Enviada",
+  reopened: "Liberada para edição",
+};
+
+// Situação da ficha: rascunho (iniciada, não enviada), enviada ou
+// devolvida pelo organizador pra edição.
+function registrationStatus(program: Program): RegistrationStatus {
+  if (!program.submittedAt) return "draft";
+  return program.reopenedAt ? "reopened" : "submitted";
+}
+
+const STATUS_TAG_STYLES: Record<RegistrationStatus, string> = {
+  draft: "bg-muted text-muted-foreground",
+  submitted: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  reopened: "bg-primary/10 text-primary",
+};
+
+// Tags da ficha no cartão: status, quem inscreveu (organizador), pendências
+// que impedem o envio
+// (clicável: abre a aba Pendências da ficha) e documentos pendentes.
+function RegistrationTags({
+  program,
+  issues,
+  onShowIssues,
+}: {
+  program: Program;
+  issues: ProgramRegistrationIssues | null;
+  onShowIssues: () => void;
+}) {
+  const status = registrationStatus(program);
+  const blocking = issues?.issues.filter((i) => i.blocking).length ?? 0;
+  const documents = issues?.documentsPendingCount ?? 0;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_TAG_STYLES[status])}>
+        {STATUS_FILTER_LABELS[status]}
+      </span>
+      {/* Inscrição feita pelo organizador e nunca enviada pelo próprio
+          programa (se ele envia pela ficha dele, a tag some). */}
+      {!isSelfRegistered(program) &&
+        !(program.userId && program.submittedBy === program.userId) && (
+        <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          Inscrito pelo organizador
+        </span>
+      )}
+      {blocking > 0 && (
+        <button
+          type="button"
+          onClick={onShowIssues}
+          className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/20"
+        >
+          {pluralize(blocking, "pendência", "pendências")}
+        </button>
+      )}
+      {documents > 0 && (
+        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+          {documents === 1 ? "1 documento pendente" : `${documents} documentos pendentes`}
+        </span>
+      )}
+    </div>
   );
 }
 
 const VISIBLE_TEAMS = 3;
 
-// Linha do programa: identidade | números | equipes | Gerenciar. A partir de
+// Linha do programa: identidade | números | equipes | Abrir ficha de inscrição. A partir de
 // xl fica tudo numa linha (como o mock de 2026-10-05); abaixo disso empilha,
 // com os números lado a lado e o botão ocupando a largura no celular.
 function ProgramCard({
   program,
+  issues,
+  onShowIssues,
   onOpen,
   onShow,
   onShowRequests,
 }: {
   program: Program;
+  issues: ProgramRegistrationIssues | null;
+  onShowIssues: () => void;
   onOpen: () => void;
   onShow: (mode: ProgramOverviewMode) => void;
   onShowRequests: () => void;
@@ -489,7 +586,7 @@ function ProgramCard({
   const categoriesCount = programCategories(program).length;
   const visibleTeams = teams.slice(0, VISIBLE_TEAMS);
   const hiddenTeams = teams.length - visibleTeams.length;
-  // Só o botão "Gerenciar" abre o programa; os números de atletas,
+  // Só o botão "Abrir ficha de inscrição" abre o programa; os números de atletas,
   // equipes e categorias abrem popups de consulta (pedido do usuário, 2026-10-05).
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 rounded-xl border border-border/60 bg-card p-4 text-left sm:p-5 xl:grid-cols-[minmax(0,1.2fr)_auto_minmax(0,1fr)_auto] xl:items-start xl:gap-0">
@@ -516,6 +613,7 @@ function ProgramCard({
               Aguardando conta Programa
             </p>
           )}
+          <RegistrationTags program={program} issues={issues} onShowIssues={onShowIssues} />
           {(program.pendingRequestsCount ?? 0) > 0 && (
             <button
               type="button"
@@ -592,7 +690,7 @@ function ProgramCard({
         className="w-full border-primary/40 text-primary hover:bg-primary/10 sm:w-auto sm:justify-self-end xl:justify-self-auto"
         onClick={onOpen}
       >
-        Gerenciar
+        Abrir ficha de inscrição
       </Button>
     </div>
   );

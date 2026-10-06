@@ -664,13 +664,18 @@ export interface CategoryRules {
 // Problema da ficha de inscrição pelas regras das categorias (impede o
 // envio).
 export interface RegistrationIssue {
-  kind: "athletes_count" | "age" | "missing_birth_date";
+  kind: "athletes_count" | "age" | "missing_birth_date" | "missing_requirement";
   teamId: string;
   categoryId: string;
-  // Atleta do evento (ProgramAthlete), nos problemas de idade.
+  // Atleta do evento (ProgramAthlete), nos problemas de idade e de dados.
   athleteId: string | null;
   // Vínculo do elenco, pra informar a data de nascimento que falta.
   linkId: string | null;
+  // Item pedido na inscrição que falta (missing_requirement).
+  requirementId: string | null;
+  // Impede o envio. Só documentos podem não impedir (quando o produtor
+  // permite enviar sem todos os documentos).
+  blocking: boolean;
   message: string;
 }
 
@@ -679,6 +684,83 @@ export interface CategoryCriterionLabel {
   value: string;
   label: string;
 }
+
+// Dados e documentos pedidos aos atletas na inscrição (2026-10-06).
+export type RequirementKind = "document" | "text" | "select" | "date";
+export type RequirementPreset =
+  | "birth_date"
+  | "identity"
+  | "school_proof"
+  | "university_proof"
+  | "cpf"
+  | "phone"
+  | "emergency_contact";
+
+export interface RegistrationRequirement {
+  // null = novo, ainda não salvo (id gerado no servidor).
+  id: string | null;
+  kind: RequirementKind;
+  preset: RequirementPreset | null;
+  label: string;
+  description: string | null;
+  required: boolean;
+  options: string[];
+  // null = todas as categorias; senão { critério: [ids das opções] }.
+  appliesTo: Partial<Record<CategoryCriterionKey, string[]>> | null;
+}
+
+export interface RegistrationSettings {
+  allowSubmitWithoutDocuments: boolean;
+  requirements: RegistrationRequirement[];
+}
+
+export interface AthleteRequirementItem {
+  requirement: RegistrationRequirement;
+  // Vale pras categorias em que o atleta compete.
+  applies: boolean;
+  value: string | null;
+  // Data de nascimento/CPF da conta do atleta: não se edita por aqui.
+  readOnly: boolean;
+  source: "account" | "roster" | "event" | null;
+}
+
+export interface AthleteRequirementsView {
+  name: string;
+  email: string;
+  items: AthleteRequirementItem[];
+}
+
+export const athleteRequirementsApi = {
+  list: (eventId: string, programId: string, athleteId: string) =>
+    authRequest<AthleteRequirementsView>(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}/requirements`,
+    ),
+
+  set: (
+    eventId: string,
+    programId: string,
+    athleteId: string,
+    requirementId: string,
+    value: string | null,
+  ) =>
+    authRequest<AthleteRequirementsView>(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}/requirements/${requirementId}`,
+      { method: "PUT", body: JSON.stringify({ value }) },
+    ),
+};
+
+export const registrationSettingsApi = {
+  get: (eventId: string) =>
+    authRequest<RegistrationSettings & { presets: RegistrationRequirement[] }>(
+      `/events/${eventId}/registration-settings`,
+    ),
+
+  update: (eventId: string, settings: RegistrationSettings) =>
+    authRequest<RegistrationSettings>(`/events/${eventId}/registration-settings`, {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
+};
 
 export const categoryCriteriaApi = {
   get: (eventId: string) =>
@@ -704,6 +786,8 @@ export interface Program {
   submittedAt?: string | null;
   // Organizador devolveu a ficha enviada pro programa editar.
   reopenedAt?: string | null;
+  // Quem enviou a ficha pela ficha de inscrição (a conta Programa).
+  submittedBy?: string | null;
   // Só na listagem: pedidos da ficha ainda não resolvidos.
   pendingRequestsCount?: number;
   // Quem cadastrou: igual a `userId` quando o próprio programa se
@@ -748,6 +832,10 @@ export interface ProgramAthlete {
   email: string;
   cpf: string | null;
   birthDate: string | null;
+  // CPF e data de nascimento da CONTA do atleta: valem antes dos de cima e
+  // não se editam (cadeado).
+  accountCpf: string | null;
+  accountBirthDate: string | null;
   createdAt: string;
   entries: ProgramAthleteEntry[];
 }
@@ -824,7 +912,24 @@ export interface EventRegistrationRequestView extends RegistrationRequestView {
 }
 
 // Lado do organizador: pedidos e "Liberar edição".
+// Pendências de uma ficha (aba Inscrições do produtor).
+export interface ProgramRegistrationIssues {
+  issues: RegistrationIssue[];
+  // Documentos obrigatórios dos atletas que faltam.
+  documentsPendingCount: number;
+}
+
 export const programRegistrationAdminApi = {
+  listIssues: (eventId: string) =>
+    authRequest<Record<string, ProgramRegistrationIssues>>(
+      `/events/${eventId}/registration-issues`,
+    ),
+
+  programIssues: (eventId: string, programId: string) =>
+    authRequest<ProgramRegistrationIssues>(
+      `/events/${eventId}/programs/${programId}/registration/issues`,
+    ),
+
   listEventRequests: (eventId: string) =>
     authRequest<EventRegistrationRequestView[]>(`/events/${eventId}/registration-requests`),
 
@@ -971,8 +1076,11 @@ export interface ProgramCatalogEntry {
 }
 
 export const programsApi = {
-  list: (eventId: string) =>
-    authRequest<Program[]>(`/events/${eventId}/programs`),
+  // `includeDrafts`: aba Inscrições (fichas em rascunho também).
+  list: (eventId: string, options: { includeDrafts?: boolean } = {}) =>
+    authRequest<Program[]>(
+      `/events/${eventId}/programs${options.includeDrafts ? "?includeDrafts=true" : ""}`,
+    ),
 
   getCatalog: () => authRequest<ProgramCatalogEntry[]>("/programs/catalog"),
 

@@ -37,6 +37,7 @@ import { FormError } from "@/components/FormError";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DatePicker } from "@/components/DatePicker";
 import { TruncatedText } from "@/components/TruncatedText";
+import { AthleteRequirementsPanel } from "@/components/AthleteRequirementsPanel";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { CreateAthleteDialog } from "@/components/CreateAthleteDialog";
@@ -114,6 +115,9 @@ export function EventRegistrationPage() {
   const [renameTarget, setRenameTarget] = useState<Team | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Team | null>(null);
   const [pairTarget, setPairTarget] = useState<PairTarget | null>(null);
+  // Popup "Dados da inscrição" de um atleta do evento (aba Configurações do
+  // produtor define o que é pedido).
+  const [dataTarget, setDataTarget] = useState<{ athleteId: string; name: string } | null>(null);
   // Tirar a equipe de uma categoria (× no cartão ou arrastar pra fora);
   // `to` = soltou em outra categoria (mover).
   const [unassignTarget, setUnassignTarget] = useState<{
@@ -318,6 +322,7 @@ export function EventRegistrationPage() {
                     if (!id) return;
                     await applyView(await registrationApi.createRequest(id, type, message));
                   }}
+                  onOpenData={setDataTarget}
                   onSetBirthDate={async (issue, birthDate) => {
                     if (!id) return;
                     // A data fica no elenco (vale pra todos os eventos);
@@ -503,6 +508,7 @@ export function EventRegistrationPage() {
                     editable={editable}
                     onAdd={() => setCreateAthleteOpen(true)}
                     onEditEntries={setAthleteTarget}
+                    onOpenData={setDataTarget}
                   />
                 )}
               </LockedOverlay>
@@ -523,6 +529,7 @@ export function EventRegistrationPage() {
                     if (!id) return;
                     await applyView(await registrationApi.createRequest(id, type, message));
                   }}
+                  onOpenData={setDataTarget}
                   onSetBirthDate={async (issue, birthDate) => {
                     if (!id) return;
                     // A data fica no elenco (vale pra todos os eventos);
@@ -598,6 +605,29 @@ export function EventRegistrationPage() {
               applyView(await registrationApi.setTeamCategories(id, team.id, categoryIds))
             }
           />
+          <DialogShell
+            open={dataTarget !== null}
+            onOpenChange={(open) => !open && setDataTarget(null)}
+            title={dataTarget ? `Dados da inscrição: ${dataTarget.name}` : ""}
+            description="O que o organizador pede de cada atleta. O próprio atleta também pode completar pela conta dele."
+          >
+            {dataTarget && program && (
+              <AthleteRequirementsPanel
+                eventId={id}
+                programId={program.id}
+                athleteId={dataTarget.athleteId}
+                readOnly={!editable}
+                onChanged={() => void load()}
+              />
+            )}
+            <Button
+              variant="outline"
+              className="justify-self-end"
+              onClick={() => setDataTarget(null)}
+            >
+              Fechar
+            </Button>
+          </DialogShell>
           <PairAthletesDialog
             target={pairTarget}
             roster={usableRoster}
@@ -806,6 +836,7 @@ function RegistrationStatusPanel({
   onSubmit,
   onRequest,
   onSetBirthDate,
+  onOpenData,
 }: {
   // Rascunho e ficha liberada: faixa curta no topo e painel completo
   // (pendências + enviar) no fim. Ficha enviada: só no topo.
@@ -814,6 +845,7 @@ function RegistrationStatusPanel({
   onSubmit: () => Promise<void>;
   onRequest: (type: RegistrationRequestType, message: string) => Promise<void>;
   onSetBirthDate: (issue: RegistrationIssue, birthDate: string) => Promise<void>;
+  onOpenData: (target: { athleteId: string; name: string }) => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [requestType, setRequestType] = useState<RegistrationRequestType | null>(null);
@@ -824,6 +856,8 @@ function RegistrationStatusPanel({
   const teamsWithout = program.teams.length - teamsInCategories;
   const reopened = !!program.submittedAt && !!program.reopenedAt;
   const pairsCount = program.teams.reduce((sum, t) => sum + t.categories.length, 0);
+  const blockingIssues = view.issues.filter((i) => i.blocking);
+  const warningIssues = view.issues.filter((i) => !i.blocking);
   const pendingNames = program.teams.flatMap((t) =>
     t.categories.filter((c) => (c.athletesCount ?? 0) === 0).map((c) => `${t.name} em ${c.name}`),
   );
@@ -841,8 +875,28 @@ function RegistrationStatusPanel({
           ))}
         </ul>
       </>
-    ) : view.issues.length > 0 ? (
-      <IssuesList issues={view.issues} onSetBirthDate={onSetBirthDate} />
+    ) : blockingIssues.length > 0 ? (
+      <IssuesList
+        title="Para enviar, corrija:"
+        issues={blockingIssues}
+        onSetBirthDate={onSetBirthDate}
+        onOpenData={onOpenData}
+      />
+    ) : null;
+  // Documentos dos atletas que podem ser enviados depois (o produtor
+  // permitiu enviar a ficha sem todos os documentos).
+  const pendingLater =
+    warningIssues.length > 0 ? (
+      <IssuesList
+        title={
+          program.submittedAt && !reopened
+            ? "Documentos que os atletas ainda precisam enviar até o prazo:"
+            : "Documentos que os atletas ainda precisam enviar (pode enviar a ficha antes, até o prazo):"
+        }
+        issues={warningIssues}
+        onSetBirthDate={onSetBirthDate}
+        onOpenData={onOpenData}
+      />
     ) : null;
   // Resumo da confirmação de envio, em linhas (ConfirmDialog respeita \n).
   const submitSummary = [
@@ -860,7 +914,7 @@ function RegistrationStatusPanel({
       <Button
         className="w-full shrink-0 sm:w-auto"
         disabled={
-          teamsInCategories === 0 || pendingNames.length > 0 || view.issues.length > 0
+          teamsInCategories === 0 || pendingNames.length > 0 || blockingIssues.length > 0
         }
         onClick={() => setConfirmOpen(true)}
       >
@@ -892,7 +946,7 @@ function RegistrationStatusPanel({
   if (placement === "bottom" && !building) return null;
   if (placement === "top" && building) {
     const pendingCount =
-      (teamsInCategories === 0 ? 1 : 0) + pendingNames.length + view.issues.length;
+      (teamsInCategories === 0 ? 1 : 0) + pendingNames.length + blockingIssues.length;
     return (
       <div className="flex flex-col gap-1 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <p>
@@ -945,6 +999,9 @@ function RegistrationStatusPanel({
           {sendBlocker && (
             <div className="mt-1 font-medium text-amber-700 dark:text-amber-400">{sendBlocker}</div>
           )}
+          {pendingLater && (
+            <div className="mt-2 text-muted-foreground">{pendingLater}</div>
+          )}
           {error && <p className="mt-1 text-destructive">{error}</p>}
         </div>
         {submitButton}
@@ -965,6 +1022,9 @@ function RegistrationStatusPanel({
           </p>
           {sendBlocker && (
             <div className="mt-1 font-medium text-amber-700 dark:text-amber-400">{sendBlocker}</div>
+          )}
+          {pendingLater && (
+            <div className="mt-2 text-muted-foreground">{pendingLater}</div>
           )}
           {error && <p className="mt-1 text-destructive">{error}</p>}
         </div>
@@ -1005,6 +1065,13 @@ function RegistrationStatusPanel({
           </div>
         )}
       </div>
+
+      {/* Enviada sem todos os documentos: o que ainda falta. */}
+      {pendingLater && view.open && (
+        <div className="border-t border-emerald-300/50 pt-3 text-muted-foreground dark:border-emerald-400/20">
+          {pendingLater}
+        </div>
+      )}
 
       {view.requests.length > 0 && (
         <div className="grid gap-2 border-t border-emerald-300/50 pt-3 dark:border-emerald-400/20">
@@ -1341,21 +1408,41 @@ function rulesItems(category: Category): string[] {
 // Problemas que impedem o envio pelas regras das categorias. Atleta sem
 // data de nascimento ganha o campo ali mesmo.
 function IssuesList({
+  title,
   issues,
   onSetBirthDate,
+  onOpenData,
 }: {
+  title: string;
   issues: RegistrationIssue[];
   onSetBirthDate: (issue: RegistrationIssue, birthDate: string) => Promise<void>;
+  onOpenData: (target: { athleteId: string; name: string }) => void;
 }) {
   return (
     <>
-      Para enviar, corrija:
+      {title}
       <ul className="mt-1 list-disc space-y-1.5 pl-5">
         {issues.map((issue, index) => (
-          <li key={`${issue.kind}-${issue.teamId}-${issue.categoryId}-${issue.athleteId ?? index}`}>
+          <li
+            key={`${issue.kind}-${issue.teamId}-${issue.categoryId}-${issue.athleteId ?? ""}-${issue.requirementId ?? index}`}
+          >
             {issue.message}
             {issue.kind === "missing_birth_date" && (issue.linkId || issue.athleteId) && (
               <BirthDateFix onSave={(date) => onSetBirthDate(issue, date)} />
+            )}
+            {issue.kind === "missing_requirement" && issue.athleteId && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenData({
+                    athleteId: issue.athleteId as string,
+                    name: issue.message.split(":")[0],
+                  })
+                }
+                className="ml-2 text-xs font-medium text-primary hover:underline"
+              >
+                Preencher
+              </button>
             )}
           </li>
         ))}
@@ -1464,6 +1551,7 @@ function AthletesTab({
   editable,
   onAdd,
   onEditEntries,
+  onOpenData,
 }: {
   view: ProgramRegistrationView;
   roster: AthleteLinkView[];
@@ -1472,6 +1560,7 @@ function AthletesTab({
   editable: boolean;
   onAdd: () => void;
   onEditEntries: (link: AthleteLinkView) => void;
+  onOpenData: (target: { athleteId: string; name: string }) => void;
 }) {
   const teams = view.program?.teams ?? [];
   const hasPairs = teams.some((t) => t.categories.length > 0);
@@ -1520,6 +1609,8 @@ function AthletesTab({
         eventAthletes={eventAthletes}
         editable={editable && hasPairs}
         onEditEntries={onEditEntries}
+        onOpenData={onOpenData}
+        issues={view.issues ?? []}
         emptyMessage="Nenhum atleta em categoria ainda."
       />
       <AthleteRosterSection
@@ -1529,6 +1620,8 @@ function AthletesTab({
         eventAthletes={eventAthletes}
         editable={editable && hasPairs}
         onEditEntries={onEditEntries}
+        onOpenData={onOpenData}
+        issues={view.issues ?? []}
         emptyMessage="Seu elenco ainda não tem atletas."
       />
     </section>
@@ -1543,6 +1636,8 @@ function AthleteRosterSection({
   eventAthletes,
   editable,
   onEditEntries,
+  onOpenData,
+  issues,
   emptyMessage,
 }: {
   title: string;
@@ -1551,6 +1646,8 @@ function AthleteRosterSection({
   eventAthletes: ProgramAthlete[];
   editable: boolean;
   onEditEntries: (link: AthleteLinkView) => void;
+  onOpenData: (target: { athleteId: string; name: string }) => void;
+  issues: RegistrationIssue[];
   emptyMessage: string;
 }) {
   const [search, setSearch] = useState("");
@@ -1591,6 +1688,14 @@ function AthleteRosterSection({
         <div className="grid grid-cols-[minmax(0,1fr)] gap-2 lg:grid-cols-2">
           {shown.map((link) => {
             const entries = entriesOf(link, eventAthletes);
+            const eventAthlete = eventAthletes.find(
+              (a) => a.email.toLowerCase() === link.email.toLowerCase(),
+            );
+            const missingData = eventAthlete
+              ? issues.filter(
+                  (i) => i.kind === "missing_requirement" && i.athleteId === eventAthlete.id,
+                ).length
+              : 0;
             return (
               <div
                 key={link.id}
@@ -1628,15 +1733,36 @@ function AthleteRosterSection({
                       })}
                     </div>
                   )}
-                  {editable && (
-                    <button
-                      type="button"
-                      onClick={() => onEditEntries(link)}
-                      className="justify-self-start text-xs font-medium text-primary hover:underline"
-                    >
-                      Escolher categorias
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    {editable && (
+                      <button
+                        type="button"
+                        onClick={() => onEditEntries(link)}
+                        className="text-xs font-medium text-primary hover:underline"
+                      >
+                        Escolher categorias
+                      </button>
+                    )}
+                    {eventAthlete && entries.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenData({
+                            athleteId: eventAthlete.id,
+                            name: `${link.firstName} ${link.lastName}`.trim(),
+                          })
+                        }
+                        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                      >
+                        Dados da inscrição
+                        {missingData > 0 && (
+                          <span className="rounded-full bg-amber-500/15 px-1.5 text-amber-700 dark:text-amber-400">
+                            {missingData} {missingData === 1 ? "pendente" : "pendentes"}
+                          </span>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );

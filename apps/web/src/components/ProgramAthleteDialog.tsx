@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { subYears } from "date-fns";
+import { Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -44,13 +45,17 @@ export function ProgramAthleteDialog({
   const [birthDate, setBirthDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // CPF/data da conta do atleta: preenchidos e travados (cadeado).
+  const cpfLocked = !!athlete?.accountCpf;
+  const birthLocked = !!athlete?.accountBirthDate;
 
   useEffect(() => {
     if (!open) return;
     setFullName(athlete ? athleteName(athlete) : "");
     setEmail(athlete?.email ?? "");
-    setCpf(athlete?.cpf ? formatCpf(athlete.cpf) : "");
-    setBirthDate(athlete?.birthDate ?? "");
+    const knownCpf = athlete?.accountCpf ?? athlete?.cpf;
+    setCpf(knownCpf ? formatCpf(knownCpf) : "");
+    setBirthDate(athlete?.accountBirthDate ?? athlete?.birthDate ?? "");
     setError(null);
   }, [open, athlete]);
 
@@ -67,8 +72,9 @@ export function ProgramAthleteDialog({
         firstName: name.slice(0, i),
         lastName: name.slice(i + 1),
         email: email.trim(),
-        cpf: cpf.replace(/\D/g, "") || null,
-        birthDate: birthDate || null,
+        // Da conta do atleta: não se mexe (fica o que estava no atleta).
+        cpf: cpfLocked ? athlete?.cpf ?? null : cpf.replace(/\D/g, "") || null,
+        birthDate: birthLocked ? athlete?.birthDate ?? null : birthDate || null,
       };
       const saved = athlete
         ? await programAthletesApi.update(eventId, programId, athlete.id, payload)
@@ -125,20 +131,28 @@ export function ProgramAthleteDialog({
 
           <div className="grid grid-cols-[minmax(0,1fr)] gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-              <Label htmlFor="program-athlete-cpf">CPF (opcional)</Label>
+              <Label htmlFor="program-athlete-cpf" className="flex items-center gap-1.5">
+                CPF (opcional)
+                {cpfLocked && <AccountLock />}
+              </Label>
               <Input
                 id="program-athlete-cpf"
                 inputMode="numeric"
                 placeholder="000.000.000-00"
                 value={cpf}
+                disabled={cpfLocked}
                 onChange={(e) => setCpf(formatCpf(e.target.value))}
-                aria-invalid={cpfDigits.length > 0 && cpfDigits.length < 11}
+                aria-invalid={!cpfLocked && cpfDigits.length > 0 && cpfDigits.length < 11}
               />
             </div>
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-              <Label htmlFor="program-athlete-birth">Nascimento (opcional)</Label>
+              <Label htmlFor="program-athlete-birth" className="flex items-center gap-1.5">
+                Nascimento (opcional)
+                {birthLocked && <AccountLock />}
+              </Label>
               <DatePicker
                 id="program-athlete-birth"
+                disabled={birthLocked}
                 value={birthDate}
                 onChange={setBirthDate}
                 captionLayout="dropdown"
@@ -151,7 +165,7 @@ export function ProgramAthleteDialog({
 
           <Button
             type="submit"
-            disabled={loading || (cpfDigits.length > 0 && cpfDigits.length < 11)}
+            disabled={loading || (!cpfLocked && cpfDigits.length > 0 && cpfDigits.length < 11)}
             className="w-full"
           >
             {loading ? "Salvando..." : athlete ? "Salvar" : "Adicionar atleta"}
@@ -159,5 +173,18 @@ export function ProgramAthleteDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Cadeado do dado que vem da conta do atleta (motivo na dica).
+function AccountLock() {
+  return (
+    <span
+      title="Vem da conta do atleta: não dá para alterar aqui."
+      aria-label="Vem da conta do atleta"
+      className="text-muted-foreground"
+    >
+      <Lock className="size-3.5" />
+    </span>
   );
 }
