@@ -352,8 +352,8 @@ export function CategoriesPage() {
                   <div>
                     <p className="font-semibold text-foreground">Próxima etapa recomendada</p>
                     <p className="text-sm text-muted-foreground">
-                      Agora cadastre os programas e as equipes do evento. Durante esse processo
-                      você vincula cada equipe às categorias em que ela vai competir.
+                      Agora cuide das inscrições: receba as fichas dos programas ou cadastre
+                      programas, equipes e atletas, vinculando cada equipe às categorias.
                     </p>
                   </div>
                 </div>
@@ -362,7 +362,7 @@ export function CategoriesPage() {
                   onClick={() => navigate(`/events/${id}/programs`)}
                   className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
                 >
-                  Ir para programas e equipes
+                  Ir para inscrições
                   <ArrowRight className="size-4" />
                 </button>
               </div>

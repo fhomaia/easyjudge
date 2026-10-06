@@ -231,9 +231,9 @@ export function buildSetupSteps(
     },
     {
       key: "programs",
-      title: "Programas e equipes",
-      shortTitle: "Programas e equipes",
-      description: "Cadastre os programas e as equipes que vão participar do evento.",
+      title: "Inscrições",
+      shortTitle: "Inscrições",
+      description: "Programas, equipes e atletas: receba as inscrições ou cadastre você mesmo.",
       completed: programsCompleted,
       inProgress: !programsCompleted && programs.programsCount > 0,
       detail: programsDetail(programs, programsCompleted),

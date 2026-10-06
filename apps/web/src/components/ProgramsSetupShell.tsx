@@ -20,7 +20,7 @@ interface ProgramsSetupShellProps {
   children: ReactNode;
 }
 
-// Casca das telas de Programas e equipes (lista, programa, equipe): mesmo
+// Casca das telas de Inscrições (lista, programa, equipe): mesmo
 // layout das outras telas de etapa do Setup.
 export function ProgramsSetupShell({
   loading,

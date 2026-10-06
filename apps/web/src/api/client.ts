@@ -561,6 +561,9 @@ export interface Category {
   ageCutoffDate: string | null;
   // Critérios que a categoria usa, na ordem fixa, já com o rótulo da opção.
   criteriaLabels?: CategoryCriterionLabel[];
+  // Regra efetiva (opção de Tamanho/Faixa etária ou regra direta),
+  // conferida no envio da inscrição.
+  rules?: CategoryRules;
   status: CategoryStatus;
   scoringTemplateId: string | null;
   scoringTemplate: { id: string; name: string; isSystemTemplate?: boolean; source?: string | null } | null;
@@ -648,6 +651,27 @@ export interface CategoryCriterion {
   key: CategoryCriterionKey;
   options: CategoryCriterionOption[];
   ageCutoffDate?: string | null;
+}
+
+export interface CategoryRules {
+  minAthletes: number | null;
+  maxAthletes: number | null;
+  minAge: number | null;
+  maxAge: number | null;
+  ageCutoffDate: string | null;
+}
+
+// Problema da ficha de inscrição pelas regras das categorias (impede o
+// envio).
+export interface RegistrationIssue {
+  kind: "athletes_count" | "age" | "missing_birth_date";
+  teamId: string;
+  categoryId: string;
+  // Atleta do evento (ProgramAthlete), nos problemas de idade.
+  athleteId: string | null;
+  // Vínculo do elenco, pra informar a data de nascimento que falta.
+  linkId: string | null;
+  message: string;
 }
 
 export interface CategoryCriterionLabel {
@@ -764,6 +788,10 @@ export interface ProgramRegistrationView {
   categories: Category[];
   // Opções dos critérios de divisão do evento (filtros).
   categoryCriteria: CategoryCriterion[];
+  // O que impede o envio pelas regras das categorias.
+  issues: RegistrationIssue[];
+  // Data de nascimento de cada atleta do elenco (id do vínculo).
+  rosterBirthDates: Record<string, string | null>;
   // Equipes de inscrições anteriores do programa que ainda não estão
   // nesta (atalhos pra reaproveitar).
   previousTeamNames: string[];
@@ -997,6 +1025,9 @@ export interface AthleteLinkView {
   // Nome do evento quando o pedido veio do produtor, ao cadastrar o
   // atleta num programa do evento; nulo nos outros casos.
   requestedFromEvent: string | null;
+  // Data de nascimento informada pelo programa (só pra atleta sem a data
+  // na conta; a da conta sempre vale antes).
+  birthDate: string | null;
   createdAt: string;
 }
 
@@ -1018,6 +1049,14 @@ export const athletesApi = {
 
   confirm: (id: string) =>
     authRequest<AthleteLinkView>(`/athletes/${id}/confirm`, { method: "POST" }),
+
+  // Data de nascimento de um atleta do elenco (recusada quando a conta
+  // dele já tem a data).
+  setBirthDate: (id: string, birthDate: string | null) =>
+    authRequest<AthleteLinkView>(`/athletes/${id}/birth-date`, {
+      method: "PATCH",
+      body: JSON.stringify({ birthDate }),
+    }),
 };
 
 // "Meus programas" do PRÓPRIO atleta logado — global (guard

@@ -10,7 +10,7 @@ import {
   type EventRegistrationRequestView,
 } from "@/api/client";
 
-// Aba "Solicitações" da tela de Programas e equipes (2026-10-05): pedidos
+// Aba "Solicitações" da tela de Inscrições (2026-10-05): pedidos
 // de alteração/cancelamento de todos os programas que se inscreveram
 // sozinhos, pendentes primeiro. Daqui o produtor marca como resolvido e
 // libera a ficha pro programa editar ("Liberar edição").

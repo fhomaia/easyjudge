@@ -35,6 +35,8 @@ import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { FormError } from "@/components/FormError";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { DatePicker } from "@/components/DatePicker";
+import { TruncatedText } from "@/components/TruncatedText";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { CreateAthleteDialog } from "@/components/CreateAthleteDialog";
@@ -65,8 +67,10 @@ import {
   usersApi,
   type AthleteLinkView,
   type Category,
+  type CategoryRules,
   type ProgramAthlete,
   type ProgramRegistrationView,
+  type RegistrationIssue,
   type RegistrationRequestType,
   type Team,
   type UserProfile,
@@ -302,6 +306,7 @@ export function EventRegistrationPage() {
 
               {program ? (
                 <RegistrationStatusPanel
+                  placement="top"
                   view={view}
                   onSubmit={async () => {
                     if (!id) return;
@@ -312,6 +317,17 @@ export function EventRegistrationPage() {
                   onRequest={async (type, message) => {
                     if (!id) return;
                     await applyView(await registrationApi.createRequest(id, type, message));
+                  }}
+                  onSetBirthDate={async (issue, birthDate) => {
+                    if (!id) return;
+                    // A data fica no elenco (vale pra todos os eventos);
+                    // atleta cadastrado pelo produtor, sem vínculo, fica no
+                    // atleta do evento.
+                    if (issue.linkId) await athletesApi.setBirthDate(issue.linkId, birthDate);
+                    else if (issue.athleteId) {
+                      await programAthletesApi.update(id, program.id, issue.athleteId, { birthDate });
+                    }
+                    await load();
                   }}
                 />
               ) : (
@@ -456,6 +472,9 @@ export function EventRegistrationPage() {
                                       )}
                                       dragging={draggingTeam !== null}
                                       editable={editable}
+                                      issues={(view.issues ?? []).filter(
+                                        (i) => i.categoryId === category.id,
+                                      )}
                                       onOpenPair={(team) => setPairTarget({ team, category })}
                                       onRemove={(team) =>
                                         setUnassignTarget({ team, from: category, to: null })
@@ -487,6 +506,36 @@ export function EventRegistrationPage() {
                   />
                 )}
               </LockedOverlay>
+
+              {/* Rascunho/ficha liberada: o envio fica no fim, depois de
+                  montar a ficha (no topo só uma faixa curta). */}
+              {program && (
+                <RegistrationStatusPanel
+                  placement="bottom"
+                  view={view}
+                  onSubmit={async () => {
+                    if (!id) return;
+                    const resubmit = !!program.submittedAt;
+                    await applyView(await registrationApi.submit(id));
+                    setCelebration(resubmit ? "resubmit" : "submit");
+                  }}
+                  onRequest={async (type, message) => {
+                    if (!id) return;
+                    await applyView(await registrationApi.createRequest(id, type, message));
+                  }}
+                  onSetBirthDate={async (issue, birthDate) => {
+                    if (!id) return;
+                    // A data fica no elenco (vale pra todos os eventos);
+                    // atleta cadastrado pelo produtor, sem vínculo, fica no
+                    // atleta do evento.
+                    if (issue.linkId) await athletesApi.setBirthDate(issue.linkId, birthDate);
+                    else if (issue.athleteId) {
+                      await programAthletesApi.update(id, program.id, issue.athleteId, { birthDate });
+                    }
+                    await load();
+                  }}
+                />
+              )}
             </>
           )}
         </div>
@@ -552,6 +601,11 @@ export function EventRegistrationPage() {
           <PairAthletesDialog
             target={pairTarget}
             roster={usableRoster}
+            birthDates={view.rosterBirthDates ?? {}}
+            onSetBirthDate={async (linkId, birthDate) => {
+              await athletesApi.setBirthDate(linkId, birthDate);
+              await load();
+            }}
             eventAthletes={eventAthletes}
             onOpenChange={(open) => {
               if (!open) {
@@ -580,6 +634,12 @@ export function EventRegistrationPage() {
           <AthleteEntriesPicker
             athlete={athleteTarget}
             teams={program?.teams ?? []}
+            categories={view.categories}
+            birthDate={athleteTarget ? (view.rosterBirthDates?.[athleteTarget.id] ?? null) : null}
+            onSetBirthDate={async (linkId, birthDate) => {
+              await athletesApi.setBirthDate(linkId, birthDate);
+              await load();
+            }}
             eventAthletes={eventAthletes}
             onOpenChange={(open) => !open && setAthleteTarget(null)}
             onSave={async (link, entries) =>
@@ -649,15 +709,40 @@ function ProgramHeader({
   const { profile, event } = view;
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+      {/* Evento em destaque (é nele que o programa está se inscrevendo). */}
       <div className="flex min-w-0 items-center gap-4">
+        <EventThumbnail
+          name={event.name}
+          logoUrl={event.logoUrl}
+          className="size-14 shrink-0 rounded-xl text-base sm:size-16"
+        />
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Inscrição no evento</p>
+          <h1 className="truncate text-xl font-semibold text-foreground sm:text-2xl">{event.name}</h1>
+          <p
+            className={cn(
+              "mt-0.5 text-sm",
+              view.open ? "text-muted-foreground" : "font-medium text-amber-700 dark:text-amber-400",
+            )}
+          >
+            {view.open
+              ? event.registrationDeadline
+                ? `Inscrições até ${formatDeadline(event.registrationDeadline)}, 23:59`
+                : "Inscrições abertas, sem data limite"
+              : "Inscrições encerradas"}
+          </p>
+        </div>
+      </div>
+      {/* Programa dono da ficha. */}
+      <div className="flex min-w-0 items-center gap-3 border-t border-border/60 pt-3 lg:max-w-sm lg:border-t-0 lg:pt-0">
         <EventThumbnail
           name={profile.name}
           logoUrl={profile.logoUrl}
-          className="size-14 shrink-0 rounded-full text-base sm:size-16"
+          className="size-12 shrink-0 rounded-full text-sm"
         />
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold text-foreground sm:text-2xl">{profile.name}</h1>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+        <div className="min-w-0 text-sm">
+          <p className="truncate font-medium text-foreground">{profile.name}</p>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
             {profile.city && profile.state ? (
               <span className="flex items-center gap-1.5">
                 <MapPin className="size-3.5" />
@@ -675,28 +760,9 @@ function ProgramHeader({
             )}
             <span className="flex min-w-0 items-center gap-1.5">
               <Mail className="size-3.5 shrink-0" />
-              <span className="truncate">{profile.email}</span>
+              <TruncatedText text={profile.email} />
             </span>
           </div>
-        </div>
-      </div>
-      {/* Evento em que o programa está se inscrevendo. */}
-      <div className="flex min-w-0 items-center gap-3 border-t border-border/60 pt-3 lg:max-w-sm lg:border-t-0 lg:pt-0">
-        <EventThumbnail
-          name={event.name}
-          logoUrl={event.logoUrl}
-          className="size-12 shrink-0 rounded-lg text-sm"
-        />
-        <div className="min-w-0 text-sm">
-          <p className="text-xs text-muted-foreground">Inscrição no evento</p>
-          <p className="truncate font-medium text-foreground">{event.name}</p>
-          <p className={view.open ? "text-muted-foreground" : "font-medium text-amber-700 dark:text-amber-400"}>
-            {view.open
-              ? event.registrationDeadline
-                ? `Inscrições até ${formatDeadline(event.registrationDeadline)}, 23:59`
-                : "Inscrições abertas, sem data limite"
-              : "Inscrições encerradas"}
-          </p>
         </div>
       </div>
     </div>
@@ -735,13 +801,19 @@ function LockedOverlay({
 //   lista de pedidos;
 // - liberada pelo organizador: editável, "Reenviar inscrição".
 function RegistrationStatusPanel({
+  placement,
   view,
   onSubmit,
   onRequest,
+  onSetBirthDate,
 }: {
+  // Rascunho e ficha liberada: faixa curta no topo e painel completo
+  // (pendências + enviar) no fim. Ficha enviada: só no topo.
+  placement: "top" | "bottom";
   view: ProgramRegistrationView;
   onSubmit: () => Promise<void>;
   onRequest: (type: RegistrationRequestType, message: string) => Promise<void>;
+  onSetBirthDate: (issue: RegistrationIssue, birthDate: string) => Promise<void>;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [requestType, setRequestType] = useState<RegistrationRequestType | null>(null);
@@ -769,6 +841,8 @@ function RegistrationStatusPanel({
           ))}
         </ul>
       </>
+    ) : view.issues.length > 0 ? (
+      <IssuesList issues={view.issues} onSetBirthDate={onSetBirthDate} />
     ) : null;
   // Resumo da confirmação de envio, em linhas (ConfirmDialog respeita \n).
   const submitSummary = [
@@ -785,7 +859,9 @@ function RegistrationStatusPanel({
     <>
       <Button
         className="w-full shrink-0 sm:w-auto"
-        disabled={teamsInCategories === 0 || pendingNames.length > 0}
+        disabled={
+          teamsInCategories === 0 || pendingNames.length > 0 || view.issues.length > 0
+        }
         onClick={() => setConfirmOpen(true)}
       >
         <Send data-icon="inline-start" />
@@ -811,6 +887,40 @@ function RegistrationStatusPanel({
     </>
   );
 
+  // Ficha ainda sendo montada (rascunho ou devolvida pelo organizador).
+  const building = view.canEdit && (!program.submittedAt || reopened);
+  if (placement === "bottom" && !building) return null;
+  if (placement === "top" && building) {
+    const pendingCount =
+      (teamsInCategories === 0 ? 1 : 0) + pendingNames.length + view.issues.length;
+    return (
+      <div className="flex flex-col gap-1 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          <span className="font-medium text-foreground">
+            {reopened ? "Ficha liberada para edição" : "Ficha em rascunho"}
+          </span>
+          <span className="text-muted-foreground">
+            {" · "}
+            {pendingCount > 0
+              ? `${pluralize(pendingCount, "pendência", "pendências")} para enviar`
+              : "pronta para enviar"}
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={() =>
+            document
+              .getElementById("registration-submit")
+              ?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
+          className="self-start text-sm font-medium text-primary hover:underline sm:self-auto"
+        >
+          {pendingCount > 0 ? "Ver pendências" : "Ir para o envio"}
+        </button>
+      </div>
+    );
+  }
+
   if (!program.submittedAt) {
     if (!view.canEdit) {
       return (
@@ -821,7 +931,10 @@ function RegistrationStatusPanel({
       );
     }
     return (
-      <div className="grid gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex sm:items-center sm:justify-between">
+      <div
+        id="registration-submit"
+        className="grid gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex sm:items-center sm:justify-between"
+      >
         <div className="text-sm">
           <p className="font-medium text-foreground">Ficha em rascunho</p>
           <p className="text-muted-foreground">
@@ -841,7 +954,10 @@ function RegistrationStatusPanel({
 
   if (reopened && view.canEdit) {
     return (
-      <div className="grid gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex sm:items-center sm:justify-between">
+      <div
+        id="registration-submit"
+        className="grid gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex sm:items-center sm:justify-between"
+      >
         <div className="text-sm">
           <p className="font-medium text-foreground">O organizador liberou sua ficha para edição</p>
           <p className="text-muted-foreground">
@@ -1073,6 +1189,7 @@ function CategoryDropCard({
   teams,
   dragging,
   editable,
+  issues,
   onOpenPair,
   onRemove,
 }: {
@@ -1080,6 +1197,8 @@ function CategoryDropCard({
   teams: Team[];
   dragging: boolean;
   editable: boolean;
+  // Problemas das regras desta categoria (ver RegistrationIssue).
+  issues: RegistrationIssue[];
   onOpenPair: (team: Team) => void;
   onRemove: (team: Team) => void;
 }) {
@@ -1097,6 +1216,9 @@ function CategoryDropCard({
       )}
     >
       <p className="font-medium text-foreground">{category.name}</p>
+      {rulesText(category) && (
+        <p className="text-xs text-muted-foreground">{rulesText(category)}</p>
+      )}
       {teams.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           {editable ? "Arraste uma equipe para cá." : "Nenhuma equipe."}
@@ -1118,6 +1240,10 @@ function CategoryDropCard({
                     <span className="font-medium text-amber-700 dark:text-amber-400">
                       Atletas pendentes
                     </span>
+                  ) : issues.some((i) => i.teamId === team.id) ? (
+                    <span className="font-medium text-destructive">
+                      {pluralize(count, "atleta", "atletas")} · fora da regra
+                    </span>
                   ) : (
                     pluralize(count, "atleta", "atletas")
                   )
@@ -1127,6 +1253,169 @@ function CategoryDropCard({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// Grupos do popup de atletas de uma categoria com regra de idade.
+const ELIGIBILITY = {
+  eligible: "Elegíveis",
+  unknown: "Sem data de nascimento",
+  outside: "Fora da faixa etária",
+};
+
+// Idade completa na data (aniversário na própria data conta); mesma conta
+// da API (ProgramRegistrationService).
+function ageAt(birthDate: string, onDate: string): number {
+  const [by, bm, bd] = birthDate.split("-").map(Number);
+  const [y, m, d] = onDate.split("-").map(Number);
+  let age = y - by;
+  if (m < bm || (m === bm && d < bd)) age -= 1;
+  return age;
+}
+
+function hasAgeRule(rules: CategoryRules): boolean {
+  return (rules.minAge != null || rules.maxAge != null) && !!rules.ageCutoffDate;
+}
+
+// Motivo de o atleta não poder entrar na categoria pela idade; null =
+// elegível. Mesmas mensagens da API (ProgramRegistrationService).
+function ageProblem(rules: CategoryRules, birthDate: string | null): string | null {
+  if (!hasAgeRule(rules)) return null;
+  if (!birthDate) return "Data de nascimento obrigatória para a categoria.";
+  const age = ageAt(birthDate, rules.ageCutoffDate as string);
+  if (rules.minAge != null && age < rules.minAge) {
+    return `Não tem a idade mínima (${rules.minAge} anos).`;
+  }
+  if (rules.maxAge != null && age > rules.maxAge) {
+    return `Idade superior ao máximo permitido (${rules.maxAge} anos).`;
+  }
+  return null;
+}
+
+// "16 a 24 atletas · 15 a 18 anos (idade em 01/12/2026)"; null sem regra.
+function rulesText(category: Category): string | null {
+  const r = category.rules;
+  if (!r) return null;
+  const range = (min: number | null, max: number | null, unit: string) =>
+    min != null && max != null
+      ? `${min} a ${max} ${unit}`
+      : min != null
+        ? `${min}+ ${unit}`
+        : max != null
+          ? `até ${max} ${unit}`
+          : null;
+  const athletes = range(r.minAthletes, r.maxAthletes, "atletas");
+  const ages = range(r.minAge, r.maxAge, "anos");
+  const parts = [
+    athletes,
+    ages && r.ageCutoffDate
+      ? `${ages} (idade em ${r.ageCutoffDate.split("-").reverse().join("/")})`
+      : ages,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+// Regras da categoria em itens (popup de atletas): "Número de atletas: 2
+// a 3", "Idade: até 12 anos", "Idade conferida em: 30/06/2026".
+function rulesItems(category: Category): string[] {
+  const r = category.rules;
+  if (!r) return [];
+  const range = (min: number | null, max: number | null, unit: string) =>
+    min != null && max != null
+      ? `${min} a ${max} ${unit}`
+      : min != null
+        ? `${min} ${unit} ou mais`
+        : max != null
+          ? `até ${max} ${unit}`
+          : null;
+  const athletes = range(r.minAthletes, r.maxAthletes, "atletas");
+  const ages = range(r.minAge, r.maxAge, "anos");
+  return [
+    athletes && `Número de atletas: ${athletes}`,
+    ages && `Idade: ${ages}`,
+    ages && r.ageCutoffDate && `Idade conferida em: ${r.ageCutoffDate.split("-").reverse().join("/")}`,
+  ].filter((item): item is string => !!item);
+}
+
+// Problemas que impedem o envio pelas regras das categorias. Atleta sem
+// data de nascimento ganha o campo ali mesmo.
+function IssuesList({
+  issues,
+  onSetBirthDate,
+}: {
+  issues: RegistrationIssue[];
+  onSetBirthDate: (issue: RegistrationIssue, birthDate: string) => Promise<void>;
+}) {
+  return (
+    <>
+      Para enviar, corrija:
+      <ul className="mt-1 list-disc space-y-1.5 pl-5">
+        {issues.map((issue, index) => (
+          <li key={`${issue.kind}-${issue.teamId}-${issue.categoryId}-${issue.athleteId ?? index}`}>
+            {issue.message}
+            {issue.kind === "missing_birth_date" && (issue.linkId || issue.athleteId) && (
+              <BirthDateFix onSave={(date) => onSetBirthDate(issue, date)} />
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function BirthDateFix({
+  onSave,
+  compact = false,
+}: {
+  onSave: (date: string) => Promise<void>;
+  // Dentro da lista de atletas: começa só com o botão "Informar data".
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(!compact);
+  const [date, setDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-xs font-medium text-primary hover:underline"
+      >
+        Informar data de nascimento
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2 font-normal">
+      <div className="w-44">
+        <DatePicker
+          value={date}
+          onChange={setDate}
+          captionLayout="dropdown"
+          startMonth={new Date(new Date().getFullYear() - 100, 0, 1)}
+          maxDate={new Date()}
+        />
+      </div>
+      <Button
+        size="sm"
+        disabled={!date || saving}
+        onClick={async () => {
+          setSaving(true);
+          setError(null);
+          try {
+            await onSave(date);
+          } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Não foi possível salvar.");
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        {saving ? "Salvando..." : "Salvar data"}
+      </Button>
+      {error && <span className="text-destructive">{error}</span>}
     </div>
   );
 }
@@ -1585,6 +1874,8 @@ function TeamCategoriesDialog({
 function PairAthletesDialog({
   target,
   roster,
+  birthDates,
+  onSetBirthDate,
   eventAthletes,
   onOpenChange,
   onNewAthlete,
@@ -1595,6 +1886,9 @@ function PairAthletesDialog({
 }: {
   target: PairTarget | null;
   roster: AthleteLinkView[];
+  // Data de nascimento por vínculo do elenco (separa os elegíveis).
+  birthDates: Record<string, string | null>;
+  onSetBirthDate: (linkId: string, birthDate: string) => Promise<void>;
   eventAthletes: ProgramAthlete[];
   // Ficha travada: só mostra quem está inscrito nesta equipe+categoria.
   readOnly?: boolean;
@@ -1681,6 +1975,16 @@ function PairAthletesDialog({
       title={target ? `${target.team.name} em ${target.category.name}` : ""}
       description="Escolha os atletas que participarão desta categoria."
     >
+      {target && rulesItems(target.category).length > 0 && (
+        <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">Regras da categoria</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
+            {rulesItems(target.category).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">Atletas do seu elenco</p>
         <button
@@ -1697,7 +2001,38 @@ function PairAthletesDialog({
           .sort((a, b) =>
             `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, "pt-BR"),
           )
-          .map((l) => ({ id: l.id, label: `${l.firstName} ${l.lastName}`.trim(), hint: l.email }))}
+          .map((l) => {
+            const item = {
+              id: l.id,
+              label: `${l.firstName} ${l.lastName}`.trim(),
+              hint: l.email,
+            };
+            if (!target?.category.rules || !hasAgeRule(target.category.rules)) return item;
+            const rules = target.category.rules;
+            const birthDate = birthDates[l.id] ?? null;
+            const problem = ageProblem(rules, birthDate);
+            const age =
+              birthDate && rules.ageCutoffDate ? ageAt(birthDate, rules.ageCutoffDate) : null;
+            return {
+              ...item,
+              hint: age != null ? `${age} anos · ${l.email}` : l.email,
+              group: !birthDate
+                ? ELIGIBILITY.unknown
+                : problem
+                  ? ELIGIBILITY.outside
+                  : ELIGIBILITY.eligible,
+              blocked: !!problem,
+              error: problem ?? undefined,
+              extra: !birthDate ? (
+                <BirthDateFix compact onSave={(date) => onSetBirthDate(l.id, date)} />
+              ) : undefined,
+            };
+          })}
+        groupOrder={
+          target?.category.rules && hasAgeRule(target.category.rules)
+            ? [ELIGIBILITY.eligible, ELIGIBILITY.unknown, ELIGIBILITY.outside]
+            : undefined
+        }
         selected={selected}
         onChange={setSelected}
         searchPlaceholder="Buscar atleta..."
@@ -1730,25 +2065,41 @@ function PairAthletesDialog({
 function AthleteEntriesPicker({
   athlete,
   teams,
+  categories,
+  birthDate,
+  onSetBirthDate,
   eventAthletes,
   onOpenChange,
   onSave,
 }: {
   athlete: AthleteLinkView | null;
   teams: Team[];
+  // Categorias do evento com a regra (as das equipes não trazem).
+  categories: Category[];
+  birthDate: string | null;
+  onSetBirthDate: (linkId: string, birthDate: string) => Promise<void>;
   eventAthletes: ProgramAthlete[];
   onOpenChange: (open: boolean) => void;
   onSave: (link: AthleteLinkView, entries: { teamId: string; categoryId: string }[]) => Promise<unknown>;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { saving, error, setError, save } = useSaver(onOpenChange);
+  const rulesById = new Map(categories.map((c) => [c.id, c.rules]));
   const items = teams.flatMap((team) =>
-    team.categories.map((category) => ({
-      id: `${team.id}:${category.id}`,
-      label: category.name,
-      hint: `Equipe ${team.name}`,
-    })),
+    team.categories.map((category) => {
+      const rules = rulesById.get(category.id);
+      const problem = rules ? ageProblem(rules, birthDate) : null;
+      return {
+        id: `${team.id}:${category.id}`,
+        label: category.name,
+        hint: `Equipe ${team.name}`,
+        blocked: !!problem,
+        error: problem ?? undefined,
+      };
+    }),
   );
+  const needsBirthDate =
+    !birthDate && items.some((i) => i.error?.startsWith("Data de nascimento"));
 
   useEffect(() => {
     if (!athlete) return;
@@ -1766,6 +2117,12 @@ function AthleteEntriesPicker({
       title={athlete ? `${athlete.firstName} ${athlete.lastName}`.trim() : ""}
       description="Em quais categorias este atleta compete neste evento? Sem nenhuma, ele não participa."
     >
+      {needsBirthDate && athlete && (
+        <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+          Algumas categorias exigem a data de nascimento deste atleta.
+          <BirthDateFix onSave={(date) => onSetBirthDate(athlete.id, date)} />
+        </div>
+      )}
       <AthleteChecklist
         items={items}
         selected={selected}

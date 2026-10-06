@@ -101,7 +101,7 @@ export function ProgramDetailPage() {
   return (
     <ProgramsSetupShell
       loading={(program === null || athletes === null) && !error}
-      backLabel="Programas e equipes"
+      backLabel="Inscrições"
       backTo={`/events/${id}/programs`}
     >
       {error && <p className="mt-6 text-sm text-destructive">{error}</p>}

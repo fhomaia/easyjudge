@@ -47,14 +47,20 @@ const PAGE_SIZE = 8;
 
 // Lista de programas do evento em cards (2026-10-04). Gerenciar um
 // programa (equipes, categorias, atletas) abre ProgramDetailPage.
+type Tab = "registration" | "programs" | "requests";
+
 export function ProgramsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [programs, setPrograms] = useState<Program[] | null>(null);
-  // Abas: Programas | Solicitações (?tab=requests, ?program=<id> filtra).
+  // Abas: Inscrições (?tab=registration: convite/compartilhar e, no
+  // futuro, documentos exigidos e pagamento) | Programas (padrão, sem
+  // ?tab) | Solicitações (?tab=requests, ?program=<id> filtra).
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab") === "requests" ? "requests" : "programs";
+  const tabParam = searchParams.get("tab");
+  const tab: Tab =
+    tabParam === "requests" ? "requests" : tabParam === "registration" ? "registration" : "programs";
   const programFilter = searchParams.get("program");
   const [requests, setRequests] = useState<EventRegistrationRequestView[]>([]);
   // Evento (pro convite de inscrição: código/QR e prazo).
@@ -62,9 +68,13 @@ export function ProgramsPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const pendingRequests = requests.filter((r) => !r.resolvedAt).length;
 
-  function showTab(next: "programs" | "requests", program?: string) {
+  function showTab(next: Tab, program?: string) {
     setSearchParams(
-      next === "requests" ? { tab: "requests", ...(program ? { program } : {}) } : {},
+      next === "requests"
+        ? { tab: "requests", ...(program ? { program } : {}) }
+        : next === "registration"
+          ? { tab: "registration" }
+          : {},
       { replace: true },
     );
   }
@@ -139,9 +149,10 @@ export function ProgramsPage() {
         <div className="mt-6 flex flex-1 flex-col gap-6 [&>*]:min-w-0">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <h1 className="text-2xl font-semibold text-foreground">Programas e equipes</h1>
+              <h1 className="text-2xl font-semibold text-foreground">Inscrições</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Gerencie os programas participantes, suas equipes e atletas.
+                Programas, equipes e atletas do evento: receba as inscrições dos programas ou
+                cadastre você mesmo.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5">
@@ -161,17 +172,10 @@ export function ProgramsPage() {
             </Button>
           </div>
 
-          {event?.eventCode && (
-            <RegistrationInvite
-              event={event}
-              onShare={() => setShareOpen(true)}
-              onEventChange={setEvent}
-            />
-          )}
-
           <div className="flex gap-6 border-b border-border">
             {(
               [
+                ["registration", "Inscrições"],
                 ["programs", "Programas"],
                 ["requests", "Solicitações"],
               ] as const
@@ -197,7 +201,17 @@ export function ProgramsPage() {
             ))}
           </div>
 
-          {tab === "requests" && id ? (
+          {tab === "registration" ? (
+            // Configuração da inscrição. Por enquanto só o convite com
+            // compartilhar e prazo; depois, documentos exigidos e pagamento.
+            event?.eventCode ? (
+              <RegistrationInvite
+                event={event}
+                onShare={() => setShareOpen(true)}
+                onEventChange={setEvent}
+              />
+            ) : null
+          ) : tab === "requests" && id ? (
             <EventRequestsTab
               eventId={id}
               requests={requests}
