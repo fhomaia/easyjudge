@@ -82,6 +82,23 @@ export class UsersService {
     return new Set(users.map((u) => u.email.toLowerCase()));
   }
 
+  // Data de nascimento das contas com esses emails (chave em minúsculas).
+  // Usado na ficha de inscrição pra conferir a idade dos atletas do
+  // elenco, que não trazem a data no atleta do evento.
+  async findBirthDatesByEmails(emails: string[]): Promise<Map<string, string>> {
+    if (emails.length === 0) return new Map();
+    const users = await this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) IN (:...emails)', {
+        emails: emails.map((e) => e.toLowerCase()),
+      })
+      .andWhere('user.birthDate IS NOT NULL')
+      .getMany();
+    return new Map(
+      users.map((u) => [u.email.toLowerCase(), u.birthDate as string]),
+    );
+  }
+
   // Mesmo raciocínio de findByEmailWithPassword (select:false na
   // entidade exige addSelect explícito), combinado com a comparação
   // sem diferenciar maiúsculas/minúsculas de findByEmailInsensitive —

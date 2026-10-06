@@ -7,7 +7,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../entities/category.entity';
-import type { CategoryCriterionLabel } from '../entities/category.entity';
+import type {
+  CategoryCriterionLabel,
+  CategoryRules,
+} from '../entities/category.entity';
 import { CategoryCriteriaSettings } from '../entities/category-criteria-settings.entity';
 import { CategoryCriterionKey } from '../enums/category-criterion-key.enum';
 import { CategoryFormat } from '../enums/category-format.enum';
@@ -141,7 +144,36 @@ export class CategoryCriteriaService {
   attachLabels(categories: Category[], criteria: CategoryCriterion[]): void {
     for (const category of categories) {
       category.criteriaLabels = this.labelsFor(category, criteria);
+      category.rules = this.rulesFor(category, criteria);
     }
+  }
+
+  // Regra efetiva (ver CategoryRules). `criteria` precisa vir de
+  // getByAlias (data da Faixa etária já resolvida pra data do evento).
+  rulesFor(category: Category, criteria: CategoryCriterion[]): CategoryRules {
+    const options = (key: CategoryCriterionKey) =>
+      criteria.find((c) => c.key === key);
+    const sizeOption = category.size
+      ? options(CategoryCriterionKey.SIZE)?.options.find(
+          (o) => o.id === category.size,
+        )
+      : undefined;
+    const ageCriterion = options(CategoryCriterionKey.AGE_GROUP);
+    const ageOption = category.ageGroup
+      ? ageCriterion?.options.find((o) => o.id === category.ageGroup)
+      : undefined;
+    const cutoff = ageCriterion?.ageCutoffDate ?? null;
+    return {
+      minAthletes: sizeOption
+        ? (sizeOption.minAthletes ?? null)
+        : category.minAthletes,
+      maxAthletes: sizeOption
+        ? (sizeOption.maxAthletes ?? null)
+        : category.maxAthletes,
+      minAge: ageOption ? (ageOption.minAge ?? null) : category.minAge,
+      maxAge: ageOption ? (ageOption.maxAge ?? null) : category.maxAge,
+      ageCutoffDate: ageOption ? cutoff : (category.ageCutoffDate ?? cutoff),
+    };
   }
 
   async attachLabelsByAlias(

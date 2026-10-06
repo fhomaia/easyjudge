@@ -83,6 +83,13 @@ export class AthleteLink {
   @Column({ name: 'ended_at', type: 'timestamptz', nullable: true })
   endedAt: Date | null;
 
+  // Data de nascimento informada pelo programa no elenco (2026-10-06),
+  // só pra atleta sem conta ou cuja conta não tem a data: confere a idade
+  // nas categorias com regra de idade. A da conta, quando existe, sempre
+  // vale antes (uma data por atleta).
+  @Column({ name: 'birth_date', type: 'date', nullable: true })
+  birthDate: string | null;
+
   // Nome do evento cujo produtor cadastrou o atleta no programa e com
   // isso pediu o vínculo (ver AthletesService.requestLinkFromEvent).
   // Nulo nos vínculos criados pelo programa ou pelo atleta.

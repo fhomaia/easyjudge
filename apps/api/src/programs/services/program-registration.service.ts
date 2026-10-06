@@ -13,6 +13,7 @@ import { TeamCategoryAthlete } from '../entities/team-category-athlete.entity';
 import { Team } from '../../teams/entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
 import { CategoryCriteriaService } from '../../categories/services/category-criteria.service';
+import type { CategoryRules } from '../../categories/entities/category.entity';
 import type { CategoryCriterion } from '../../categories/category-criteria';
 import { CategoryStatus } from '../../categories/enums/category-status.enum';
 import { Event } from '../../events/entities/event.entity';
@@ -76,6 +77,13 @@ export interface ProgramRegistrationView {
   // Critérios de divisão do evento (filtros da ficha, na ordem e com as
   // opções configuradas pelo produtor).
   categoryCriteria: CategoryCriterion[];
+  // O que impede o envio pelas regras das categorias (número de atletas e
+  // idade). A tela mostra antes; o envio recusa com a mesma lista.
+  issues: RegistrationIssue[];
+  // Data de nascimento de cada atleta do elenco (id do vínculo -> data ou
+  // null), ver birthDateLookup. Usada pra separar os elegíveis por idade
+  // ao escolher atletas de uma categoria.
+  rosterBirthDates: Record<string, string | null>;
   // Nomes de equipes usadas em inscrições anteriores do programa que
   // ainda não estão nesta (atalhos pra reaproveitar).
   previousTeamNames: string[];
@@ -84,6 +92,60 @@ export interface ProgramRegistrationView {
   // Pode mandar pedido de alteração/cancelamento ao organizador.
   canRequest: boolean;
   requests: RegistrationRequestView[];
+}
+
+export interface RegistrationIssue {
+  kind: 'athletes_count' | 'age' | 'missing_birth_date';
+  teamId: string;
+  categoryId: string;
+  // Atleta do evento (ProgramAthlete), nos problemas de idade.
+  athleteId: string | null;
+  // Vínculo do elenco, pra informar a data de nascimento que falta.
+  linkId: string | null;
+  message: string;
+}
+
+const brDate = (iso: string) => iso.split('-').reverse().join('/');
+
+// "16 a 24 atletas", "até 17 anos", "10 anos ou mais".
+function rangeText(
+  min: number | null,
+  max: number | null,
+  unit: string,
+): string {
+  if (min != null && max != null) return `de ${min} a ${max} ${unit}`;
+  if (min != null) return `${min} ${unit} ou mais`;
+  return `até ${max} ${unit}`;
+}
+
+// Idade completa na data (aniversário na própria data conta).
+function ageAt(birthDate: string, onDate: string): number {
+  const [by, bm, bd] = birthDate.split('-').map(Number);
+  const [y, m, d] = onDate.split('-').map(Number);
+  let age = y - by;
+  if (m < bm || (m === bm && d < bd)) age -= 1;
+  return age;
+}
+
+// Motivo de um atleta não poder entrar numa categoria pela regra de
+// idade; null = elegível (ou categoria sem regra de idade). Mesmas
+// mensagens da tela (EventRegistrationPage, popup de atletas).
+function ageProblem(
+  rules: CategoryRules,
+  birthDate: string | null,
+): string | null {
+  if ((rules.minAge == null && rules.maxAge == null) || !rules.ageCutoffDate) {
+    return null;
+  }
+  if (!birthDate) return 'Data de nascimento obrigatória para a categoria.';
+  const age = ageAt(birthDate, rules.ageCutoffDate);
+  if (rules.minAge != null && age < rules.minAge) {
+    return `Não tem a idade mínima (${rules.minAge} anos).`;
+  }
+  if (rules.maxAge != null && age > rules.maxAge) {
+    return `Idade superior ao máximo permitido (${rules.maxAge} anos).`;
+  }
+  return null;
 }
 
 // Inscrição de um evento feita pela própria conta Programa (2026-10-05).
@@ -130,9 +192,16 @@ export class ProgramRegistrationService {
       event.aliasId,
     );
     this.categoryCriteriaService.attachLabels(categories, categoryCriteria);
+    const issues = participation
+      ? await this.computeIssues(event, participation.id, userId)
+      : [];
     const program = participation
       ? await this.programsService.findOneForEvent(eventId, participation.id)
       : null;
+    const rosterBirthDates = await this.rosterBirthDates(
+      userId,
+      participation?.id ?? null,
+    );
     return {
       event: {
         id: event.aliasId,
@@ -156,6 +225,8 @@ export class ProgramRegistrationService {
       },
       categories,
       categoryCriteria,
+      issues,
+      rosterBirthDates,
       previousTeamNames: await this.previousTeamNames(
         userId,
         event.aliasId,
@@ -164,7 +235,9 @@ export class ProgramRegistrationService {
       canEdit: participation
         ? programCanEditRegistration(event, participation)
         : isRegistrationOpen(event),
-      canRequest: participation ? programCanRequestChange(event, participation) : false,
+      canRequest: participation
+        ? programCanRequestChange(event, participation)
+        : false,
       requests: participation
         ? (
             await this.requestsRepo.find({
@@ -199,7 +272,11 @@ export class ProgramRegistrationService {
         'Informe a cidade e a UF do programa antes de se inscrever.',
       );
     }
-    const data = { name: profile.name, city: profile.city, state: profile.state };
+    const data = {
+      name: profile.name,
+      city: profile.city,
+      state: profile.state,
+    };
 
     if (participation) {
       Object.assign(participation, data);
@@ -220,7 +297,10 @@ export class ProgramRegistrationService {
   // "Enviar inscrição": tira do rascunho (passa a aparecer pro produtor,
   // ganha o papel PROGRAM). Exige ao menos uma equipe numa categoria.
   // Depois de enviada, continua editável até o prazo.
-  async submit(eventId: string, userId: string): Promise<ProgramRegistrationView> {
+  async submit(
+    eventId: string,
+    userId: string,
+  ): Promise<ProgramRegistrationView> {
     const { participation } = await this.loadOwnedOpen(eventId, userId);
     const withCategory = await this.teamsRepo
       .createQueryBuilder('team')
@@ -251,6 +331,16 @@ export class ProgramRegistrationService {
           .join('; ')}.`,
       );
     }
+    // Regras das categorias (número de atletas e idade, 2026-10-06).
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const issues = await this.computeIssues(event, participation.id, userId);
+    if (issues.length > 0) {
+      const shown = issues.slice(0, 5).map((i) => i.message);
+      const more = issues.length - shown.length;
+      throw new BadRequestException(
+        `Corrija antes de enviar: ${shown.join(' ')}${more > 0 ? ` E mais ${more}.` : ''}`,
+      );
+    }
     const resubmit = participation.submittedAt !== null;
     if (resubmit) {
       // Ficha devolvida pelo organizador e enviada de novo: trava outra vez.
@@ -279,10 +369,14 @@ export class ProgramRegistrationService {
     resubmit: boolean,
   ): Promise<void> {
     const event = await this.eventsService.findEventOrThrow(eventId);
-    const program = await this.programsService.findOneForEvent(eventId, programId);
+    const program = await this.programsService.findOneForEvent(
+      eventId,
+      programId,
+    );
     const enrolled = program.teams.filter((t) => t.categories.length > 0);
     const pairs = enrolled.reduce((sum, t) => sum + t.categories.length, 0);
-    const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+    const plural = (n: number, one: string, many: string) =>
+      `${n} ${n === 1 ? one : many}`;
     const verb = resubmit ? 'reenviou' : 'enviou';
     await this.mailService.sendNotice({
       to: await this.eventsService.findManagerEmails(event.aliasId),
@@ -335,8 +429,12 @@ export class ProgramRegistrationService {
         createdById: userId,
       }),
     );
-    const program = await this.programsService.findOneForEvent(eventId, participation.id);
-    const what = type === RegistrationRequestType.CANCEL ? 'cancelamento' : 'alteração';
+    const program = await this.programsService.findOneForEvent(
+      eventId,
+      participation.id,
+    );
+    const what =
+      type === RegistrationRequestType.CANCEL ? 'cancelamento' : 'alteração';
     await this.notificationsService.create(
       event.aliasId,
       NotificationType.REGISTRATION_REQUEST,
@@ -347,7 +445,10 @@ export class ProgramRegistrationService {
       to: await this.eventsService.findManagerEmails(event.aliasId),
       replyTo: program.email,
       subject: `[${event.name}] ${program.name} pediu ${what} da inscrição`,
-      heading: type === RegistrationRequestType.CANCEL ? 'Pedido de cancelamento' : 'Pedido de alteração',
+      heading:
+        type === RegistrationRequestType.CANCEL
+          ? 'Pedido de cancelamento'
+          : 'Pedido de alteração',
       lines: [
         `O programa ${program.name} (${program.email}) pediu ${what} da inscrição no evento ${event.name}.`,
         text ? 'Mensagem do programa:' : 'O programa não deixou mensagem.',
@@ -383,7 +484,10 @@ export class ProgramRegistrationService {
     });
     const views = await Promise.all(
       rows.map(async (r) => {
-        const program = await this.programsService.findOneForEvent(eventId, r.programId);
+        const program = await this.programsService.findOneForEvent(
+          eventId,
+          r.programId,
+        );
         return {
           ...this.toRequestView(r),
           program: {
@@ -392,7 +496,8 @@ export class ProgramRegistrationService {
             submittedAt: r.program.submittedAt,
             reopenedAt: r.program.reopenedAt,
             selfRegistered:
-              r.program.userId !== null && r.program.userId === r.program.createdById,
+              r.program.userId !== null &&
+              r.program.userId === r.program.createdById,
           },
         };
       }),
@@ -404,7 +509,10 @@ export class ProgramRegistrationService {
     );
   }
 
-  async listRequests(eventId: string, programId: string): Promise<RegistrationRequestView[]> {
+  async listRequests(
+    eventId: string,
+    programId: string,
+  ): Promise<RegistrationRequestView[]> {
     await this.programsService.findProgramOrThrow(eventId, programId);
     const rows = await this.requestsRepo.find({
       where: { programId },
@@ -420,7 +528,10 @@ export class ProgramRegistrationService {
     userId: string,
   ): Promise<RegistrationRequestView> {
     await this.programsService.findProgramOrThrow(eventId, programId);
-    const request = await this.requestsRepo.findOneBy({ id: requestId, programId });
+    const request = await this.requestsRepo.findOneBy({
+      id: requestId,
+      programId,
+    });
     if (!request) throw new NotFoundException('Pedido não encontrado');
     if (!request.resolvedAt) {
       request.resolvedAt = new Date();
@@ -441,12 +552,20 @@ export class ProgramRegistrationService {
     userId: string,
   ): Promise<void> {
     const event = await this.eventsService.findEventOrThrow(eventId);
-    const request = await this.requestsRepo.findOneBy({ id: requestId, programId });
+    const request = await this.requestsRepo.findOneBy({
+      id: requestId,
+      programId,
+    });
     if (!request) throw new NotFoundException('Pedido não encontrado');
     if (request.type !== RegistrationRequestType.CANCEL || request.resolvedAt) {
-      throw new ConflictException('Só dá pra aceitar um pedido de cancelamento pendente.');
+      throw new ConflictException(
+        'Só dá pra aceitar um pedido de cancelamento pendente.',
+      );
     }
-    const program = await this.programsService.findOneForEvent(eventId, programId);
+    const program = await this.programsService.findOneForEvent(
+      eventId,
+      programId,
+    );
     await this.programsService.remove(eventId, programId, userId);
     await this.mailService.sendNotice({
       to: [program.email],
@@ -462,14 +581,24 @@ export class ProgramRegistrationService {
 
   // "Liberar edição": devolve a ficha enviada pro programa editar (até o
   // evento iniciar); ela trava de novo quando o programa reenviar.
-  async reopen(eventId: string, programId: string): Promise<ProgramParticipation> {
+  async reopen(
+    eventId: string,
+    programId: string,
+  ): Promise<ProgramParticipation> {
     const event = await this.eventsService.findEventOrThrow(eventId);
-    const participation = await this.programsService.findProgramOrThrow(eventId, programId);
+    const participation = await this.programsService.findProgramOrThrow(
+      eventId,
+      programId,
+    );
     if (!participation.userId || !participation.submittedAt) {
-      throw new ConflictException('Este programa não tem uma inscrição enviada pela própria conta.');
+      throw new ConflictException(
+        'Este programa não tem uma inscrição enviada pela própria conta.',
+      );
     }
     if (!programCanRequestChange(event, participation)) {
-      throw new ConflictException('Não dá pra liberar a edição depois que o evento começou.');
+      throw new ConflictException(
+        'Não dá pra liberar a edição depois que o evento começou.',
+      );
     }
     if (!participation.reopenedAt) {
       participation.reopenedAt = new Date();
@@ -483,7 +612,10 @@ export class ProgramRegistrationService {
         undefined,
         participation.userId,
       );
-      const program = await this.programsService.findOneForEvent(eventId, programId);
+      const program = await this.programsService.findOneForEvent(
+        eventId,
+        programId,
+      );
       await this.mailService.sendNotice({
         to: [program.email],
         subject: `[${event.name}] Sua ficha de inscrição foi liberada para edição`,
@@ -531,7 +663,10 @@ export class ProgramRegistrationService {
     if (toAdd.length) await relation.add(toAdd);
     if (toRemove.length) {
       await relation.remove(toRemove);
-      await this.entriesRepo.delete({ teamId: team.id, categoryId: In(toRemove) });
+      await this.entriesRepo.delete({
+        teamId: team.id,
+        categoryId: In(toRemove),
+      });
     }
     await this.removeUnassignedRosterAthletes(participation, userId);
     return this.get(eventId, userId);
@@ -555,6 +690,24 @@ export class ProgramRegistrationService {
       throw new ConflictException('A equipe já está na categoria de destino.');
     }
     await this.assertEventCategories(event, [toCategoryId]);
+    const moving = await this.entriesRepo.find({
+      where: { teamId: team.id, categoryId: fromCategoryId },
+    });
+    const movingAthletes = moving.length
+      ? await this.athletesRepo.findBy({
+          id: In(moving.map((e) => e.athleteId)),
+        })
+      : [];
+    await this.assertAgeEligible(
+      event,
+      userId,
+      participation.id,
+      [toCategoryId],
+      movingAthletes.map((a) => ({
+        name: `${a.firstName} ${a.lastName}`.trim(),
+        email: a.email,
+      })),
+    );
     await this.dataSource.transaction(async (manager) => {
       const relation = manager
         .createQueryBuilder()
@@ -584,6 +737,19 @@ export class ProgramRegistrationService {
     const { event, participation } = await this.loadOwnedOpen(eventId, userId);
     const team = await this.findOwnTeam(participation, teamId);
     await this.assertEventCategories(event, [categoryId]);
+    const roster = await this.roster(userId);
+    await this.assertAgeEligible(
+      event,
+      userId,
+      participation.id,
+      [categoryId],
+      roster
+        .filter((l) => linkIds.includes(l.id))
+        .map((l) => ({
+          name: `${l.firstName} ${l.lastName}`.trim(),
+          email: l.email,
+        })),
+    );
     if (!team.categories.some((c) => c.id === categoryId)) {
       await this.teamsRepo
         .createQueryBuilder()
@@ -615,7 +781,22 @@ export class ProgramRegistrationService {
     linkId: string,
     entries: AthleteEntryDto[],
   ): Promise<ProgramRegistrationView> {
-    const { participation } = await this.loadOwnedOpen(eventId, userId);
+    const { event, participation } = await this.loadOwnedOpen(eventId, userId);
+    const link = (await this.roster(userId)).find((l) => l.id === linkId);
+    if (link) {
+      await this.assertAgeEligible(
+        event,
+        userId,
+        participation.id,
+        entries.map((e) => e.categoryId),
+        [
+          {
+            name: `${link.firstName} ${link.lastName}`.trim(),
+            email: link.email,
+          },
+        ],
+      );
+    }
     const [athleteId] = await this.athleteIdsForLinks(
       eventId,
       participation,
@@ -659,13 +840,18 @@ export class ProgramRegistrationService {
     const { event, participation } = await this.loadForUser(eventId, userId);
     if (!participation) {
       this.assertOpen(event);
-      throw new NotFoundException('Adicione uma equipe para começar a inscrição.');
+      throw new NotFoundException(
+        'Adicione uma equipe para começar a inscrição.',
+      );
     }
     this.assertCanEdit(event, participation);
     return { event, participation };
   }
 
-  private assertCanEdit(event: Event, participation: ProgramParticipation): void {
+  private assertCanEdit(
+    event: Event,
+    participation: ProgramParticipation,
+  ): void {
     if (programCanEditRegistration(event, participation)) return;
     throw new ConflictException(
       participation.submittedAt && isRegistrationOpen(event)
@@ -676,7 +862,9 @@ export class ProgramRegistrationService {
 
   private assertOpen(event: Event): void {
     if (!isRegistrationOpen(event)) {
-      throw new ConflictException('As inscrições deste evento estão encerradas.');
+      throw new ConflictException(
+        'As inscrições deste evento estão encerradas.',
+      );
     }
   }
 
@@ -692,19 +880,29 @@ export class ProgramRegistrationService {
     return team;
   }
 
-  private async assertEventCategories(event: Event, ids: string[]): Promise<void> {
+  private async assertEventCategories(
+    event: Event,
+    ids: string[],
+  ): Promise<void> {
     if (ids.length === 0) return;
     const count = await this.categoriesRepo.count({
-      where: { id: In(ids), aliasId: event.aliasId, status: CategoryStatus.ACTIVE },
+      where: {
+        id: In(ids),
+        aliasId: event.aliasId,
+        status: CategoryStatus.ACTIVE,
+      },
     });
-    if (count !== ids.length) throw new NotFoundException('Categoria não encontrada');
+    if (count !== ids.length)
+      throw new NotFoundException('Categoria não encontrada');
   }
 
   // Elenco usável na inscrição: vínculos confirmados (o programa já
   // aceitou) com email.
   private async roster(userId: string): Promise<AthleteLinkView[]> {
     const links = await this.athletesService.listForProgram(userId);
-    return links.filter((l) => l.confirmed && !l.emailIsProgramAccount && l.email);
+    return links.filter(
+      (l) => l.confirmed && !l.emailIsProgramAccount && l.email,
+    );
   }
 
   // Vínculos do elenco -> atletas do evento (ProgramAthlete), criando os
@@ -719,10 +917,13 @@ export class ProgramRegistrationService {
     const byId = new Map(roster.map((l) => [l.id, l]));
     const links = [...new Set(linkIds)].map((id) => {
       const link = byId.get(id);
-      if (!link) throw new NotFoundException('Atleta não encontrado no seu elenco.');
+      if (!link)
+        throw new NotFoundException('Atleta não encontrado no seu elenco.');
       return link;
     });
-    const existing = await this.athletesRepo.findBy({ programId: participation.id });
+    const existing = await this.athletesRepo.findBy({
+      programId: participation.id,
+    });
     const byEmail = new Map(existing.map((a) => [a.email.toLowerCase(), a.id]));
     const ids: string[] = [];
     for (const link of links) {
@@ -732,7 +933,11 @@ export class ProgramRegistrationService {
         const created = await this.programAthletesService.create(
           eventId,
           participation.id,
-          { firstName: link.firstName || email, lastName: link.lastName, email },
+          {
+            firstName: link.firstName || email,
+            lastName: link.lastName,
+            email,
+          },
           userId,
         );
         id = created.id;
@@ -750,7 +955,9 @@ export class ProgramRegistrationService {
     participation: ProgramParticipation,
     userId: string,
   ): Promise<void> {
-    const rosterEmails = (await this.roster(userId)).map((l) => l.email.toLowerCase());
+    const rosterEmails = (await this.roster(userId)).map((l) =>
+      l.email.toLowerCase(),
+    );
     if (rosterEmails.length === 0) return;
     const orphans: { id: string }[] = await this.athletesRepo
       .createQueryBuilder('a')
@@ -764,6 +971,179 @@ export class ProgramRegistrationService {
     if (orphans.length) {
       await this.athletesRepo.delete({ id: In(orphans.map((o) => o.id)) });
     }
+  }
+
+  private async rosterBirthDates(
+    userId: string,
+    participationId: string | null,
+  ): Promise<Record<string, string | null>> {
+    const roster = await this.roster(userId);
+    if (roster.length === 0) return {};
+    const { birthDateOf } = await this.birthDateLookup(userId, participationId);
+    return Object.fromEntries(roster.map((l) => [l.id, birthDateOf(l.email)]));
+  }
+
+  // Data de nascimento de um atleta (por email), uma só por atleta
+  // (decisão do usuário, 2026-10-06): a da conta dele, se existir; senão
+  // a informada pelo programa no elenco; senão a do atleta do evento
+  // (cadastro do produtor no Setup).
+  private async birthDateLookup(
+    userId: string,
+    participationId: string | null,
+  ): Promise<{
+    birthDateOf: (email: string) => string | null;
+    linkIdOf: (email: string) => string | null;
+  }> {
+    const roster = await this.roster(userId);
+    const eventAthletes = participationId
+      ? await this.athletesRepo.findBy({ programId: participationId })
+      : [];
+    const eventDates = new Map(
+      eventAthletes
+        .filter((a) => a.birthDate)
+        .map((a) => [a.email.toLowerCase(), a.birthDate as string]),
+    );
+    const linkDates = new Map(
+      roster
+        .filter((l) => l.birthDate)
+        .map((l) => [l.email.toLowerCase(), l.birthDate as string]),
+    );
+    const linkIds = new Map(roster.map((l) => [l.email.toLowerCase(), l.id]));
+    const accountDates = await this.usersService.findBirthDatesByEmails([
+      ...new Set([
+        ...roster.map((l) => l.email.toLowerCase()),
+        ...eventAthletes.map((a) => a.email.toLowerCase()),
+      ]),
+    ]);
+    return {
+      birthDateOf: (email) => {
+        const key = email.toLowerCase();
+        return (
+          accountDates.get(key) ??
+          linkDates.get(key) ??
+          eventDates.get(key) ??
+          null
+        );
+      },
+      linkIdOf: (email) => linkIds.get(email.toLowerCase()) ?? null,
+    };
+  }
+
+  // Trava (2026-10-06): atleta que não cumpre a regra de idade não entra
+  // na categoria (recusado com o motivo de cada um). Número de atletas
+  // só é conferido no envio (a ficha é montada aos poucos).
+  private async assertAgeEligible(
+    event: Event,
+    userId: string,
+    participationId: string,
+    categoryIds: string[],
+    athletes: { name: string; email: string }[],
+  ): Promise<void> {
+    if (athletes.length === 0 || categoryIds.length === 0) return;
+    const categories = await this.categoriesRepo.findBy({
+      id: In([...new Set(categoryIds)]),
+    });
+    const criteria = await this.categoryCriteriaService.getByAlias(
+      event.aliasId,
+    );
+    const { birthDateOf } = await this.birthDateLookup(userId, participationId);
+    const problems: string[] = [];
+    for (const category of categories) {
+      const rules = this.categoryCriteriaService.rulesFor(category, criteria);
+      for (const athlete of athletes) {
+        const problem = ageProblem(rules, birthDateOf(athlete.email));
+        if (problem)
+          problems.push(`${athlete.name} (${category.name}): ${problem}`);
+      }
+    }
+    if (problems.length > 0) {
+      throw new BadRequestException(problems.join(' '));
+    }
+  }
+
+  // Problemas da ficha pelas regras das categorias (ver
+  // CategoryCriteriaService.rulesFor): equipe com número de atletas fora
+  // do intervalo; atleta fora da faixa de idade na data de referência ou
+  // sem data de nascimento (a do atleta do evento ou, sem ela, a da conta
+  // com o mesmo email). Equipe sem nenhum atleta não entra (já barrada
+  // como "escolha os atletas").
+  private async computeIssues(
+    event: Event,
+    participationId: string,
+    userId: string,
+  ): Promise<RegistrationIssue[]> {
+    const teams = await this.teamsRepo.find({
+      where: { programId: participationId },
+      relations: ['categories'],
+      order: { name: 'ASC' },
+    });
+    const pairs = teams.flatMap((team) =>
+      team.categories.map((category) => ({ team, category })),
+    );
+    if (pairs.length === 0) return [];
+
+    const criteria = await this.categoryCriteriaService.getByAlias(
+      event.aliasId,
+    );
+    const entries = await this.entriesRepo.find({
+      where: { teamId: In(teams.map((t) => t.id)) },
+    });
+    const athletes = entries.length
+      ? await this.athletesRepo.findBy({
+          id: In([...new Set(entries.map((e) => e.athleteId))]),
+        })
+      : [];
+    const athleteById = new Map(athletes.map((a) => [a.id, a]));
+    const { birthDateOf, linkIdOf } = await this.birthDateLookup(
+      userId,
+      participationId,
+    );
+
+    const issues: RegistrationIssue[] = [];
+    for (const { team, category } of pairs) {
+      const rules = this.categoryCriteriaService.rulesFor(category, criteria);
+      const pairAthletes = entries
+        .filter((e) => e.teamId === team.id && e.categoryId === category.id)
+        .map((e) => athleteById.get(e.athleteId))
+        .filter((a): a is ProgramAthlete => !!a);
+      if (pairAthletes.length === 0) continue;
+      const where = `${team.name} em ${category.name}`;
+
+      const count = pairAthletes.length;
+      if (
+        (rules.minAthletes != null && count < rules.minAthletes) ||
+        (rules.maxAthletes != null && count > rules.maxAthletes)
+      ) {
+        issues.push({
+          kind: 'athletes_count',
+          teamId: team.id,
+          categoryId: category.id,
+          athleteId: null,
+          linkId: null,
+          message: `${where}: ${count} ${count === 1 ? 'atleta' : 'atletas'}, a categoria aceita ${rangeText(rules.minAthletes, rules.maxAthletes, 'atletas')}.`,
+        });
+      }
+
+      for (const athlete of pairAthletes) {
+        const name = `${athlete.firstName} ${athlete.lastName}`.trim();
+        const birthDate = birthDateOf(athlete.email);
+        const problem = ageProblem(rules, birthDate);
+        if (!problem) continue;
+        const age =
+          birthDate && rules.ageCutoffDate
+            ? ` (${ageAt(birthDate, rules.ageCutoffDate)} anos em ${brDate(rules.ageCutoffDate)})`
+            : '';
+        issues.push({
+          kind: birthDate ? 'age' : 'missing_birth_date',
+          teamId: team.id,
+          categoryId: category.id,
+          athleteId: athlete.id,
+          linkId: linkIdOf(athlete.email),
+          message: `${name}, ${where}: ${problem.replace(/\.$/, '')}${age}.`,
+        });
+      }
+    }
+    return issues;
   }
 
   private async previousTeamNames(

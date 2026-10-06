@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -29,6 +30,8 @@ export interface AthleteLinkView {
   // Nome do evento quando o pedido veio do produtor (ver
   // requestLinkFromEvent); nulo nos outros casos.
   requestedFromEvent: string | null;
+  // Data de nascimento informada pelo programa (ver AthleteLink.birthDate).
+  birthDate: string | null;
   createdAt: string;
 }
 
@@ -64,6 +67,38 @@ export class AthletesService {
           programEmails.has(l.email.toLowerCase()),
       ),
     );
+  }
+
+  // Programa informa a data de nascimento de um atleta do próprio elenco
+  // (usada pra conferir a idade nas categorias com regra de idade). Só
+  // quando a conta do atleta não tem a data (uma data por atleta).
+  async setBirthDate(
+    programUserId: string,
+    linkId: string,
+    birthDate: string | null,
+  ): Promise<AthleteLinkView> {
+    const link = await this.linksRepo.findOneBy({
+      id: linkId,
+      programUserId,
+      endedAt: IsNull(),
+    });
+    if (!link) throw new NotFoundException('Atleta não encontrado.');
+    // A data é uma só por atleta: com a data na conta dele, vale ela.
+    const account = link.athleteUserId
+      ? await this.usersService.findById(link.athleteUserId)
+      : null;
+    if (account?.birthDate) {
+      throw new ConflictException(
+        'A data de nascimento deste atleta vem da conta dele e não pode ser alterada aqui.',
+      );
+    }
+    if (birthDate && birthDate > new Date().toISOString().slice(0, 10)) {
+      throw new BadRequestException(
+        'A data de nascimento não pode ser no futuro.',
+      );
+    }
+    link.birthDate = birthDate;
+    return this.toView(await this.linksRepo.save(link));
   }
 
   // Vínculos ativos do programa esperando confirmação (pedidos do atleta
@@ -488,6 +523,7 @@ export class AthletesService {
       confirmed: link.confirmedAt !== null,
       emailIsProgramAccount,
       requestedFromEvent: link.requestedFromEvent,
+      birthDate: link.birthDate,
       createdAt: link.createdAt.toISOString(),
     };
   }

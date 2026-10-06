@@ -16,6 +16,18 @@ import type { CategoryCriterionKey } from '../enums/category-criterion-key.enum'
 // Rótulo de um critério ligado no evento, montado na leitura (não é
 // coluna), na ordem configurada: o front usa pra tabela, cartões e
 // filtros sem precisar conhecer as opções.
+// Regra efetiva da categoria (conferida no envio da inscrição): a da
+// opção de Tamanho/Faixa etária escolhida ou, sem ela, a regra direta.
+// null = sem limite.
+export interface CategoryRules {
+  minAthletes: number | null;
+  maxAthletes: number | null;
+  minAge: number | null;
+  maxAge: number | null;
+  // Data em que a idade é conferida (YYYY-MM-DD).
+  ageCutoffDate: string | null;
+}
+
 export interface CategoryCriterionLabel {
   key: CategoryCriterionKey;
   // Id da opção, ou o próprio nível ("4.2", "4-nt") no Nível.
@@ -147,6 +159,7 @@ export class Category {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 
-  // Não é coluna: preenchido por CategoryCriteriaService.attachLabels.
+  // Não são colunas: preenchidos por CategoryCriteriaService.attachLabels.
   criteriaLabels?: CategoryCriterionLabel[];
+  rules?: CategoryRules;
 }

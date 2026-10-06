@@ -4,12 +4,14 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { AthletesService } from '../services/athletes.service';
 import { CreateAthleteLinkDto } from '../dto/create-athlete-link.dto';
+import { SetAthleteBirthDateDto } from '../dto/set-athlete-birth-date.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -35,9 +37,7 @@ export class AthleteRosterController {
   @Get('pending-count')
   async pendingCount(@Req() req: AuthenticatedRequest) {
     return {
-      count: await this.athletesService.countPendingForProgram(
-        req.user.userId,
-      ),
+      count: await this.athletesService.countPendingForProgram(req.user.userId),
     };
   }
 
@@ -49,6 +49,19 @@ export class AthleteRosterController {
   @Delete(':id')
   remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.athletesService.remove(req.user.userId, id);
+  }
+
+  @Patch(':id/birth-date')
+  setBirthDate(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: SetAthleteBirthDateDto,
+  ) {
+    return this.athletesService.setBirthDate(
+      req.user.userId,
+      id,
+      dto.birthDate ?? null,
+    );
   }
 
   @Post(':id/confirm')
