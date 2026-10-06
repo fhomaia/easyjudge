@@ -3309,3 +3309,70 @@ continua com o desktop como alvo principal, mas agora funciona em 412px.
 - **Não testado por automação**: as mudanças de layout foram feitas e
   conferidas pelo usuário; só o fix do seletor (ver gotcha "Tela rolando
   sozinha ao abrir um `Select`") foi investigado nesta sessão.
+
+# Movido do CLAUDE.md em 2026-10-06 (seções de 2026-09-24)
+
+## Avaliações do evento e da plataforma (2026-09-24)
+
+Pedido do usuário: feedback separado do evento e da plataforma, pra um
+não contaminar o outro. Só nota (1 a 5 estrelas) e comentário opcional.
+
+- **Backend**: módulo `feedback` (tabelas próprias, migration
+  `CreateFeedbacks`, só cria tabelas). `EventFeedback` (`event_feedbacks`,
+  único por `alias_id`+`user_id`, editável; `PUT/GET
+  /events/:id/feedback/me` pra qualquer papel do evento, a qualquer
+  momento depois de publicado; quem tem papel admin/assessor NÃO avalia, mesmo
+  acumulando jurado — pego no teste). `GET /events/:id/feedback`
+  (admin/assessor) lista com nome, email e papéis de quem avaliou
+  (decisão do usuário: o produtor vê quem avaliou). `PlatformFeedback`
+  (`platform_feedbacks`, cada envio uma linha, guarda tipo da conta e
+  tela de origem); `POST /feedback/platform` qualquer logado; `GET` só o
+  dono da plataforma (`IMPERSONATOR_EMAIL`, mesma exceção do "ver
+  como"), senão 403.
+- **Frontend**: `FeedbackDialog` genérico (estrelas `StarRating` +
+  comentário) usado pelos dois. "Avaliar a Cheer Cup" = ícone no rodapé
+  do `AppSidebar` e do `MobileNavSheet` (`PlatformFeedbackDialog`, manda
+  o path atual). Avaliação do evento: popup único `EventFeedbackHost`
+  (montado no App, aberto por `useEventFeedbackStore.open(event)`;
+  `canRateEvent` = publicado em diante e sem papel admin/assessor), com
+  entrada no menu do evento ("Avaliar evento" abaixo de Notificações,
+  `sidebarOnly` = fica fora da barra inferior mobile) e coração ao lado
+  do sininho no cabeçalho mobile do Início e de Súmulas
+  (`EventFeedbackHeaderButton`). Produtor vê as avaliações na
+  tela Métricas do evento (`FeedbackOverview`: média, distribuição,
+  lista). Dono da plataforma: ícone de caixa de entrada no rodapé do
+  menu → `/admin/feedback` (`PlatformFeedbackPage`).
+
+## Súmula fiel à árvore do sistema de pontuação (2026-09-24)
+
+- **Causa da ordem errada**: `ScoringCriteriaService.findAllForTemplateUnchecked`
+  ordena a lista inteira por `order`, que é a posição ENTRE IRMÃOS — misturava
+  os níveis e os grupos saíam fora da ordem (Jump antes de Stunt). Além disso,
+  o detalhe da súmula e a folha do jurado (`buildGroups`) reordenavam cada grupo
+  por `order` depois de montar, intercalando subgrupos. Agora
+  `sortCriteriaByTree` (pré-ordem, cada nível pelo `order`) roda em
+  `loadPresentationContext`, `buildGroups` percorre essa lista, e as duas
+  reordenações por `order` foram removidas. Vale pro detalhe (admin/programa/
+  atleta), PDF baixado, folha do jurado e painel Head Judge.
+- **Árvore inteira no detalhe**: todo critério do template aparece, mesmo sem
+  jurado escalado (nota "—"); com isso a nota máxima exibida (soma dos
+  critérios) passa a ser o total do template. Cada critério traz
+  `subgroupPath` (subgrupos entre o grupo raiz e ele); `criteriaWithSubgroups`
+  (web/lib) intercala subtítulos na tela e no PDF, com recuo por nível.
+  Critério solto no primeiro nível (`isStandaloneCriterion`) vira cartão/faixa
+  de uma linha, sem repetir o nome.
+- **PDF**: grupos com `pageBreak: "avoid"` (não cortam entre páginas quando
+  cabem numa); notas com `formatCriterionScore` (1 a 2 casas, vírgula) — antes
+  `toFixed(1)` mostrava 9,25 como 9.3 e a soma das linhas não batia com o total.
+- **Faixa de pontuação na súmula**: quando o critério usa faixas e tem nota,
+  mostra a faixa em que a nota caiu (mesma regra da tela do jurado,
+  `findMatchingBand`: sobreposição → a de início mais baixo). Tela:
+  `CurrentBandBadge` embaixo do nome. PDF: coluna "Faixa" (nome na cor da
+  faixa) só nos grupos em que algum critério usa faixas; no critério solto do
+  primeiro nível, o nome da faixa vai em branco na própria faixa azul.
+- **Exemplos locais**: no Easy Judge Cup, dia 14/07, categorias "Team Cheer All
+  Star COED Nível 5 (exemplo)" (Team Cheer (Coed), Aurora, 4 jurados com
+  comentários, Stunt Difficulty com 2 jurados, dedução) e "Team Cheer COED
+  Non-Tumbling (exemplo subgrupos)" (template de 58 pts com subgrupos, Fenix);
+  ids em `zz_example_ids`. Validado gerando o PDF real no Node (bundle do
+  `presentationDetailExport` com rolldown) e convertendo com `pdftoppm`.

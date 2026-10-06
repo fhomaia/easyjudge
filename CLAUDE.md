@@ -1172,68 +1172,20 @@ qualquer evento, unidade = categoria em um dia.
 
 ## Avaliações do evento e da plataforma (2026-09-24)
 
-Pedido do usuário: feedback separado do evento e da plataforma, pra um
-não contaminar o outro. Só nota (1 a 5 estrelas) e comentário opcional.
-
-- **Backend**: módulo `feedback` (tabelas próprias, migration
-  `CreateFeedbacks`, só cria tabelas). `EventFeedback` (`event_feedbacks`,
-  único por `alias_id`+`user_id`, editável; `PUT/GET
-  /events/:id/feedback/me` pra qualquer papel do evento, a qualquer
-  momento depois de publicado; quem tem papel admin/assessor NÃO avalia, mesmo
-  acumulando jurado — pego no teste). `GET /events/:id/feedback`
-  (admin/assessor) lista com nome, email e papéis de quem avaliou
-  (decisão do usuário: o produtor vê quem avaliou). `PlatformFeedback`
-  (`platform_feedbacks`, cada envio uma linha, guarda tipo da conta e
-  tela de origem); `POST /feedback/platform` qualquer logado; `GET` só o
-  dono da plataforma (`IMPERSONATOR_EMAIL`, mesma exceção do "ver
-  como"), senão 403.
-- **Frontend**: `FeedbackDialog` genérico (estrelas `StarRating` +
-  comentário) usado pelos dois. "Avaliar a Cheer Cup" = ícone no rodapé
-  do `AppSidebar` e do `MobileNavSheet` (`PlatformFeedbackDialog`, manda
-  o path atual). Avaliação do evento: popup único `EventFeedbackHost`
-  (montado no App, aberto por `useEventFeedbackStore.open(event)`;
-  `canRateEvent` = publicado em diante e sem papel admin/assessor), com
-  entrada no menu do evento ("Avaliar evento" abaixo de Notificações,
-  `sidebarOnly` = fica fora da barra inferior mobile) e coração ao lado
-  do sininho no cabeçalho mobile do Início e de Súmulas
-  (`EventFeedbackHeaderButton`). Produtor vê as avaliações na
-  tela Métricas do evento (`FeedbackOverview`: média, distribuição,
-  lista). Dono da plataforma: ícone de caixa de entrada no rodapé do
-  menu → `/admin/feedback` (`PlatformFeedbackPage`).
+Resumo; texto completo movido em 2026-10-06 para `docs/CLAUDE_HISTORY.md`.
+Módulo `feedback`: `EventFeedback` (1 por pessoa por evento, editável,
+admin/assessor não avaliam; produtor vê nas Métricas) e
+`PlatformFeedback` (cada envio uma linha; só o dono da plataforma,
+`IMPERSONATOR_EMAIL`, lista em `/admin/feedback`). `FeedbackDialog` com
+estrelas; "Avaliar a Cheer Cup" no rodapé do menu.
 
 ## Súmula fiel à árvore do sistema de pontuação (2026-09-24)
 
-- **Causa da ordem errada**: `ScoringCriteriaService.findAllForTemplateUnchecked`
-  ordena a lista inteira por `order`, que é a posição ENTRE IRMÃOS — misturava
-  os níveis e os grupos saíam fora da ordem (Jump antes de Stunt). Além disso,
-  o detalhe da súmula e a folha do jurado (`buildGroups`) reordenavam cada grupo
-  por `order` depois de montar, intercalando subgrupos. Agora
-  `sortCriteriaByTree` (pré-ordem, cada nível pelo `order`) roda em
-  `loadPresentationContext`, `buildGroups` percorre essa lista, e as duas
-  reordenações por `order` foram removidas. Vale pro detalhe (admin/programa/
-  atleta), PDF baixado, folha do jurado e painel Head Judge.
-- **Árvore inteira no detalhe**: todo critério do template aparece, mesmo sem
-  jurado escalado (nota "—"); com isso a nota máxima exibida (soma dos
-  critérios) passa a ser o total do template. Cada critério traz
-  `subgroupPath` (subgrupos entre o grupo raiz e ele); `criteriaWithSubgroups`
-  (web/lib) intercala subtítulos na tela e no PDF, com recuo por nível.
-  Critério solto no primeiro nível (`isStandaloneCriterion`) vira cartão/faixa
-  de uma linha, sem repetir o nome.
-- **PDF**: grupos com `pageBreak: "avoid"` (não cortam entre páginas quando
-  cabem numa); notas com `formatCriterionScore` (1 a 2 casas, vírgula) — antes
-  `toFixed(1)` mostrava 9,25 como 9.3 e a soma das linhas não batia com o total.
-- **Faixa de pontuação na súmula**: quando o critério usa faixas e tem nota,
-  mostra a faixa em que a nota caiu (mesma regra da tela do jurado,
-  `findMatchingBand`: sobreposição → a de início mais baixo). Tela:
-  `CurrentBandBadge` embaixo do nome. PDF: coluna "Faixa" (nome na cor da
-  faixa) só nos grupos em que algum critério usa faixas; no critério solto do
-  primeiro nível, o nome da faixa vai em branco na própria faixa azul.
-- **Exemplos locais**: no Easy Judge Cup, dia 14/07, categorias "Team Cheer All
-  Star COED Nível 5 (exemplo)" (Team Cheer (Coed), Aurora, 4 jurados com
-  comentários, Stunt Difficulty com 2 jurados, dedução) e "Team Cheer COED
-  Non-Tumbling (exemplo subgrupos)" (template de 58 pts com subgrupos, Fenix);
-  ids em `zz_example_ids`. Validado gerando o PDF real no Node (bundle do
-  `presentationDetailExport` com rolldown) e convertendo com `pdftoppm`.
+Resumo; texto completo movido em 2026-10-06 para `docs/CLAUDE_HISTORY.md`.
+`sortCriteriaByTree` (pré-ordem, `order` é posição entre irmãos) em
+`loadPresentationContext` e `buildGroups`; detalhe mostra a árvore inteira
+(nota "—" sem jurado) com `subgroupPath`; PDF com grupos sem quebra e notas
+com `formatCriterionScore`; faixa da nota (`findMatchingBand`) na súmula.
 
 ## Valores fixos em itens de avaliação + modelo USS na régua Level 3-5 (2026-09-24)
 
@@ -1882,8 +1834,8 @@ está aqui; a primeira, com liga/desliga por evento, foi descartada).
   o nome: Vínculo institucional, Regime de competição (Novice/Prep/Elite),
   Faixa etária, Gênero, Nível, Tamanho (`CRITERION_ORDER`, espelhado em
   `categories/category-criteria.ts` e `web/src/lib/categoryCriteria.ts`).
-  **Nível é obrigatório** (como a modalidade); os demais, cada categoria
-  usa se quiser (null = não usa). Tamanho só em Team Cheer e Custom
+  **Nível e Gênero são obrigatórios** (como a modalidade); os demais, cada
+  categoria usa se quiser (null = não usa). Tamanho só em Team Cheer e Custom
   (`sizeAllowedFor`; nos stunts a API zera).
 - **Categoria**: `institution`/`gender` (colunas antigas `modality`/
   `division`, de enum para varchar; os ids das opções padrão são os
@@ -1963,13 +1915,71 @@ está aqui; a primeira, com liga/desliga por evento, foi descartada).
   hover/toque (`TruncatedText`).
 - **"Programas e equipes" virou "Inscrições"** (card do Setup, título da
   tela, subtítulo "Programas, equipes e atletas"); rota continua
-  `/events/:id/programs`. Abas: Inscrições (`?tab=registration`, por
-  enquanto o convite/compartilhar/prazo; depois documentos dos atletas e
-  pagamento) | Programas (padrão) | Solicitações.
+  `/events/:id/programs`. Abas: Configurações (`?tab=registration`: convite,
+  prazo de inscrição em seção própria e dados/documentos pedidos aos
+  atletas; depois pagamento) | Inscrições (lista de programas, padrão) |
+  Solicitações.
 - **Testado**: script HTTP com contas descartáveis (32 verificações:
   regras por opção e direta, data da conta/elenco/evento, trava ao marcar
   e ao mover, 409 ao sobrescrever data da conta, envio bloqueado e
   liberado). Telas conferidas pelo usuário.
+
+## Dados dos atletas na inscrição + aba Inscrições do produtor (2026-10-06)
+
+- **Configuração** (aba **Configurações** da tela de Inscrições,
+  `?tab=registration`, com título "Configurações da inscrição"): convite
+  com "Compartilhar evento", **prazo de inscrição em seção própria**
+  (salva na hora) e "Dados e documentos dos atletas". Tabela
+  `registration_settings` (uma linha por `aliasId`, jsonb `requirements`;
+  sem linha = só Data de nascimento), `GET/PUT
+  /events/:id/registration-settings` (admin/assessor). Nome e Email sempre
+  pedidos (fixos, cadeado). Sugestões: data de nascimento (já ativa),
+  identidade, comprovante de vínculo escolar/universitário (já valendo só
+  pra esses vínculos), CPF, telefone, contato de emergência; itens próprios
+  do tipo documento, texto, lista de opções (caixas, Enter cria a próxima)
+  ou data. Cada item: nome, orientação, obrigatório, "Vale para" (todas as
+  categorias ou opções de divisões, `requirementApplies`). Ordem = ordem do
+  formulário (arrastar ou setas). **Data, CPF e telefone têm nome e tipo
+  fixos** (`LOCKED_LABEL_PRESETS`: validação/máscara própria).
+- **Única opção do produtor: `allowSubmitWithoutDocuments`** (o programa
+  envia a ficha sem todos os documentos; completam até o prazo). Dados
+  obrigatórios SEMPRE bloqueiam o envio.
+- **Respostas**: `athlete_requirement_values` (uma por atleta do evento e
+  item; CASCADE com o atleta). Data de nascimento e CPF NÃO ficam aí: usam
+  o valor único do atleta (conta > elenco > atleta do evento para a data;
+  conta > atleta do evento para o CPF), travados (cadeado) quando vêm da
+  conta. `GET/PUT /events/:id/programs/:programId/athletes/:athleteId/
+  requirements[/:requirementId]` (staff ou o programa dono, pelo
+  `ProgramAccessGuard`). `AthleteRequirementsPanel` mostra/edita (aba Dados
+  pessoais do atleta no produtor, "Dados da inscrição" na ficha do
+  programa). "Editar atleta" também trava CPF/nascimento da conta
+  (`accountCpf`/`accountBirthDate` no `ProgramAthleteView`).
+- **Pendências** (`computeIssuesBatch`, carga única pro evento, ~12
+  consultas qualquer que seja o número de programas): número de atletas,
+  idade, falta de data, dado obrigatório (`missing_requirement`, sempre
+  `blocking`) e `documentsPendingCount`. Documentos ainda não bloqueiam (sem
+  envio de arquivo ainda); quando houver, bloqueiam salvo
+  `allowSubmitWithoutDocuments`.
+- **Aba Inscrições do produtor** (lista de programas, padrão): inclui
+  RASCUNHOS (`GET /programs?includeDrafts=true`; o resto do evento continua
+  só com fichas enviadas). Tags: status (Rascunho / Enviada / Liberada para
+  edição), "Inscrito pelo organizador" (cadastro do produtor que o programa
+  nunca enviou: `program_participations.submitted_by`, gravado no envio
+  pela ficha), "N pendências" (leva à aba **Pendências** da ficha, nova, com
+  "Preencher") e "N documentos pendentes". Filtro por status. Perfis da
+  lista numa consulta só (era uma por programa). Botões: "Inscrever
+  programa", "Abrir ficha de inscrição"; card do Setup: "Configurar
+  inscrições" / "Ver inscrições" / "Ver solicitações".
+- **Também**: Gênero obrigatório nas categorias (como Nível).
+- **Migrations**: `CreateRegistrationSettings`,
+  `CreateAthleteRequirementValues`, `AddProgramSubmittedBy` (rodadas no
+  Neon pelo usuário antes do push).
+- **Testado**: scripts HTTP com contas descartáveis (configuração,
+  respostas e validações, pendências bloqueando/liberando o envio, lista com
+  rascunhos, pendências por programa).
+- **Falta**: envio de documentos (bucket R2 PRIVADO, os arquivos não podem
+  ir pro `cdn` público), lado do atleta ("Inscreva-se aqui", biblioteca de
+  documentos), contestação, limpeza 30 dias após o evento.
 
 ## Inscrição de campeonato pelo próprio programa (2026-10-05)
 
@@ -2207,11 +2217,11 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
 
 ## Próximos passos (não iniciados ainda)
 
-0. **Documentos e dados dos atletas na inscrição** (desenhado em
-   2026-10-06, não iniciado; decisões na memória do Claude): exigências
-   configuradas na aba Inscrições, inscrição do lado do atleta, biblioteca
-   de documentos na conta, contestação pelo produtor, cópias do evento
-   apagadas 30 dias depois. Depois: regras de crossover e pagamento.
+0. **Documentos dos atletas e lado do atleta** (dados já feitos, ver
+   "Dados dos atletas na inscrição"): envio de arquivos com bucket R2
+   privado, biblioteca de documentos na conta, "Inscreva-se aqui" do
+   atleta, contestação pelo produtor, cópias apagadas 30 dias depois do
+   evento. Depois: regras de crossover e pagamento.
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
 atleta/espectador, transição de status `completed`, endereçamento por
