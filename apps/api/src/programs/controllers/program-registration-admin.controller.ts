@@ -28,6 +28,21 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 export class ProgramRegistrationAdminController {
   constructor(private readonly registrationService: ProgramRegistrationService) {}
 
+  // Pendências de todas as fichas do evento (aba Inscrições: tags de
+  // problemas e de documentos pendentes), inclusive rascunhos.
+  @Get('registration-issues')
+  listIssues(@Param('eventId') eventId: string) {
+    return this.registrationService.issuesForEvent(eventId);
+  }
+
+  @Get('programs/:programId/registration/issues')
+  programIssues(
+    @Param('eventId') eventId: string,
+    @Param('programId') programId: string,
+  ) {
+    return this.registrationService.issuesForProgram(eventId, programId);
+  }
+
   // Todos os pedidos do evento (aba Solicitações da tela de Programas).
   @Get('registration-requests')
   listEventRequests(@Param('eventId') eventId: string) {

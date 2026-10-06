@@ -192,17 +192,26 @@ export class ProgramsService {
     }
   }
 
-  async findAllForEvent(eventId: string): Promise<ProgramParticipation[]> {
+  // `includeDrafts`: só a aba Inscrições do produtor (fichas iniciadas e
+  // não enviadas, com tag de status); o resto do evento (cronograma,
+  // métricas, escala...) continua só com as enviadas.
+  async findAllForEvent(
+    eventId: string,
+    options: { includeDrafts?: boolean } = {},
+  ): Promise<ProgramParticipation[]> {
     const event = await this.eventsService.findEventOrThrow(eventId);
     // Equipes e categorias vêm junto pros cards da tela de Programas e
     // equipes (nome de cada equipe e quantas categorias ela tem).
-    const participations = await this.participationsRepo
+    const query = this.participationsRepo
       .createQueryBuilder('participation')
       .leftJoinAndSelect('participation.teams', 'team')
       .leftJoinAndSelect('team.categories', 'category')
-      .where('participation.aliasId = :aliasId', { aliasId: event.aliasId })
-      // Inscrição do programa em rascunho não aparece pro produtor.
-      .andWhere('participation.submittedAt IS NOT NULL')
+      .where('participation.aliasId = :aliasId', { aliasId: event.aliasId });
+    // Inscrição do programa em rascunho não entra no resto do evento.
+    if (!options.includeDrafts) {
+      query.andWhere('participation.submittedAt IS NOT NULL');
+    }
+    const participations = await query
       .orderBy('participation.createdAt', 'DESC')
       .addOrderBy('team.createdAt', 'ASC')
       .getMany();
@@ -221,7 +230,18 @@ export class ProgramsService {
       p.athletesCount = athleteCounts.get(p.id) ?? 0;
       p.pendingRequestsCount = pendingRequests.get(p.id) ?? 0;
     }
-    return Promise.all(participations.map((p) => this.toProgramView(p)));
+    // Perfis numa consulta só (antes era uma por programa: com 50
+    // programas, ~2 s em produção).
+    const userIds = participations
+      .map((p) => p.userId)
+      .filter((id): id is string => !!id);
+    const profiles = userIds.length
+      ? await this.profilesRepo.findBy({ userId: In(userIds) })
+      : [];
+    const profileByUser = new Map(profiles.map((p) => [p.userId, p]));
+    return participations.map((p) =>
+      this.applyProfile(p, p.userId ? profileByUser.get(p.userId) : undefined),
+    );
   }
 
   // Pedidos da ficha de inscrição ainda não resolvidos (selo na lista).
@@ -778,6 +798,14 @@ export class ProgramsService {
     const profile = await this.profilesRepo.findOneBy({
       userId: participation.userId,
     });
+    return this.applyProfile(participation, profile ?? undefined);
+  }
+
+  // Programa com conta: nome, email, cidade e logo vêm do perfil.
+  private applyProfile(
+    participation: ProgramParticipation,
+    profile: ProgramProfile | undefined,
+  ): ProgramParticipation {
     if (!profile) return participation;
     return {
       ...participation,

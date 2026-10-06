@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -45,9 +46,15 @@ export class ProgramsController {
     return this.programsService.create(eventId, dto, req.user.userId);
   }
 
+  // `?includeDrafts=true`: aba Inscrições (fichas em rascunho também).
   @Get()
-  findAll(@Param('eventId') eventId: string) {
-    return this.programsService.findAllForEvent(eventId);
+  findAll(
+    @Param('eventId') eventId: string,
+    @Query('includeDrafts') includeDrafts?: string,
+  ) {
+    return this.programsService.findAllForEvent(eventId, {
+      includeDrafts: includeDrafts === 'true',
+    });
   }
 
   @Get(':id')

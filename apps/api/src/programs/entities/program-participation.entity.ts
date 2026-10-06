@@ -66,6 +66,12 @@ export class ProgramParticipation {
   @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true })
   submittedAt: Date | null;
 
+  // Quem enviou a ficha pela ficha de inscrição (a conta Programa), no
+  // último envio. Nulo quando quem cadastrou foi o produtor e o programa
+  // nunca enviou: a lista do produtor mostra "Inscrito pelo organizador".
+  @Column({ name: 'submitted_by', type: 'uuid', nullable: true })
+  submittedBy: string | null;
+
   // Organizador devolveu a ficha (já enviada) pro programa editar; volta
   // a nulo quando o programa envia de novo.
   @Column({ name: 'reopened_at', type: 'timestamptz', nullable: true })

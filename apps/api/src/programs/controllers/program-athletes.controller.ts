@@ -17,6 +17,8 @@ import { CreateProgramAthleteDto } from '../dto/create-program-athlete.dto';
 import { UpdateProgramAthleteDto } from '../dto/update-program-athlete.dto';
 import { SetAthleteEntriesDto } from '../dto/set-athlete-entries.dto';
 import { ProgramAccessGuard } from '../guards/program-access.guard';
+import { ProgramAthleteRequirementsService } from '../services/program-athlete-requirements.service';
+import { SetRequirementValueDto } from '../dto/set-requirement-value.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
@@ -25,7 +27,39 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 // Staff (admin/assessor) ou a própria conta Programa, ver ProgramAccessGuard.
 @UseGuards(JwtAuthGuard, ProgramAccessGuard)
 export class ProgramAthletesController {
-  constructor(private readonly athletesService: ProgramAthletesService) {}
+  constructor(
+    private readonly athletesService: ProgramAthletesService,
+    private readonly requirementsService: ProgramAthleteRequirementsService,
+  ) {}
+
+  // Dados pedidos na inscrição (aba Configurações) e as respostas do atleta.
+  @Get(':athleteId/requirements')
+  listRequirements(
+    @Param('eventId') eventId: string,
+    @Param('programId') programId: string,
+    @Param('athleteId') athleteId: string,
+  ) {
+    return this.requirementsService.list(eventId, programId, athleteId);
+  }
+
+  @Put(':athleteId/requirements/:requirementId')
+  setRequirement(
+    @Param('eventId') eventId: string,
+    @Param('programId') programId: string,
+    @Param('athleteId') athleteId: string,
+    @Param('requirementId') requirementId: string,
+    @Body() dto: SetRequirementValueDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.requirementsService.set(
+      eventId,
+      programId,
+      athleteId,
+      requirementId,
+      dto.value ?? null,
+      req.user.userId,
+    );
+  }
 
   @Get()
   findAll(

@@ -9,6 +9,12 @@ import { Category } from '../categories/entities/category.entity';
 import { ProgramRegistrationController } from './controllers/program-registration.controller';
 import { ProgramRegistrationAdminController } from './controllers/program-registration-admin.controller';
 import { RegistrationRequest } from './entities/registration-request.entity';
+import { RegistrationSettings } from './entities/registration-settings.entity';
+import { AthleteRequirementValue } from './entities/athlete-requirement-value.entity';
+import { AthleteLink } from '../athletes/entities/athlete-link.entity';
+import { ProgramAthleteRequirementsService } from './services/program-athlete-requirements.service';
+import { RegistrationSettingsController } from './controllers/registration-settings.controller';
+import { RegistrationSettingsService } from './services/registration-settings.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MailModule } from '../auth/mail.module';
 import { ProgramRegistrationService } from './services/program-registration.service';
@@ -33,6 +39,9 @@ import { CategoriesModule } from '../categories/categories.module';
       Team,
       Category,
       RegistrationRequest,
+      RegistrationSettings,
+      AthleteRequirementValue,
+      AthleteLink,
     ]),
     NotificationsModule,
     MailModule,
@@ -48,11 +57,14 @@ import { CategoriesModule } from '../categories/categories.module';
     ProgramAthletesController,
     ProgramRegistrationController,
     ProgramRegistrationAdminController,
+    RegistrationSettingsController,
   ],
   providers: [
     ProgramsService,
     ProgramAthletesService,
     ProgramRegistrationService,
+    RegistrationSettingsService,
+    ProgramAthleteRequirementsService,
   ],
   exports: [ProgramsService, ProgramAthletesService],
 })

@@ -27,6 +27,7 @@ import { ProgramAthlete } from '../../programs/entities/program-athlete.entity';
 import { ScheduleDay } from '../../schedule/entities/schedule-day.entity';
 import { ScheduleAutoSettings } from '../../schedule/entities/schedule-auto-settings.entity';
 import { CategoryCriteriaSettings } from '../../categories/entities/category-criteria-settings.entity';
+import { RegistrationSettings } from '../../programs/entities/registration-settings.entity';
 import { Regulation } from '../../regulations/entities/regulation.entity';
 import { StorageService } from '../../common/services/storage.service';
 import { JudgeParticipation } from '../../judges/entities/judge-participation.entity';
@@ -54,6 +55,7 @@ import { EVENT_STAFF_ROLES } from '../constants/event-staff-roles';
 const EVENT_SCOPED_ENTITIES = [
   Category,
   CategoryCriteriaSettings,
+  RegistrationSettings,
   // Antes de ProgramParticipation (a FK apagaria em cascata de qualquer
   // jeito; explícito pra não depender disso).
   ProgramAthlete,

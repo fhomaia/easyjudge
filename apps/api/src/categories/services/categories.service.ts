@@ -166,8 +166,8 @@ export class CategoriesService {
     return category;
   }
 
-  // Valores dos critérios de divisão (ver category-criteria.ts). Nível é
-  // obrigatório; os demais, cada categoria usa se quiser (null = não
+  // Valores dos critérios de divisão (ver category-criteria.ts). Nível e
+  // Gênero são obrigatórios; os demais, cada categoria usa se quiser (null = não
   // usa); valor
   // informado precisa ser uma opção do evento. Campo ausente no corpo =
   // mantém o valor atual (edição parcial).
@@ -221,6 +221,10 @@ export class CategoriesService {
       }
 
       const value = category[field];
+      // Gênero é obrigatório, como Nível e Modalidade (2026-10-06).
+      if (criterion.key === CategoryCriterionKey.GENDER && !value) {
+        throw new BadRequestException('Escolha o gênero da categoria.');
+      }
       if (value && !criterion.options.some((o) => o.id === value)) {
         throw new BadRequestException(
           `Opção inválida em ${name}. Recarregue a página e tente de novo.`,

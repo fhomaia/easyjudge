@@ -82,6 +82,23 @@ export class UsersService {
     return new Set(users.map((u) => u.email.toLowerCase()));
   }
 
+  // CPF das contas com esses emails (chave em minúsculas), pra conferir
+  // o CPF pedido na inscrição sem repetir o que a conta já tem.
+  async findCpfsByEmails(emails: string[]): Promise<Map<string, string>> {
+    if (emails.length === 0) return new Map();
+    const users = await this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) IN (:...emails)', {
+        emails: emails.map((e) => e.toLowerCase()),
+      })
+      .andWhere('user.documentType = :type', { type: DocumentType.CPF })
+      .andWhere('user.documentNumber IS NOT NULL')
+      .getMany();
+    return new Map(
+      users.map((u) => [u.email.toLowerCase(), u.documentNumber as string]),
+    );
+  }
+
   // Data de nascimento das contas com esses emails (chave em minúsculas).
   // Usado na ficha de inscrição pra conferir a idade dos atletas do
   // elenco, que não trazem a data no atleta do evento.

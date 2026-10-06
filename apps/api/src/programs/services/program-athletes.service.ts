@@ -19,6 +19,7 @@ import { EventActivityLogService } from '../../events/services/event-activity-lo
 import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
 import { EventsService } from '../../events/services/events.service';
 import { AthletesService } from '../../athletes/services/athletes.service';
+import { UsersService } from '../../users/services/users.service';
 import { ProgramParticipation } from '../entities/program-participation.entity';
 
 export interface ProgramAthleteEntryView {
@@ -34,6 +35,11 @@ export interface ProgramAthleteView {
   email: string;
   cpf: string | null;
   birthDate: string | null;
+  // CPF e data de nascimento da CONTA do atleta (mesmo email), quando
+  // existem: valem antes dos do atleta do evento e não se editam aqui
+  // (uma data/CPF por atleta, 2026-10-06).
+  accountCpf: string | null;
+  accountBirthDate: string | null;
   createdAt: Date;
   entries: ProgramAthleteEntryView[];
 }
@@ -56,6 +62,7 @@ export class ProgramAthletesService {
     private readonly activityLogService: EventActivityLogService,
     private readonly eventsService: EventsService,
     private readonly athletesService: AthletesService,
+    private readonly usersService: UsersService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -79,7 +86,9 @@ export class ProgramAthletesService {
       list.push({ teamId: e.teamId, categoryId: e.categoryId });
       byAthlete.set(e.athleteId, list);
     }
-    return athletes.map((a) => this.toView(a, byAthlete.get(a.id) ?? []));
+    return this.withAccount(
+      athletes.map((a) => this.toView(a, byAthlete.get(a.id) ?? [])),
+    );
   }
 
   async create(
@@ -116,7 +125,7 @@ export class ProgramAthletesService {
       this.displayName(saved),
     );
     await this.requestProgramLink(program, saved, userId);
-    return this.toView(saved, []);
+    return (await this.withAccount([this.toView(saved, [])]))[0];
   }
 
   async update(
@@ -155,10 +164,14 @@ export class ProgramAthletesService {
       await this.requestProgramLink(program, saved, userId);
     }
     const entries = await this.entriesRepo.findBy({ athleteId });
-    return this.toView(
-      saved,
-      entries.map((e) => ({ teamId: e.teamId, categoryId: e.categoryId })),
-    );
+    return (
+      await this.withAccount([
+        this.toView(
+          saved,
+          entries.map((e) => ({ teamId: e.teamId, categoryId: e.categoryId })),
+        ),
+      ])
+    )[0];
   }
 
   async remove(
@@ -246,10 +259,14 @@ export class ProgramAthletesService {
         );
       }
     });
-    return this.toView(
-      athlete,
-      unique.map((e) => ({ teamId: e.teamId, categoryId: e.categoryId })),
-    );
+    return (
+      await this.withAccount([
+        this.toView(
+          athlete,
+          unique.map((e) => ({ teamId: e.teamId, categoryId: e.categoryId })),
+        ),
+      ])
+    )[0];
   }
 
   // Visão da equipe: substitui os atletas de uma equipe numa categoria.
@@ -394,8 +411,27 @@ export class ProgramAthletesService {
       email: a.email,
       cpf: a.cpf,
       birthDate: a.birthDate,
+      accountCpf: null,
+      accountBirthDate: null,
       createdAt: a.createdAt,
       entries,
     };
+  }
+
+  // Preenche CPF e data de nascimento das contas (uma consulta por campo).
+  private async withAccount(
+    views: ProgramAthleteView[],
+  ): Promise<ProgramAthleteView[]> {
+    if (views.length === 0) return views;
+    const emails = views.map((v) => v.email);
+    const [cpfs, birthDates] = await Promise.all([
+      this.usersService.findCpfsByEmails(emails),
+      this.usersService.findBirthDatesByEmails(emails),
+    ]);
+    return views.map((v) => ({
+      ...v,
+      accountCpf: cpfs.get(v.email.toLowerCase()) ?? null,
+      accountBirthDate: birthDates.get(v.email.toLowerCase()) ?? null,
+    }));
   }
 }
