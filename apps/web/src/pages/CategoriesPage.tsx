@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, CalendarDays, MapPin, Plus, Star } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarDays,
+  MapPin,
+  Plus,
+  Star,
+} from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
@@ -10,15 +17,19 @@ import { EventThumbnail } from "@/components/EventThumbnail";
 import { CategoryStatCards } from "@/components/CategoryStatCards";
 import {
   CategoryFiltersBar,
-  type CategoryModalityFilter,
   type CategorySortOption,
   type CategoryStatusFilter,
   type CategoryViewMode,
 } from "@/components/CategoryFiltersBar";
 import { CategoryTable } from "@/components/CategoryTable";
 import { CategoryGridItem } from "@/components/CategoryGridItem";
-import { CreateCategoryDialog } from "@/components/CreateCategoryDialog";
-import { EditCategoryDialog } from "@/components/EditCategoryDialog";
+import {
+  CategoryFiltersPopover,
+  EMPTY_CATEGORY_FILTER,
+  filterCategories,
+  type CategoryFilterState,
+} from "@/components/CategoryFilters";
+
 import { CategoryTeamsSheet } from "@/components/CategoryTeamsSheet";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Pagination } from "@/components/Pagination";
@@ -30,14 +41,13 @@ import { useIsMobile } from "@/lib/useIsMobile";
 import {
   ApiError,
   categoriesApi,
-  eventScoringTemplatesApi,
+  categoryCriteriaApi,
   eventsApi,
-  scoringTemplatesApi,
   teamsApi,
   usersApi,
   type Category,
+  type CategoryCriterion,
   type Event,
-  type ScoringTemplate,
   type TeamWithProgram,
   type UserProfile,
 } from "@/api/client";
@@ -67,17 +77,16 @@ export function CategoriesPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
   const [categories, setCategories] = useState<Category[] | null>(null);
-  const [scoringTemplates, setScoringTemplates] = useState<ScoringTemplate[]>([]);
+  const [criteria, setCriteria] = useState<CategoryCriterion[] | null>(null);
   const [teams, setTeams] = useState<TeamWithProgram[]>([]);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Category | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [teamsTarget, setTeamsTarget] = useState<Category | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CategoryStatusFilter>("all");
-  const [modalityFilter, setModalityFilter] = useState<CategoryModalityFilter>("all");
+  const [criteriaFilter, setCriteriaFilter] =
+    useState<CategoryFilterState>(EMPTY_CATEGORY_FILTER);
   const [sort, setSort] = useState<CategorySortOption>("recent");
   const [teamSort, setTeamSort] = useState<"asc" | "desc" | null>(null);
   const [view, setView] = useState<CategoryViewMode>("list");
@@ -106,53 +115,25 @@ export function CategoriesPage() {
           err instanceof ApiError ? err.message : "Não foi possível carregar as categorias.",
         ),
       );
-    eventScoringTemplatesApi
-      .list(id)
-      .then((templates) =>
-        setScoringTemplates(templates.filter((t) => t.isComplete)),
-      )
-      .catch(() => setScoringTemplates([]));
+    categoryCriteriaApi
+      .get(id)
+      .then(setCriteria)
+      .catch((err) =>
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Não foi possível carregar os critérios de divisão.",
+        ),
+      );
     teamsApi
       .listForEvent(id)
       .then(setTeams)
       .catch(() => setTeams([]));
   }, [id]);
 
-  // Uma categoria já criada pode usar um template que foi removido da
-  // seleção do evento depois (ver ScoringTemplatesSummarySection) — a
-  // seleção é só um filtro pra NOVAS atribuições, não desfaz as já
-  // feitas. Sem isso, o seletor de "Sistema de pontuação" no editar
-  // mostraria em branco pra essa categoria, mesmo com um id válido
-  // salvo. Roda de novo sempre que `categories`/`scoringTemplates`
-  // mudam, mas estabiliza sozinho (na segunda vez não acha mais nada
-  // faltando).
-  useEffect(() => {
-    if (!categories) return;
-    const knownIds = new Set(scoringTemplates.map((t) => t.id));
-    const missingIds = [
-      ...new Set(
-        categories
-          .map((c) => c.scoringTemplateId)
-          .filter((templateId): templateId is string => !!templateId && !knownIds.has(templateId)),
-      ),
-    ];
-    if (missingIds.length === 0) return;
-    Promise.all(missingIds.map((templateId) => scoringTemplatesApi.get(templateId).catch(() => null))).then(
-      (fetched) => {
-        const found = fetched.filter((t): t is ScoringTemplate => t !== null);
-        if (found.length === 0) return;
-        setScoringTemplates((prev) => {
-          const existingIds = new Set(prev.map((t) => t.id));
-          const newOnes = found.filter((t) => !existingIds.has(t.id));
-          return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
-        });
-      },
-    );
-  }, [categories, scoringTemplates]);
-
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, modalityFilter, sort, teamSort]);
+  }, [search, statusFilter, criteriaFilter, sort, teamSort]);
 
   const teamsByCategory = useMemo(() => {
     const map = new Map<string, TeamWithProgram[]>();
@@ -173,14 +154,10 @@ export function CategoriesPage() {
   }, [teamsByCategory]);
 
   const filteredCategories = useMemo(() => {
-    const list = categories ?? [];
-    const query = search.trim().toLowerCase();
-    const filtered = list.filter((category) => {
-      if (statusFilter !== "all" && category.status !== statusFilter) return false;
-      if (modalityFilter !== "all" && category.modality !== modalityFilter) return false;
-      if (query && !category.name.toLowerCase().includes(query)) return false;
-      return true;
-    });
+    const list = filterCategories(categories ?? [], { ...criteriaFilter, search });
+    const filtered = list.filter(
+      (category) => statusFilter === "all" || category.status === statusFilter,
+    );
     if (teamSort) {
       const sorted = [...filtered];
       sorted.sort((a, b) => {
@@ -191,7 +168,7 @@ export function CategoriesPage() {
       return sorted;
     }
     return sortCategories(filtered, sort);
-  }, [categories, search, statusFilter, modalityFilter, sort, teamSort, teamCounts]);
+  }, [categories, search, statusFilter, criteriaFilter, sort, teamSort, teamCounts]);
 
   const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -205,12 +182,8 @@ export function CategoriesPage() {
     navigate("/login");
   }
 
-  function handleCreated(category: Category) {
-    setCategories((prev) => [category, ...(prev ?? [])]);
-  }
-
-  function handleUpdated(category: Category) {
-    setCategories((prev) => prev?.map((c) => (c.id === category.id ? category : c)) ?? prev);
+  function openEdit(category: Category) {
+    navigate(`/events/${id}/categories/${category.id}/edit`);
   }
 
   async function handleDelete() {
@@ -230,7 +203,9 @@ export function CategoriesPage() {
 
       {/* `pt-14 sm:pt-0`: espaço da barra fixa do AppSidebar no celular. */}
       <main className="relative flex-1 overflow-y-auto pt-14 sm:pt-0">
-        <PageLoadingOverlay loading={(!event || categories === null) && !error} />
+        <PageLoadingOverlay
+          loading={(!event || categories === null || criteria === null) && !error}
+        />
         <div className="flex items-center justify-between px-4 pt-6 sm:px-10">
           <button
             type="button"
@@ -269,7 +244,7 @@ export function CategoriesPage() {
             </div>
           )}
 
-          {categories !== null && (
+          {categories !== null && criteria !== null && (
             <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
@@ -278,7 +253,10 @@ export function CategoriesPage() {
                     Gerencie todas as categorias que farão parte do seu evento.
                   </p>
                 </div>
-                <Button className="w-full sm:w-auto" onClick={() => setCreateOpen(true)}>
+                <Button
+                  className="w-full sm:w-auto"
+                  onClick={() => navigate(`/events/${id}/categories/new`)}
+                >
                   <Plus data-icon="inline-start" />
                   Adicionar categoria
                 </Button>
@@ -293,8 +271,15 @@ export function CategoriesPage() {
                     onSearchChange={setSearch}
                     statusFilter={statusFilter}
                     onStatusFilterChange={setStatusFilter}
-                    modalityFilter={modalityFilter}
-                    onModalityFilterChange={setModalityFilter}
+                    filters={
+                      <CategoryFiltersPopover
+                        categories={categories}
+                        criteria={criteria}
+                        value={criteriaFilter}
+                        onChange={setCriteriaFilter}
+                        className="w-full sm:w-auto"
+                      />
+                    }
                     sort={sort}
                     onSortChange={setSort}
                     view={view}
@@ -311,7 +296,7 @@ export function CategoriesPage() {
                       teamCounts={teamCounts}
                       teamSort={teamSort}
                       onTeamSortChange={setTeamSort}
-                      onEdit={setEditTarget}
+                      onEdit={openEdit}
                       onDelete={setDeleteTarget}
                       onViewTeams={setTeamsTarget}
                     />
@@ -328,7 +313,7 @@ export function CategoriesPage() {
                           key={category.id}
                           category={category}
                           teamCount={teamCounts.get(category.id) ?? 0}
-                          onEdit={setEditTarget}
+                          onEdit={openEdit}
                           onDelete={setDeleteTarget}
                           onViewTeams={setTeamsTarget}
                         />
@@ -352,7 +337,7 @@ export function CategoriesPage() {
                 </>
               ) : (
                 <div className="flex min-h-[40vh] items-center justify-center">
-                  <Button size="lg" onClick={() => setCreateOpen(true)}>
+                  <Button size="lg" onClick={() => navigate(`/events/${id}/categories/new`)}>
                     <Plus data-icon="inline-start" />
                     Adicionar categoria
                   </Button>
@@ -385,26 +370,6 @@ export function CategoriesPage() {
           )}
         </div>
       </main>
-
-      {id && (
-        <CreateCategoryDialog
-          eventId={id}
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          onCreated={handleCreated}
-          scoringTemplates={scoringTemplates}
-        />
-      )}
-
-      {id && (
-        <EditCategoryDialog
-          eventId={id}
-          category={editTarget}
-          onOpenChange={(open) => !open && setEditTarget(null)}
-          onUpdated={handleUpdated}
-          scoringTemplates={scoringTemplates}
-        />
-      )}
 
       <CategoryTeamsSheet
         category={teamsTarget}

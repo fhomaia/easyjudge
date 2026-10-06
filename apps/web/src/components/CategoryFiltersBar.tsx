@@ -8,22 +8,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { MODALITY_LABELS, STATUS_LABELS } from "@/lib/categoryLabels";
-import type { CategoryModality, CategoryStatus } from "@/api/client";
+import { STATUS_LABELS } from "@/lib/categoryLabels";
+import type { CategoryStatus } from "@/api/client";
 
 export type CategoryStatusFilter = "all" | CategoryStatus;
-export type CategoryModalityFilter = "all" | CategoryModality;
 export type CategorySortOption = "recent" | "oldest" | "name";
 export type CategoryViewMode = "list" | "grid";
 
 const STATUS_FILTER_LABELS: Record<CategoryStatusFilter, string> = {
   all: "Todos os status",
   ...STATUS_LABELS,
-};
-
-const MODALITY_FILTER_LABELS: Record<CategoryModalityFilter, string> = {
-  all: "Todas as divisões",
-  ...MODALITY_LABELS,
 };
 
 const SORT_LABELS: Record<CategorySortOption, string> = {
@@ -37,8 +31,9 @@ interface CategoryFiltersBarProps {
   onSearchChange: (value: string) => void;
   statusFilter: CategoryStatusFilter;
   onStatusFilterChange: (value: CategoryStatusFilter) => void;
-  modalityFilter: CategoryModalityFilter;
-  onModalityFilterChange: (value: CategoryModalityFilter) => void;
+  // Botão "Filtros" (modalidade e critérios de divisão), ver
+  // CategoryFiltersPopover.
+  filters: React.ReactNode;
   sort: CategorySortOption;
   onSortChange: (value: CategorySortOption) => void;
   view: CategoryViewMode;
@@ -50,8 +45,7 @@ export function CategoryFiltersBar({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
-  modalityFilter,
-  onModalityFilterChange,
+  filters,
   sort,
   onSortChange,
   view,
@@ -69,7 +63,7 @@ export function CategoryFiltersBar({
         />
       </div>
 
-      {/* Celular: modalidade na linha inteira, status e ordenação lado a
+      {/* Celular: filtros na linha inteira, status e ordenação lado a
           lado embaixo; a partir de `sm`, `contents` devolve os três pra
           linha da barra, na ordem de sempre. */}
       <div className="grid grid-cols-2 gap-2 sm:contents">
@@ -89,23 +83,7 @@ export function CategoryFiltersBar({
         </SelectContent>
       </Select>
 
-      <Select
-        value={modalityFilter}
-        onValueChange={(value) => onModalityFilterChange(value as CategoryModalityFilter)}
-      >
-        <SelectTrigger className="order-first col-span-2 w-full min-w-0 sm:order-none sm:w-60">
-          <SelectValue>
-            {(value: CategoryModalityFilter) => MODALITY_FILTER_LABELS[value]}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.keys(MODALITY_FILTER_LABELS) as CategoryModalityFilter[]).map((key) => (
-            <SelectItem key={key} value={key}>
-              {MODALITY_FILTER_LABELS[key]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="order-first col-span-2 grid sm:order-none sm:flex">{filters}</div>
 
       <Select value={sort} onValueChange={(value) => onSortChange(value as CategorySortOption)}>
         <SelectTrigger className="w-full min-w-0 sm:w-44">

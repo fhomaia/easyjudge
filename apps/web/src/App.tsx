@@ -68,6 +68,9 @@ const RegulationPage = lazy(() =>
 const CategoriesPage = lazy(() =>
   import("@/pages/CategoriesPage").then((m) => ({ default: m.CategoriesPage })),
 );
+const CategoryFormPage = lazy(() =>
+  import("@/pages/CategoryFormPage").then((m) => ({ default: m.CategoryFormPage })),
+);
 const ProgramsPage = lazy(() =>
   import("@/pages/ProgramsPage").then((m) => ({ default: m.ProgramsPage })),
 );
@@ -173,6 +176,11 @@ function App() {
           <Route path="/events/:id/metrics" element={<EventMetricsPage />} />
           <Route path="/events/:id/regulation" element={<RegulationPage />} />
           <Route path="/events/:id/categories" element={<CategoriesPage />} />
+          <Route path="/events/:id/categories/new" element={<CategoryFormPage />} />
+          <Route
+            path="/events/:id/categories/:categoryId/edit"
+            element={<CategoryFormPage />}
+          />
           <Route path="/events/:id/programs" element={<ProgramsPage />} />
           <Route path="/events/:id/registration" element={<EventRegistrationPage />} />
           <Route

@@ -1,28 +1,11 @@
-import type {
-  CategoryDivision,
-  CategoryFormat,
-  CategoryModality,
-  CategoryStatus,
-} from "@/api/client";
+import type { CategoryFormat, CategoryStatus } from "@/api/client";
 
-// Nomenclatura da plataforma (2026-10-05) x nomes no código:
+// Nomenclatura da plataforma x nomes no código:
 // - "Modalidade" na tela = `categoryFormat` (FORMAT_LABELS: Team Cheer,
 //   Group Stunt, Elite Stunt...);
-// - "Divisão" = `modality` (MODALITY_LABELS: All Star, Universitário,
-//   Escolar);
-// - "Gênero" = `division` (DIVISION_LABELS: COED, All Girl, All Boy).
-export const MODALITY_LABELS: Record<CategoryModality, string> = {
-  all_star: "All Star",
-  university: "Universitário",
-  school: "Escolar",
-};
-
-export const DIVISION_LABELS: Record<CategoryDivision, string> = {
-  coed: "COED",
-  all_girl: "All Girl",
-  all_boy: "All Boy",
-};
-
+// - os demais (Vínculo institucional, Regime, Faixa etária, Gênero,
+//   Nível, Tamanho) são critérios de divisão configuráveis por evento,
+//   ver lib/categoryCriteria.ts.
 export const FORMAT_LABELS: Record<CategoryFormat, string> = {
   team_cheer: "Team Cheer",
   group_stunt: "Group Stunt",
@@ -52,19 +35,4 @@ export function formatLabelFor(
 ): string {
   if (categoryFormat === "custom" && customFormatLabel) return customFormatLabel;
   return FORMAT_LABELS[categoryFormat];
-}
-
-// Nome automático de uma categoria criada em lote (por nível): junção
-// de formato, modalidade, divisão e nível, nessa ordem — decisão do
-// usuário pra evitar nomes duplicados ao criar uma categoria por nível
-// selecionado.
-export function buildCategoryName(
-  categoryFormat: CategoryFormat,
-  modality: CategoryModality,
-  division: CategoryDivision,
-  level: number,
-  customFormatLabel?: string | null,
-): string {
-  const formatLabel = formatLabelFor(categoryFormat, customFormatLabel);
-  return `${formatLabel} ${MODALITY_LABELS[modality]} ${DIVISION_LABELS[division]} Nível ${level}`;
 }

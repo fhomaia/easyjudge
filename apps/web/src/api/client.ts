@@ -529,8 +529,6 @@ export const eventStaffApi = {
 };
 
 export type CategoryStatus = "active" | "inactive";
-export type CategoryModality = "all_star" | "university" | "school";
-export type CategoryDivision = "coed" | "all_girl" | "all_boy";
 export type CategoryFormat =
   "team_cheer" | "group_stunt" | "coed" | "partner" | "custom";
 
@@ -541,12 +539,28 @@ export interface Category {
   // atletas a equipe marcou nesta categoria.
   athletesCount?: number;
   name: string;
-  modality: CategoryModality;
-  division: CategoryDivision;
   categoryFormat: CategoryFormat;
   customFormatLabel: string | null;
-  level: number;
+  // Critérios de divisão: id da opção escolhida (ver CategoryCriterion),
+  // null quando a categoria não usa o critério.
+  institution: string | null;
+  regime: string | null;
+  ageGroup: string | null;
+  gender: string | null;
+  size: string | null;
+  // Construção.tumbling (4.2 = construção 4, tumbling 2). Obrigatório
+  // (null só em dado antigo).
+  level: number | null;
   nonTumbling: boolean;
+  // Regra direta (sem divisão de Tamanho/Faixa etária); null = sem limite.
+  minAthletes: number | null;
+  maxAthletes: number | null;
+  minAge: number | null;
+  maxAge: number | null;
+  // Data em que a idade da regra direta é conferida; null = a padrão.
+  ageCutoffDate: string | null;
+  // Critérios que a categoria usa, na ordem fixa, já com o rótulo da opção.
+  criteriaLabels?: CategoryCriterionLabel[];
   status: CategoryStatus;
   scoringTemplateId: string | null;
   scoringTemplate: { id: string; name: string; isSystemTemplate?: boolean; source?: string | null } | null;
@@ -558,12 +572,20 @@ export interface Category {
 
 export interface CategoryPayload {
   name: string;
-  modality: CategoryModality;
-  division: CategoryDivision;
   categoryFormat: CategoryFormat;
   customFormatLabel?: string | null;
-  level: number;
-  nonTumbling: boolean;
+  institution?: string | null;
+  regime?: string | null;
+  ageGroup?: string | null;
+  gender?: string | null;
+  size?: string | null;
+  level?: number | null;
+  nonTumbling?: boolean;
+  minAthletes?: number | null;
+  maxAthletes?: number | null;
+  minAge?: number | null;
+  maxAge?: number | null;
+  ageCutoffDate?: string | null;
   scoringTemplateId: string;
   presentationTimeSeconds: number;
   warmupMinutes: number;
@@ -592,6 +614,56 @@ export const categoriesApi = {
   remove: (eventId: string, id: string) =>
     authRequest<void>(`/events/${eventId}/categories/${id}`, {
       method: "DELETE",
+    }),
+};
+
+// Critérios de divisão das categorias (2026-10-06). Lista fixa da
+// plataforma; o produtor só cria/edita as opções de cada um.
+export type CategoryCriterionKey =
+  | "institution"
+  | "regime"
+  | "age_group"
+  | "gender"
+  | "level"
+  | "size";
+
+export interface CategoryCriterionOption {
+  // null = opção nova, ainda não salva (o id é gerado no servidor).
+  id: string | null;
+  label: string;
+  // Opção padrão da plataforma: não pode ser excluída.
+  builtIn?: boolean;
+  // Nível: construção.tumbling (4.2) e "sem tumbling" (o rótulo sai deles).
+  level?: number | null;
+  nonTumbling?: boolean;
+  minAge?: number | null;
+  maxAge?: number | null;
+  minAthletes?: number | null;
+  maxAthletes?: number | null;
+}
+
+// Opções de um critério no evento. Cada categoria escolhe quais
+// critérios usa; no Nível as opções são só a paleta mostrada na tela.
+export interface CategoryCriterion {
+  key: CategoryCriterionKey;
+  options: CategoryCriterionOption[];
+  ageCutoffDate?: string | null;
+}
+
+export interface CategoryCriterionLabel {
+  key: CategoryCriterionKey;
+  value: string;
+  label: string;
+}
+
+export const categoryCriteriaApi = {
+  get: (eventId: string) =>
+    authRequest<CategoryCriterion[]>(`/events/${eventId}/category-criteria`),
+
+  update: (eventId: string, criteria: CategoryCriterion[]) =>
+    authRequest<CategoryCriterion[]>(`/events/${eventId}/category-criteria`, {
+      method: "PUT",
+      body: JSON.stringify({ criteria }),
     }),
 };
 
@@ -690,6 +762,8 @@ export interface ProgramRegistrationView {
     logoUrl: string | null;
   };
   categories: Category[];
+  // Opções dos critérios de divisão do evento (filtros).
+  categoryCriteria: CategoryCriterion[];
   // Equipes de inscrições anteriores do programa que ainda não estão
   // nesta (atalhos pra reaproveitar).
   previousTeamNames: string[];

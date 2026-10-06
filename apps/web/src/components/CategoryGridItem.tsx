@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Calculator, Clock, Pencil, Trash2, Users } from "lucide-react";
 import { CategoryStatusBadge } from "@/components/CategoryStatusBadge";
 import { listItemVariants } from "@/lib/motionVariants";
-import { DIVISION_LABELS, MODALITY_LABELS, formatLabelFor } from "@/lib/categoryLabels";
+import { formatLabelFor } from "@/lib/categoryLabels";
 import { formatMinutesSeconds } from "@/lib/presentationTime";
 import type { Category } from "@/api/client";
 import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
@@ -57,14 +57,10 @@ export function CategoryGridItem({
       <div className="min-w-0">
         <p className="truncate font-medium text-foreground">{category.name}</p>
         <div className="mt-1.5 flex flex-col gap-1 text-sm text-muted-foreground">
-          <span>
-            {MODALITY_LABELS[category.modality]} · {DIVISION_LABELS[category.division]}
-          </span>
-          <span>
-            {formatLabelFor(category.categoryFormat, category.customFormatLabel)} · Nível{" "}
-            {category.level}
-          </span>
-          {category.nonTumbling && <span>Non-tumbling</span>}
+          <span>{formatLabelFor(category.categoryFormat, category.customFormatLabel)}</span>
+          {(category.criteriaLabels?.length ?? 0) > 0 && (
+            <span>{category.criteriaLabels?.map((l) => l.label).join(" · ")}</span>
+          )}
           {category.presentationTimeSeconds != null && (
             <span className="flex items-center gap-1.5">
               <Clock className="size-3.5" />

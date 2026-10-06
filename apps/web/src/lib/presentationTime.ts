@@ -1,21 +1,9 @@
-import type { CategoryFormat, CategoryModality } from "@/api/client";
+import type { CategoryFormat } from "@/api/client";
 
-// Usado pra pré-preencher o campo (usuário pode ajustar antes de
-// salvar) e recalculado sempre que formato/modalidade mudam no form —
-// ver CreateCategoryDialog/EditCategoryDialog. Essa duração alimenta o
-// cronograma do evento numa etapa futura.
-export function getDefaultPresentationTimeSeconds(
-  categoryFormat: CategoryFormat,
-  modality: CategoryModality,
-): number {
-  if (categoryFormat === "team_cheer") {
-    return modality === "school" || modality === "university" ? 165 : 150;
-  }
-  return 60;
-}
+// Tempo padrão de apresentação: ver defaultPresentationTimeSeconds em
+// lib/categoryCriteria.ts (depende dos critérios do evento).
 
-// Mesmo raciocínio de getDefaultPresentationTimeSeconds acima: só
-// pré-preenche o campo (usuário ajusta antes de salvar). Diferente da
+// Só pré-preenche o campo (usuário ajusta antes de salvar). Diferente da
 // duração de apresentação, só varia por formato — Team Cheer pede um
 // preparo bem maior que uma passagem de stunt de 1min.
 export function getDefaultWarmupMinutes(categoryFormat: CategoryFormat): number {

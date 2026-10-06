@@ -429,6 +429,7 @@ export function EventRegistrationPage() {
                         <>
                           <CategoryFilters
                             categories={view.categories}
+                            criteria={view.categoryCriteria}
                             value={categoryFilter}
                             onChange={setCategoryFilter}
                           />

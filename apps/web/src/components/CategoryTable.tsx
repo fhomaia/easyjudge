@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Trash2, Users } from "lucide-react";
 import { CategoryStatusBadge } from "@/components/CategoryStatusBadge";
-import { DIVISION_LABELS, MODALITY_LABELS, formatLabelFor } from "@/lib/categoryLabels";
+import { formatLabelFor } from "@/lib/categoryLabels";
+import { CRITERION_LABELS, CRITERION_ORDER } from "@/lib/categoryCriteria";
 import { formatMinutesSeconds } from "@/lib/presentationTime";
 import type { Category } from "@/api/client";
 import { scoringTemplateLabel } from "@/lib/scoringTemplateLabel";
@@ -30,6 +31,10 @@ export function CategoryTable({
     onTeamSortChange(teamSort === null ? "desc" : teamSort === "desc" ? "asc" : null);
   }
 
+  // Uma coluna por divisão usada por alguma categoria da página.
+  const columns = CRITERION_ORDER.filter((key) =>
+    categories.some((c) => c.criteriaLabels?.some((l) => l.key === key)),
+  );
   const TeamSortIcon = teamSort === "asc" ? ArrowUp : teamSort === "desc" ? ArrowDown : ArrowUpDown;
 
   return (
@@ -39,9 +44,11 @@ export function CategoryTable({
           <tr className="border-b border-border/60 text-xs text-muted-foreground">
             <th className="px-4 py-3 font-medium">Categoria</th>
             <th className="px-4 py-3 font-medium">Modalidade</th>
-            <th className="px-4 py-3 font-medium">Divisão</th>
-            <th className="px-4 py-3 font-medium">Gênero</th>
-            <th className="px-4 py-3 font-medium">Nível</th>
+            {columns.map((key) => (
+              <th key={key} className="px-4 py-3 font-medium">
+                {CRITERION_LABELS[key]}
+              </th>
+            ))}
             <th className="px-4 py-3 font-medium">Tempo</th>
             <th className="px-4 py-3 font-medium">Sistema de pontuação</th>
             <th className="px-4 py-3 font-medium">
@@ -71,24 +78,17 @@ export function CategoryTable({
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Users className="size-4" />
                   </div>
-                  <div>
-                    <p className="font-medium text-foreground">{category.name}</p>
-                    {category.nonTumbling && (
-                      <p className="text-xs text-muted-foreground">Non-tumbling</p>
-                    )}
-                  </div>
+                  <p className="font-medium text-foreground">{category.name}</p>
                 </div>
               </td>
               <td className="px-4 py-3 text-muted-foreground">
                 {formatLabelFor(category.categoryFormat, category.customFormatLabel)}
               </td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {MODALITY_LABELS[category.modality]}
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {DIVISION_LABELS[category.division]}
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">Nível {category.level}</td>
+              {columns.map((key) => (
+                <td key={key} className="px-4 py-3 text-muted-foreground">
+                  {category.criteriaLabels?.find((l) => l.key === key)?.label ?? "—"}
+                </td>
+              ))}
               <td className="px-4 py-3 text-muted-foreground">
                 {category.presentationTimeSeconds != null
                   ? formatMinutesSeconds(category.presentationTimeSeconds)
