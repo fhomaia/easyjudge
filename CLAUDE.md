@@ -1568,23 +1568,11 @@ dois em Oregon; motivo do valor alto não investigado), e o mover fazia
 
 ## Nota máxima na súmula e empate no slider (2026-09-29)
 
-- **Slider do jurado (desktop)**: equipes com a mesma nota (1 casa)
-  dividem um marcador (`groupTeamScores` em `ScoreBandSlider.tsx`) e a
-  tag lista os nomes um por linha; antes os marcadores empilhavam e o
-  hover só mostrava o de cima. Notas próximas mas diferentes ainda
-  podem encostar.
-- **Súmula de detalhe** (programa/atleta/admin): "/ máx." em cinza ao
-  lado da nota de cada item (`MaxScoreLabel`) e do Total
-  (`ScoringSummary showMaxScore`, a tela do jurado não usa). PDF idem:
-  no cartão Total e na coluna da nota, desenhado por `didDrawCell`
-  (`scoreCell`/`drawMaxScore`, o autoTable não mistura estilos numa
-  célula; célula de cabeçalho não herda `columnStyles`, por isso o
-  `halign` vai na própria célula).
-- **Resumo (`ScoringSummary`) em grade**: 4 blocos = 2x2 no celular e
-  uma linha a partir de `sm`; 3 ou menos = sempre uma linha. Vale pras
-  4 telas que usam o componente.
-- Testado: tela pelo usuário (slider e resumo); PDF gerado no Node com
-  dados sintéticos (rolldown + `pdftoppm`).
+Resumo; texto completo movido em 2026-10-06 para `docs/CLAUDE_HISTORY.md`.
+Slider do jurado agrupa equipes empatadas num marcador (`groupTeamScores`);
+súmula de detalhe e PDF mostram "/ máx." por item e no Total
+(`MaxScoreLabel`, `didDrawCell` no PDF); `ScoringSummary` em grade 2x2 no
+celular com 4 blocos.
 
 ## Endereço do evento, menu ⋯ do Início e espectadores (2026-09-29)
 
@@ -1618,40 +1606,11 @@ dois em Oregon; motivo do valor alto não investigado), e o mover fazia
 
 ## Telas de configuração do evento no celular (2026-09-29)
 
-Commit `4d27c1b` (feito pelo usuário, publicado junto do fix `b806c22`).
-Até aqui só as telas "ao vivo" eram pensadas pro celular; o setup
-continua com o desktop como alvo principal, mas agora funciona em 412px.
-
-- **Padrão aplicado em Setup, Gerenciar equipe, Categorias, Programas,
-  Regulamento e Cronograma**: `main` com `pt-14 sm:pt-0` (barra fixa do
-  `AppSidebar` no celular), `px-4 sm:px-10`, grades com
-  `grid-cols-[minmax(0,1fr)]` (item de grid tem `min-width: auto` e
-  qualquer fileira larga alargava a página), cabeçalho empilhado e botão
-  principal `w-full sm:w-auto`. Popups de formulário com
-  `max-h-[92dvh] overflow-y-auto p-6 sm:p-10`; `DialogContent` ganhou
-  `grid-cols-[minmax(0,1fr)]` no próprio componente.
-- **Categorias**: no celular sempre em cartões (`useIsMobile`, troca
-  lista/cartões escondida); `CategoryGridItem` mostra "N equipes"
-  clicável (abre a lista, igual à tabela); contadores do topo lado a lado
-  com rótulo curto.
-- **Cronograma**: no celular só a Tabela (`effectiveViewMode`); arraste
-  por `TouchSensor` com `delay: 300` (segurar o dedo parado), porque com
-  `PointerSensor` o navegador trata o movimento como rolagem e cancela o
-  arraste; desktop continua `PointerSensor` com 5px. Barra de
-  configuração do dia empilhada com divisórias horizontais.
-- **Programas**: tocar num programa rola até os detalhes (ficam embaixo
-  da lista no celular); editar/excluir equipe logo depois do nome; o
-  seletor do catálogo mostra nome e email em duas linhas e ganhou texto
-  de ajuda ("Selecione para preencher").
-- **Gerenciar equipe**: "Adicionar pessoa" virou "Adicionar" e pede o
-  nome completo num campo só (separado no 1º espaço, mesma regra do
-  `RegisterDialog`); papéis vão pra baixo do email no celular.
-- **Sistemas de pontuação no Regulamento**: uma fileira só (os do
-  usuário primeiro, depois os pré-definidos, sem subtítulos), cartões de
-  `w-64` no celular.
-- **Não testado por automação**: as mudanças de layout foram feitas e
-  conferidas pelo usuário; só o fix do seletor (ver gotcha "Tela rolando
-  sozinha ao abrir um `Select`") foi investigado nesta sessão.
+Resumo; texto completo movido em 2026-10-06 para `docs/CLAUDE_HISTORY.md`.
+Padrão das telas de setup em 412px: `main` com `pt-14 sm:pt-0`, `px-4
+sm:px-10`, grades `grid-cols-[minmax(0,1fr)]`, botão principal `w-full
+sm:w-auto`, popups `max-h-[92dvh] overflow-y-auto p-6 sm:p-10`. Cronograma
+no celular só Tabela, arraste por `TouchSensor` (`delay: 300`).
 
 ## Atleta em qualquer conta (2026-10-03)
 
@@ -1969,9 +1928,48 @@ está aqui; a primeira, com liga/desliga por evento, foi descartada).
 - **Testado**: script HTTP com conta descartável (42 verificações) e no
   navegador (criar em lote, editar, "+ Adicionar", filtros, 412px); o
   usuário conferiu o resto.
-- **Ainda não feito (fase 2)**: bloquear o envio da inscrição quando o
-  número de atletas ou a idade (data de nascimento na data de referência)
-  saem da regra da categoria.
+- **Fase 2** (regras na inscrição): ver a seção seguinte.
+
+## Regras das categorias na inscrição + data de nascimento única (2026-10-06)
+
+- **Regra efetiva** (`CategoryCriteriaService.rulesFor`, anexada em
+  `Category.rules` na leitura): número de atletas e idade da opção de
+  Tamanho/Faixa etária escolhida ou, sem ela, a regra direta da
+  categoria; data de referência da idade = a da Faixa etária (padrão: data
+  do evento) ou a da regra direta. Idade completa na data (aniversário no
+  próprio dia conta).
+- **Data de nascimento: uma por atleta** (decisão do usuário): a da CONTA
+  do atleta, se existir; senão a do elenco (`athlete_links.birth_date`,
+  migration `AddAthleteLinkBirthDate`, `PATCH /athletes/:id/birth-date`,
+  recusado com 409 quando a conta tem data); senão a do atleta do evento
+  (cadastro do produtor). `ProgramRegistrationService.birthDateLookup`.
+- **Trava de elegibilidade**: atleta fora da faixa ou sem data não entra
+  na categoria (400 com o motivo) ao escolher atletas da categoria, ao
+  escolher categorias de um atleta e ao mover a equipe de categoria.
+  Mensagens iguais na API e na tela: "Não tem a idade mínima (N anos).",
+  "Idade superior ao máximo permitido (N anos).", "Data de nascimento
+  obrigatória para a categoria.".
+- **Envio**: `computeIssues` (número de atletas fora do intervalo, idade,
+  falta de data) vem na ficha (`issues`) e bloqueia o `submit` ("Corrija
+  antes de enviar: ..."). Número de atletas só é conferido no envio.
+- **Ficha (`EventRegistrationPage`)**: regra embaixo do nome da categoria;
+  equipe "fora da regra" em vermelho; popup de atletas com "Regras da
+  categoria" em tópicos e grupos Elegíveis / Sem data de nascimento / Fora
+  da faixa etária (não elegível com caixa desativada e motivo; "Informar
+  data de nascimento" salva no elenco). Rascunho: faixa curta no topo
+  ("N pendências para enviar") e painel completo (pendências + enviar) no
+  fim; ficha enviada continua no topo. Cabeçalho com o EVENTO em destaque
+  e o programa secundário. Texto longo (email) cortado com etiqueta no
+  hover/toque (`TruncatedText`).
+- **"Programas e equipes" virou "Inscrições"** (card do Setup, título da
+  tela, subtítulo "Programas, equipes e atletas"); rota continua
+  `/events/:id/programs`. Abas: Inscrições (`?tab=registration`, por
+  enquanto o convite/compartilhar/prazo; depois documentos dos atletas e
+  pagamento) | Programas (padrão) | Solicitações.
+- **Testado**: script HTTP com contas descartáveis (32 verificações:
+  regras por opção e direta, data da conta/elenco/evento, trava ao marcar
+  e ao mover, 409 ao sobrescrever data da conta, envio bloqueado e
+  liberado). Telas conferidas pelo usuário.
 
 ## Inscrição de campeonato pelo próprio programa (2026-10-05)
 
@@ -2209,10 +2207,11 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
 
 ## Próximos passos (não iniciados ainda)
 
-0. **Fase 2 dos critérios de divisão**: validar número de atletas e idade
-   no envio da inscrição (ver "Critérios de divisão das categorias").
-   Depois: regras de crossover (atleta em mais de uma equipe/categoria) e,
-   se o usuário quiser, ordenar o cronograma por qualquer critério.
+0. **Documentos e dados dos atletas na inscrição** (desenhado em
+   2026-10-06, não iniciado; decisões na memória do Claude): exigências
+   configuradas na aba Inscrições, inscrição do lado do atleta, biblioteca
+   de documentos na conta, contestação pelo produtor, cópias do evento
+   apagadas 30 dias depois. Depois: regras de crossover e pagamento.
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
 atleta/espectador, transição de status `completed`, endereçamento por

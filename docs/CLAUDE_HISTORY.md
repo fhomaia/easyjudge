@@ -3250,3 +3250,62 @@ mesma sessão. Ainda não deployada (ver "Deploy" abaixo).
 - **Deploy**: migration `AddSketchTextSetToScoreEventKind` ainda
   precisa rodar no Neon (usuário, `DATABASE_URL` inline no terminal
   dele) antes de qualquer push que inclua este backend.
+
+# Movido do CLAUDE.md em 2026-10-06 (seções de 2026-09-29)
+
+## Nota máxima na súmula e empate no slider (2026-09-29)
+
+- **Slider do jurado (desktop)**: equipes com a mesma nota (1 casa)
+  dividem um marcador (`groupTeamScores` em `ScoreBandSlider.tsx`) e a
+  tag lista os nomes um por linha; antes os marcadores empilhavam e o
+  hover só mostrava o de cima. Notas próximas mas diferentes ainda
+  podem encostar.
+- **Súmula de detalhe** (programa/atleta/admin): "/ máx." em cinza ao
+  lado da nota de cada item (`MaxScoreLabel`) e do Total
+  (`ScoringSummary showMaxScore`, a tela do jurado não usa). PDF idem:
+  no cartão Total e na coluna da nota, desenhado por `didDrawCell`
+  (`scoreCell`/`drawMaxScore`, o autoTable não mistura estilos numa
+  célula; célula de cabeçalho não herda `columnStyles`, por isso o
+  `halign` vai na própria célula).
+- **Resumo (`ScoringSummary`) em grade**: 4 blocos = 2x2 no celular e
+  uma linha a partir de `sm`; 3 ou menos = sempre uma linha. Vale pras
+  4 telas que usam o componente.
+- Testado: tela pelo usuário (slider e resumo); PDF gerado no Node com
+  dados sintéticos (rolldown + `pdftoppm`).
+
+## Telas de configuração do evento no celular (2026-09-29)
+
+Commit `4d27c1b` (feito pelo usuário, publicado junto do fix `b806c22`).
+Até aqui só as telas "ao vivo" eram pensadas pro celular; o setup
+continua com o desktop como alvo principal, mas agora funciona em 412px.
+
+- **Padrão aplicado em Setup, Gerenciar equipe, Categorias, Programas,
+  Regulamento e Cronograma**: `main` com `pt-14 sm:pt-0` (barra fixa do
+  `AppSidebar` no celular), `px-4 sm:px-10`, grades com
+  `grid-cols-[minmax(0,1fr)]` (item de grid tem `min-width: auto` e
+  qualquer fileira larga alargava a página), cabeçalho empilhado e botão
+  principal `w-full sm:w-auto`. Popups de formulário com
+  `max-h-[92dvh] overflow-y-auto p-6 sm:p-10`; `DialogContent` ganhou
+  `grid-cols-[minmax(0,1fr)]` no próprio componente.
+- **Categorias**: no celular sempre em cartões (`useIsMobile`, troca
+  lista/cartões escondida); `CategoryGridItem` mostra "N equipes"
+  clicável (abre a lista, igual à tabela); contadores do topo lado a lado
+  com rótulo curto.
+- **Cronograma**: no celular só a Tabela (`effectiveViewMode`); arraste
+  por `TouchSensor` com `delay: 300` (segurar o dedo parado), porque com
+  `PointerSensor` o navegador trata o movimento como rolagem e cancela o
+  arraste; desktop continua `PointerSensor` com 5px. Barra de
+  configuração do dia empilhada com divisórias horizontais.
+- **Programas**: tocar num programa rola até os detalhes (ficam embaixo
+  da lista no celular); editar/excluir equipe logo depois do nome; o
+  seletor do catálogo mostra nome e email em duas linhas e ganhou texto
+  de ajuda ("Selecione para preencher").
+- **Gerenciar equipe**: "Adicionar pessoa" virou "Adicionar" e pede o
+  nome completo num campo só (separado no 1º espaço, mesma regra do
+  `RegisterDialog`); papéis vão pra baixo do email no celular.
+- **Sistemas de pontuação no Regulamento**: uma fileira só (os do
+  usuário primeiro, depois os pré-definidos, sem subtítulos), cartões de
+  `w-64` no celular.
+- **Não testado por automação**: as mudanças de layout foram feitas e
+  conferidas pelo usuário; só o fix do seletor (ver gotcha "Tela rolando
+  sozinha ao abrir um `Select`") foi investigado nesta sessão.
