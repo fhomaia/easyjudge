@@ -87,7 +87,8 @@ export interface UnscheduledPairView {
   categoryName: string;
   categoryFormat: CategoryFormat;
   customFormatLabel: string | null;
-  level: number;
+  // Null quando o evento desligou o critério Nível.
+  level: number | null;
   durationMinutes: number;
   warmupMinutes: number;
 }
@@ -1187,7 +1188,7 @@ export class ScheduleService {
     const byFormat = (a: UnscheduledPairView, b: UnscheduledPairView) =>
       rankOf(a) - rankOf(b);
     const byLevel = (a: UnscheduledPairView, b: UnscheduledPairView) =>
-      levelSign * (a.level - b.level);
+      levelSign * ((a.level ?? 0) - (b.level ?? 0));
     const levelFirst = settings.orderPrimary === AutoGenerateOrderPrimary.LEVEL;
     const unscheduled = [...(await this.getUnscheduled(eventId, day.id))].sort(
       (a, b) =>

@@ -12,6 +12,8 @@ import { ProgramAthlete } from '../entities/program-athlete.entity';
 import { TeamCategoryAthlete } from '../entities/team-category-athlete.entity';
 import { Team } from '../../teams/entities/team.entity';
 import { Category } from '../../categories/entities/category.entity';
+import { CategoryCriteriaService } from '../../categories/services/category-criteria.service';
+import type { CategoryCriterion } from '../../categories/category-criteria';
 import { CategoryStatus } from '../../categories/enums/category-status.enum';
 import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
@@ -71,6 +73,9 @@ export interface ProgramRegistrationView {
     logoUrl: string | null;
   };
   categories: Category[];
+  // Critérios de divisão do evento (filtros da ficha, na ordem e com as
+  // opções configuradas pelo produtor).
+  categoryCriteria: CategoryCriterion[];
   // Nomes de equipes usadas em inscrições anteriores do programa que
   // ainda não estão nesta (atalhos pra reaproveitar).
   previousTeamNames: string[];
@@ -110,6 +115,7 @@ export class ProgramRegistrationService {
     private readonly programAthletesService: ProgramAthletesService,
     private readonly athletesService: AthletesService,
     private readonly usersService: UsersService,
+    private readonly categoryCriteriaService: CategoryCriteriaService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -120,6 +126,10 @@ export class ProgramRegistrationService {
       where: { aliasId: event.aliasId, status: CategoryStatus.ACTIVE },
       order: { name: 'ASC' },
     });
+    const categoryCriteria = await this.categoryCriteriaService.getByAlias(
+      event.aliasId,
+    );
+    this.categoryCriteriaService.attachLabels(categories, categoryCriteria);
     const program = participation
       ? await this.programsService.findOneForEvent(eventId, participation.id)
       : null;
@@ -145,6 +155,7 @@ export class ProgramRegistrationService {
         logoUrl: profile.logoUrl,
       },
       categories,
+      categoryCriteria,
       previousTeamNames: await this.previousTeamNames(
         userId,
         event.aliasId,

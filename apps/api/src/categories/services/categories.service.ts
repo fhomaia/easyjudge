@@ -1,8 +1,26 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../entities/category.entity';
-import { CategoryFormat } from '../enums/category-format.enum';
+import {
+  CRITERION_LABELS,
+  OPTION_CRITERION_FIELDS,
+  isAlwaysNonTumbling,
+  isOptionCriterion,
+  levelProblem,
+  sizeAllowedFor,
+  type CategoryCriterion,
+} from '../category-criteria';
+import { CategoryCriterionKey } from '../enums/category-criterion-key.enum';
+import {
+  CategoryCriteriaService,
+  type CategoryIdentity,
+} from './category-criteria.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
 import { EventsService } from '../../events/services/events.service';
@@ -19,6 +37,7 @@ export class CategoriesService {
     private readonly eventsService: EventsService,
     private readonly scoringTemplatesService: ScoringTemplatesService,
     private readonly activityLogService: EventActivityLogService,
+    private readonly criteriaService: CategoryCriteriaService,
   ) {}
 
   async create(
@@ -31,18 +50,31 @@ export class CategoriesService {
       dto.scoringTemplateId,
       userId,
     );
-    await this.assertNoDuplicateCategory(event.aliasId, {
-      modality: dto.modality,
-      division: dto.division,
+    const criteria = await this.criteriaService.getByAlias(event.aliasId);
+    const category = this.categoriesRepo.create({
+      name: dto.name,
       categoryFormat: dto.categoryFormat,
       customFormatLabel: dto.customFormatLabel ?? null,
-      level: dto.level,
-      nonTumbling: dto.nonTumbling ?? false,
-    });
-    const category = this.categoriesRepo.create({
-      ...dto,
+      scoringTemplateId: dto.scoringTemplateId,
+      presentationTimeSeconds: dto.presentationTimeSeconds,
+      warmupMinutes: dto.warmupMinutes,
+      institution: null,
+      regime: null,
+      ageGroup: null,
+      gender: null,
+      size: null,
+      level: null,
+      nonTumbling: false,
+      minAthletes: dto.minAthletes ?? null,
+      maxAthletes: dto.maxAthletes ?? null,
+      minAge: dto.minAge ?? null,
+      maxAge: dto.maxAge ?? null,
+      ageCutoffDate: dto.ageCutoffDate ?? null,
       aliasId: event.aliasId,
     });
+    this.applyCriteriaValues(category, dto, criteria);
+    this.applyDirectRules(category);
+    await this.assertNoDuplicateCategory(event.aliasId, category);
     const saved = await this.categoriesRepo.save(category);
     await this.activityLogService.record(
       event.aliasId,
@@ -55,11 +87,13 @@ export class CategoriesService {
 
   async findAllForEvent(eventId: string): Promise<Category[]> {
     const event = await this.eventsService.findEventOrThrow(eventId);
-    return this.categoriesRepo.find({
+    const categories = await this.categoriesRepo.find({
       where: { aliasId: event.aliasId },
       relations: ['scoringTemplate'],
       order: { createdAt: 'DESC' },
     });
+    await this.criteriaService.attachLabelsByAlias(categories, event.aliasId);
+    return categories;
   }
 
   async update(
@@ -75,17 +109,27 @@ export class CategoriesService {
         userId,
       );
     }
-    Object.assign(category, stripUndefined(dto));
+    const {
+      institution,
+      regime,
+      ageGroup,
+      gender,
+      size,
+      level,
+      nonTumbling,
+      ...rest
+    } = dto;
+    Object.assign(category, stripUndefined(rest));
+    const criteria = await this.criteriaService.getByAlias(category.aliasId);
+    this.applyCriteriaValues(
+      category,
+      { institution, regime, ageGroup, gender, size, level, nonTumbling },
+      criteria,
+    );
+    this.applyDirectRules(category);
     await this.assertNoDuplicateCategory(
       category.aliasId,
-      {
-        modality: category.modality,
-        division: category.division,
-        categoryFormat: category.categoryFormat,
-        customFormatLabel: category.customFormatLabel ?? null,
-        level: category.level,
-        nonTumbling: category.nonTumbling,
-      },
+      category,
       category.id,
     );
     const saved = await this.categoriesRepo.save(category);
@@ -122,51 +166,115 @@ export class CategoriesService {
     return category;
   }
 
-  // Modalidade + formato + divisão + nível (+ non-tumbling, quando o
-  // formato permite variar) definem a "mesma" categoria pro domínio —
-  // não há constraint única no banco pra isso, checagem em
-  // application-level segue o mesmo padrão de
-  // ProgramsService.assertEmailNotDuplicateInCatalog.
+  // Valores dos critérios de divisão (ver category-criteria.ts). Nível é
+  // obrigatório; os demais, cada categoria usa se quiser (null = não
+  // usa); valor
+  // informado precisa ser uma opção do evento. Campo ausente no corpo =
+  // mantém o valor atual (edição parcial).
+  private applyCriteriaValues(
+    category: Category,
+    values: Partial<
+      Pick<
+        Category,
+        | 'institution'
+        | 'regime'
+        | 'ageGroup'
+        | 'gender'
+        | 'size'
+        | 'level'
+        | 'nonTumbling'
+      >
+    >,
+    criteria: CategoryCriterion[],
+  ): void {
+    for (const criterion of criteria) {
+      const name = CRITERION_LABELS[criterion.key];
+
+      if (!isOptionCriterion(criterion.key)) {
+        if (values.level !== undefined) category.level = values.level;
+        if (values.nonTumbling !== undefined) {
+          category.nonTumbling = values.nonTumbling;
+        }
+        // Nível é obrigatório (como a modalidade).
+        if (category.level == null) {
+          throw new BadRequestException('Escolha o nível da categoria.');
+        }
+        if (isAlwaysNonTumbling(category.categoryFormat)) {
+          category.nonTumbling = true;
+        }
+        const problem = levelProblem(category.level, category.nonTumbling);
+        if (problem) throw new BadRequestException(problem);
+        continue;
+      }
+
+      const field = OPTION_CRITERION_FIELDS[criterion.key];
+      const incoming = values[field];
+      if (incoming !== undefined) category[field] = incoming || null;
+
+      // Tamanho só em modalidade de grupo.
+      if (
+        criterion.key === CategoryCriterionKey.SIZE &&
+        !sizeAllowedFor(category.categoryFormat)
+      ) {
+        category.size = null;
+        continue;
+      }
+
+      const value = category[field];
+      if (value && !criterion.options.some((o) => o.id === value)) {
+        throw new BadRequestException(
+          `Opção inválida em ${name}. Recarregue a página e tente de novo.`,
+        );
+      }
+    }
+  }
+
+  // Regra direta de atletas/idade: some quando a categoria usa a divisão
+  // correspondente (a regra passa a ser a da opção).
+  private applyDirectRules(category: Category): void {
+    if (category.size) {
+      category.minAthletes = null;
+      category.maxAthletes = null;
+    }
+    if (category.ageGroup) {
+      category.minAge = null;
+      category.maxAge = null;
+      category.ageCutoffDate = null;
+    }
+    if (
+      category.minAthletes != null &&
+      category.maxAthletes != null &&
+      category.minAthletes > category.maxAthletes
+    ) {
+      throw new BadRequestException('O mínimo de atletas passa do máximo.');
+    }
+    if (
+      category.minAge != null &&
+      category.maxAge != null &&
+      category.minAge > category.maxAge
+    ) {
+      throw new BadRequestException('A idade mínima passa da máxima.');
+    }
+  }
+
+  // Cada combinação de modalidade e critérios é uma categoria;
+  // não há constraint única no banco pra isso (os critérios mudam por
+  // evento), checagem em application-level.
   private async assertNoDuplicateCategory(
     aliasId: string,
-    values: Pick<
-      Category,
-      | 'modality'
-      | 'division'
-      | 'categoryFormat'
-      | 'customFormatLabel'
-      | 'level'
-      | 'nonTumbling'
-    >,
+    candidate: CategoryIdentity,
     excludeId?: string,
   ): Promise<void> {
-    const qb = this.categoriesRepo
-      .createQueryBuilder('category')
-      .where('category.aliasId = :aliasId', { aliasId })
-      .andWhere('category.modality = :modality', { modality: values.modality })
-      .andWhere('category.division = :division', { division: values.division })
-      .andWhere('category.categoryFormat = :categoryFormat', {
-        categoryFormat: values.categoryFormat,
-      })
-      .andWhere('category.level = :level', { level: values.level })
-      .andWhere('category.nonTumbling = :nonTumbling', {
-        nonTumbling: values.nonTumbling,
-      });
-
-    if (values.categoryFormat === CategoryFormat.CUSTOM) {
-      qb.andWhere('LOWER(category.customFormatLabel) = LOWER(:customFormatLabel)', {
-        customFormatLabel: values.customFormatLabel ?? '',
-      });
-    }
-
-    if (excludeId) {
-      qb.andWhere('category.id != :excludeId', { excludeId });
-    }
-
-    const conflict = await qb.getOne();
+    const key = this.criteriaService.identityKey(candidate);
+    const others = await this.categoriesRepo.find({ where: { aliasId } });
+    const conflict = others.find(
+      (other) =>
+        other.id !== excludeId &&
+        this.criteriaService.identityKey(other) === key,
+    );
     if (conflict) {
       throw new ConflictException(
-        'Já existe uma categoria com essa combinação de modalidade, formato, divisão e nível.',
+        `Já existe uma categoria com essa mesma combinação: "${conflict.name}".`,
       );
     }
   }
@@ -181,6 +289,10 @@ export class CategoriesService {
       relations: ['scoringTemplate'],
     });
     if (!category) throw new NotFoundException('Categoria não encontrada');
+    await this.criteriaService.attachLabelsByAlias(
+      [category],
+      category.aliasId,
+    );
     return category;
   }
 }

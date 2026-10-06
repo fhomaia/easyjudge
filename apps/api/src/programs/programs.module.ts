@@ -21,6 +21,7 @@ import { ProgramsService } from './services/programs.service';
 import { EventsModule } from '../events/events.module';
 import { UsersModule } from '../users/users.module';
 import { AthletesModule } from '../athletes/athletes.module';
+import { CategoriesModule } from '../categories/categories.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AthletesModule } from '../athletes/athletes.module';
     EventsModule,
     UsersModule,
     AthletesModule,
+    CategoriesModule,
   ],
   controllers: [
     ProgramsController,

@@ -1,4 +1,5 @@
 import {
+  IsDateString,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -12,8 +13,6 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { CategoryModality } from '../enums/category-modality.enum';
-import { CategoryDivision } from '../enums/category-division.enum';
 import { CategoryFormat } from '../enums/category-format.enum';
 import { CategoryStatus } from '../enums/category-status.enum';
 
@@ -25,14 +24,6 @@ export class UpdateCategoryDto {
   name?: string;
 
   @IsOptional()
-  @IsEnum(CategoryModality)
-  modality?: CategoryModality;
-
-  @IsOptional()
-  @IsEnum(CategoryDivision)
-  division?: CategoryDivision;
-
-  @IsOptional()
   @IsEnum(CategoryFormat)
   categoryFormat?: CategoryFormat;
 
@@ -42,11 +33,69 @@ export class UpdateCategoryDto {
   @MaxLength(100)
   customFormatLabel?: string;
 
+  // Critérios de divisão: id de uma opção da configuração do evento
+  // (validado em CategoriesService contra os critérios ligados; os
+  // desligados são ignorados).
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  institution?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  regime?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  ageGroup?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  gender?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  size?: string | null;
+
+  // Regra direta da categoria (sem divisão de Tamanho/Faixa etária).
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(999)
+  minAthletes?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(999)
+  maxAthletes?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  minAge?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  maxAge?: number | null;
+
+  @IsOptional()
+  @IsDateString({ strict: true })
+  ageCutoffDate?: string | null;
+
+  // Construção.tumbling (ex.: 4.2), ver levelProblem. Até 7.7.
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 1 })
   @Min(1)
-  @Max(7)
-  level?: number;
+  @Max(7.7)
+  level?: number | null;
 
   @IsOptional()
   @IsBoolean()

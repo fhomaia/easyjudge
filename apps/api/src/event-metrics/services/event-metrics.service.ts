@@ -69,7 +69,7 @@ interface PresentationRow {
   categoryId: string;
   categoryFormat: CategoryFormat;
   customFormatLabel: string | null;
-  level: number;
+  level: number | null;
   count: number;
 }
 
@@ -180,6 +180,8 @@ export class EventMetricsService {
     // aqui mudaria o sentido dos dados.
     const levelGroups = new Map<number, number>();
     for (const row of presentationRows) {
+      // Sem nível = evento com o critério Nível desligado.
+      if (row.level == null) continue;
       const level = Number(row.level);
       levelGroups.set(level, (levelGroups.get(level) ?? 0) + row.count);
     }

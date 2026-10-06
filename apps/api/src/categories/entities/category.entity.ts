@@ -10,9 +10,18 @@ import {
 } from 'typeorm';
 import { ScoringTemplate } from '../../scoring-templates/entities/scoring-template.entity';
 import { CategoryStatus } from '../enums/category-status.enum';
-import { CategoryModality } from '../enums/category-modality.enum';
-import { CategoryDivision } from '../enums/category-division.enum';
 import { CategoryFormat } from '../enums/category-format.enum';
+import type { CategoryCriterionKey } from '../enums/category-criterion-key.enum';
+
+// Rótulo de um critério ligado no evento, montado na leitura (não é
+// coluna), na ordem configurada: o front usa pra tabela, cartões e
+// filtros sem precisar conhecer as opções.
+export interface CategoryCriterionLabel {
+  key: CategoryCriterionKey;
+  // Id da opção, ou o próprio nível ("4.2", "4-nt") no Nível.
+  value: string;
+  label: string;
+}
 
 @Entity('categories')
 export class Category {
@@ -29,14 +38,29 @@ export class Category {
   @Column({ length: 150 })
   name: string;
 
-  @Column({ type: 'enum', enum: CategoryModality })
-  modality: CategoryModality;
+  // Critérios de divisão (2026-10-06): cada um guarda o id de uma opção
+  // da configuração do evento (CategoryCriteriaSettings), ou null quando
+  // o critério está desligado. Vínculo institucional e Gênero reusam as
+  // colunas antigas `modality`/`division` (antes enum, hoje varchar); os
+  // ids das opções padrão são os valores antigos dos enums.
+  @Column({ name: 'modality', type: 'varchar', nullable: true })
+  institution: string | null;
 
-  @Column({ type: 'enum', enum: CategoryDivision })
-  division: CategoryDivision;
+  @Column({ type: 'varchar', nullable: true })
+  regime: string | null;
+
+  @Column({ name: 'age_group', type: 'varchar', nullable: true })
+  ageGroup: string | null;
+
+  @Column({ name: 'division', type: 'varchar', nullable: true })
+  gender: string | null;
+
+  // Só em modalidade de grupo (ver sizeRuleFor).
+  @Column({ type: 'varchar', nullable: true })
+  size: string | null;
 
   // Importante porque as regras de segurança são definidas por formato
-  // (não confundir com `modality`, que é All Star/Universitário/Escolar).
+  // (não confundir com `institution`, que é All Star/Universitário/Escolar).
   @Column({ name: 'category_format', type: 'enum', enum: CategoryFormat })
   categoryFormat: CategoryFormat;
 
@@ -46,17 +70,40 @@ export class Category {
   @Column({ name: 'custom_format_label', type: 'varchar', nullable: true })
   customFormatLabel: string | null;
 
-  // Vai de 1 a 7, aceitando até uma casa decimal (ex: 3.5) — por isso
-  // 'float' em vez de 'int'.
-  @Column({ type: 'float' })
-  level: number;
+  // Parte inteira = nível de construção (1 a 7); casa decimal = nível de
+  // tumbling (1 a 7) quando é diferente: 4.2 = construção 4, tumbling 2
+  // (ver levelProblem). Obrigatório na API; a coluna aceita null só por
+  // compatibilidade com a migration (não há categoria sem nível).
+  @Column({ type: 'float', nullable: true })
+  level: number | null;
 
+  // Regra direta da categoria (2026-10-06), pra quem não quer criar uma
+  // opção de Tamanho/Faixa etária: só vale quando a categoria não usa a
+  // divisão correspondente (CategoriesService limpa ao escolher uma).
+  @Column({ name: 'min_athletes', type: 'int', nullable: true })
+  minAthletes: number | null;
+
+  @Column({ name: 'max_athletes', type: 'int', nullable: true })
+  maxAthletes: number | null;
+
+  @Column({ name: 'min_age', type: 'int', nullable: true })
+  minAge: number | null;
+
+  @Column({ name: 'max_age', type: 'int', nullable: true })
+  maxAge: number | null;
+
+  // Data em que a idade da regra direta é conferida (YYYY-MM-DD). Null =
+  // a da Faixa etária do evento (por padrão, a data do evento).
+  @Column({ name: 'age_cutoff_date', type: 'date', nullable: true })
+  ageCutoffDate: string | null;
+
+  // "Sem tumbling" do Nível (nível sempre inteiro nesse caso).
   @Column({ name: 'non_tumbling', default: false })
   nonTumbling: boolean;
 
   // Nullable no banco (categorias criadas antes dessa feature não têm),
   // mas obrigatório no CreateCategoryDto. Front-end pré-preenche um
-  // default por categoryFormat/modality (team_cheer: 2:30, exceto
+  // default por modalidade, vínculo e regime (team_cheer: 2:30, exceto
   // school/university que são 2:45; demais formatos: 1:00) — usuário
   // pode ajustar antes de salvar. Alimenta o cronograma do evento numa
   // etapa futura.
@@ -99,4 +146,7 @@ export class Category {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
+
+  // Não é coluna: preenchido por CategoryCriteriaService.attachLabels.
+  criteriaLabels?: CategoryCriterionLabel[];
 }
