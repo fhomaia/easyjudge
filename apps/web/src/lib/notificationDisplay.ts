@@ -2,6 +2,7 @@ import {
   ArrowRightLeft,
   CalendarCheck,
   ClipboardList,
+  FileWarning,
   Flag,
   Gavel,
   Hourglass,
@@ -36,6 +37,7 @@ export const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   registration_submitted: Send,
   registration_request: MessageSquare,
   registration_reopened: Unlock,
+  document_contested: FileWarning,
 };
 
 export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/formatRelativeTime";
@@ -82,6 +84,8 @@ export function notificationHref(
       return `/events/${eventId}/programs?tab=requests`;
     // Pro programa: abre a ficha dele.
     case "registration_reopened":
+    // Documento de atleta contestado: o programa reenvia pela ficha.
+    case "document_contested":
       return `/events/${eventId}/registration`;
     default:
       return null;

@@ -21,6 +21,7 @@ import {
 } from "@/components/EventFiltersBar";
 import { EventListItem } from "@/components/EventListItem";
 import { EventGridItem } from "@/components/EventGridItem";
+import { AthleteRegistrationsStrip } from "@/components/AthleteRegistrationsStrip";
 import { Pagination } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
 import { BrandBackdrop } from "@/components/BrandBackdrop";
@@ -289,6 +290,8 @@ export function HomePage() {
                   </div>
 
                   <EventStatCards events={events} />
+
+                  {accountRole && accountRole !== "program" && <AthleteRegistrationsStrip />}
 
                   {error && <p className="text-sm text-destructive">{error}</p>}
 

@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { AthleteRequirementsPanel } from "@/components/AthleteRequirementsPanel";
+import { RegistrationIssueGroups, issueSubject } from "@/components/RegistrationIssueGroups";
 import { ProgramsSetupShell } from "@/components/ProgramsSetupShell";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { EditProgramDialog } from "@/components/EditProgramDialog";
@@ -50,6 +51,7 @@ import {
   type ProgramAthlete,
   type ProgramRegistrationIssues,
   type ProgramWithTeams,
+  type Team,
 } from "@/api/client";
 
 type Tab = "teams" | "athletes" | "issues";
@@ -184,7 +186,12 @@ export function ProgramDetailPage() {
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1.5">
                     <UserRound className="size-3.5" />
-                    {pluralize(athletes.length, "atleta", "atletas")}
+                    {/* Só quem compete; a aba Atletas mostra todos. */}
+                    {pluralize(
+                      athletes.filter((a) => a.entries.length > 0).length,
+                      "atleta",
+                      "atletas",
+                    )}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Users className="size-3.5" />
@@ -252,7 +259,13 @@ export function ProgramDetailPage() {
           </div>
 
           {tab === "issues" ? (
-            <IssuesTab eventId={id} programId={programId} issues={issues} onChanged={load} />
+            <IssuesTab
+              eventId={id}
+              programId={programId}
+              issues={issues}
+              teams={program.teams}
+              onChanged={load}
+            />
           ) : tab === "teams" ? (
             <TeamsTab
               program={program}
@@ -319,11 +332,13 @@ function IssuesTab({
   eventId,
   programId,
   issues,
+  teams,
   onChanged,
 }: {
   eventId: string;
   programId: string;
   issues: ProgramRegistrationIssues | null;
+  teams: Team[];
   onChanged: () => void;
 }) {
   const [dataTarget, setDataTarget] = useState<{ athleteId: string; name: string } | null>(null);
@@ -331,9 +346,33 @@ function IssuesTab({
   const blocking = issues.issues.filter((i) => i.blocking);
   const warnings = issues.issues.filter((i) => !i.blocking);
 
+  // Dado ou documento de atleta faltando: abre os dados dele aqui mesmo.
+  function fillButton(issue: ProgramRegistrationIssues["issues"][number]) {
+    if (
+      (issue.kind !== "missing_requirement" && issue.kind !== "missing_document") ||
+      !issue.athleteId
+    ) {
+      return null;
+    }
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          setDataTarget({
+            athleteId: issue.athleteId as string,
+            name: issueSubject(issue.message),
+          })
+        }
+        className="ml-2 text-xs font-medium text-primary hover:underline"
+      >
+        {issue.kind === "missing_document" ? "Ver documentos" : "Preencher"}
+      </button>
+    );
+  }
+
   return (
     <section className="grid gap-5">
-      {blocking.length === 0 && warnings.length === 0 && issues.documentsPendingCount === 0 ? (
+      {blocking.length === 0 && warnings.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border/60 py-8 text-center text-sm text-muted-foreground">
           Nenhuma pendência nesta ficha.
         </p>
@@ -344,45 +383,18 @@ function IssuesTab({
               <p className="font-medium text-foreground">
                 {pluralize(blocking.length, "pendência impede", "pendências impedem")} o envio da ficha
               </p>
-              <ul className="list-disc space-y-1.5 pl-5 text-foreground">
-                {blocking.map((issue, index) => (
-                  <li key={index}>
-                    {issue.message}
-                    {issue.kind === "missing_requirement" && issue.athleteId && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDataTarget({
-                            athleteId: issue.athleteId as string,
-                            name: issue.message.split(":")[0],
-                          })
-                        }
-                        className="ml-2 text-xs font-medium text-primary hover:underline"
-                      >
-                        Preencher
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <div className="text-foreground">
+                <RegistrationIssueGroups issues={blocking} teams={teams} renderActions={fillButton} />
+              </div>
             </div>
           )}
           {warnings.length > 0 && (
             <div className="grid gap-2 rounded-xl border border-border/60 p-4 text-sm">
               <p className="font-medium text-foreground">Podem ser completadas até o prazo</p>
-              <ul className="list-disc space-y-1.5 pl-5 text-muted-foreground">
-                {warnings.map((issue, index) => (
-                  <li key={index}>{issue.message}</li>
-                ))}
-              </ul>
+              <div className="text-muted-foreground">
+                <RegistrationIssueGroups issues={warnings} teams={teams} renderActions={fillButton} />
+              </div>
             </div>
-          )}
-          {issues.documentsPendingCount > 0 && (
-            <p className="rounded-xl border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300">
-              {issues.documentsPendingCount === 1
-                ? "1 documento obrigatório dos atletas ainda não foi enviado."
-                : `${issues.documentsPendingCount} documentos obrigatórios dos atletas ainda não foram enviados.`}
-            </p>
           )}
         </>
       )}
@@ -401,6 +413,7 @@ function IssuesTab({
                 eventId={eventId}
                 programId={programId}
                 athleteId={dataTarget.athleteId}
+                canContest
                 onChanged={onChanged}
               />
             </dl>
@@ -898,6 +911,7 @@ function AthleteDetail({
             eventId={eventId}
             programId={program.id}
             athleteId={athlete.id}
+            canContest
             onChanged={onPersonalDataChanged}
           />
         </dl>

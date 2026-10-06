@@ -16,6 +16,9 @@ export interface ChecklistItem {
   // vermelho embaixo, e um conteúdo extra opcional (ex.: informar data).
   blocked?: boolean;
   error?: string;
+  // Pode ser marcado, mas com um aviso em amarelo (ex.: fora da faixa
+  // etária: vira pendência que impede o envio da ficha).
+  warning?: string;
   extra?: React.ReactNode;
 }
 
@@ -149,6 +152,11 @@ export function AthleteChecklist({
               <TruncatedText text={item.hint} className="text-xs text-muted-foreground" />
             )}
             {item.error && <span className="block text-xs text-destructive">{item.error}</span>}
+            {item.warning && (
+              <span className="block text-xs text-amber-700 dark:text-amber-400">
+                {item.warning}
+              </span>
+            )}
           </span>
         </label>
         {item.extra && <div className="pl-7">{item.extra}</div>}

@@ -109,6 +109,9 @@ const AthleteProgramsPage = lazy(() =>
     default: m.AthleteProgramsPage,
   })),
 );
+const AthleteRegistrationPage = lazy(() =>
+  import("@/pages/AthleteRegistrationPage").then((m) => ({ default: m.AthleteRegistrationPage })),
+);
 const ProfilePage = lazy(() =>
   import("@/pages/ProfilePage").then((m) => ({ default: m.ProfilePage })),
 );
@@ -183,6 +186,7 @@ function App() {
           />
           <Route path="/events/:id/programs" element={<ProgramsPage />} />
           <Route path="/events/:id/registration" element={<EventRegistrationPage />} />
+          <Route path="/events/:id/my-registration" element={<AthleteRegistrationPage />} />
           <Route
             path="/events/:id/programs/:programId"
             element={<ProgramDetailPage />}

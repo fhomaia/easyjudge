@@ -26,6 +26,8 @@ interface DatePickerProps {
   // acima (que desliga o campo inteiro) pra não colidir com o matcher
   // `disabled` do próprio Calendar.
   maxDate?: Date;
+  // "sm": campo compacto (h-9), pra listas de dados.
+  size?: "default" | "sm";
 }
 
 const DISPLAY_FORMAT = "dd/MM/yyyy";
@@ -54,6 +56,7 @@ export function DatePicker({
   startMonth,
   endMonth,
   maxDate,
+  size = "default",
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : undefined;
@@ -83,7 +86,8 @@ export function DatePicker({
     <Popover open={open} onOpenChange={setOpen}>
       <div
         className={cn(
-          "flex h-12 w-full items-center gap-2.5 rounded-lg border border-transparent bg-muted px-5 text-base text-foreground transition-colors focus-within:border-primary focus-within:bg-primary/[0.06]",
+          "flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-muted text-foreground transition-colors focus-within:border-primary focus-within:bg-primary/[0.06]",
+          size === "sm" ? "h-9 px-3 text-sm" : "h-12 px-5 text-base",
           invalid && "border-destructive focus-within:border-destructive",
           disabled && "pointer-events-none opacity-50",
         )}

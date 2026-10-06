@@ -67,7 +67,11 @@ export function ProgramOverviewDialog({
       cancelled = true;
     };
   }, [eventId, programId, mode]);
-  const athleteList = athletes && athletes.programId === programId ? athletes.list : null;
+  // Só quem compete (está em alguma categoria), igual ao número do cartão.
+  const athleteList =
+    athletes && athletes.programId === programId
+      ? athletes.list.filter((a) => a.entries.length > 0)
+      : null;
 
   return (
     <Dialog open={program !== null} onOpenChange={onOpenChange}>

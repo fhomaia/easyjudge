@@ -5,6 +5,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Camera, ChevronRight, KeyRound, Power, Trash2 } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
+import { MyDocumentsCard } from "@/components/MyDocumentsCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,6 +82,10 @@ export function ProfilePage() {
                   inteiro dentro, ficaria apertado dividindo a largura. */}
               <DocumentCard profile={profile} onUpdated={setProfile} />
               <BirthDateCard profile={profile} onUpdated={setProfile} />
+
+              {/* Biblioteca de documentos de atleta (qualquer conta menos
+                  Programa pode ser atleta). */}
+              {profile.role !== "program" && <MyDocumentsCard />}
 
               <PasswordSection />
 

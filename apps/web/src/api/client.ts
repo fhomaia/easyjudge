@@ -158,6 +158,39 @@ async function authUpload<T>(path: string, formData: FormData): Promise<T> {
   return data as T;
 }
 
+// Arquivo privado (documento de atleta, 2026-10-06): só sai pela API com
+// o token, então não dá pra usar um link direto. Abre numa aba nova (a aba
+// é aberta antes da requisição, senão o navegador bloqueia o pop-up).
+export async function openPrivateFile(path: string, fileName: string): Promise<void> {
+  const tab = window.open("", "_blank");
+  const accessToken = useAuthStore.getState().accessToken;
+  try {
+    const res = await apiFetch(path, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      checkUnauthorized(
+        new ApiError(data?.message ?? "Não foi possível abrir o arquivo.", res.status),
+        accessToken,
+      );
+    }
+    const url = URL.createObjectURL(await res.blob());
+    if (tab) {
+      tab.location.href = url;
+    } else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (err) {
+    tab?.close();
+    throw err;
+  }
+}
+
 export type UserRole = "judge" | "athlete" | "organization" | "program";
 export type DocumentType = "cpf" | "cnpj";
 
@@ -664,7 +697,12 @@ export interface CategoryRules {
 // Problema da ficha de inscrição pelas regras das categorias (impede o
 // envio).
 export interface RegistrationIssue {
-  kind: "athletes_count" | "age" | "missing_birth_date" | "missing_requirement";
+  kind:
+    | "athletes_count"
+    | "age"
+    | "missing_birth_date"
+    | "missing_requirement"
+    | "missing_document";
   teamId: string;
   categoryId: string;
   // Atleta do evento (ProgramAthlete), nos problemas de idade e de dados.
@@ -714,11 +752,31 @@ export interface RegistrationSettings {
   requirements: RegistrationRequirement[];
 }
 
+export interface PrivateFileView {
+  key: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface AthleteDocumentView {
+  status: "sent" | "contested";
+  contestReason: string | null;
+  contestedAt: string | null;
+  updatedAt: string;
+  files: PrivateFileView[];
+}
+
 export interface AthleteRequirementItem {
   requirement: RegistrationRequirement;
   // Vale pras categorias em que o atleta compete.
   applies: boolean;
   value: string | null;
+  // Itens de documento: o que foi enviado (null = nada ainda).
+  document: AthleteDocumentView | null;
+  // Itens de documento: dá pra enviar/trocar este agora.
+  documentEditable: boolean;
   // Data de nascimento/CPF da conta do atleta: não se edita por aqui.
   readOnly: boolean;
   source: "account" | "roster" | "event" | null;
@@ -727,7 +785,25 @@ export interface AthleteRequirementItem {
 export interface AthleteRequirementsView {
   name: string;
   email: string;
+  // Quem está vendo pode enviar documentos / mudar dados agora.
+  documentsEditable: boolean;
+  dataEditable: boolean;
+  // Atleta com a inscrição já enviada: só manda o que falta ou foi
+  // contestado; o resto, pelo programa.
+  athleteLocked: boolean;
+  allowSubmitWithoutDocuments: boolean;
+  // Ficha do programa já enviada.
+  programSubmitted: boolean;
+  // O próprio atleta enviou a parte dele (opcional).
+  athleteSubmittedAt: string | null;
   items: AthleteRequirementItem[];
+}
+
+function filesForm(files: File[], extra: Record<string, string> = {}): FormData {
+  const form = new FormData();
+  for (const file of files) form.append("files", file);
+  for (const [key, value] of Object.entries(extra)) form.append(key, value);
+  return form;
 }
 
 export const athleteRequirementsApi = {
@@ -747,6 +823,153 @@ export const athleteRequirementsApi = {
       `/events/${eventId}/programs/${programId}/athletes/${athleteId}/requirements/${requirementId}`,
       { method: "PUT", body: JSON.stringify({ value }) },
     ),
+
+  uploadDocument: (
+    eventId: string,
+    programId: string,
+    athleteId: string,
+    requirementId: string,
+    files: File[],
+  ) =>
+    authUpload<AthleteRequirementsView>(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}/documents/${requirementId}`,
+      filesForm(files),
+    ),
+
+  removeDocument: (
+    eventId: string,
+    programId: string,
+    athleteId: string,
+    requirementId: string,
+  ) =>
+    authRequest<AthleteRequirementsView>(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}/documents/${requirementId}`,
+      { method: "DELETE" },
+    ),
+
+  openFile: (
+    eventId: string,
+    programId: string,
+    athleteId: string,
+    requirementId: string,
+    index: number,
+    fileName: string,
+  ) =>
+    openPrivateFile(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}/documents/${requirementId}/files/${index}`,
+      fileName,
+    ),
+
+  contestDocument: (
+    eventId: string,
+    programId: string,
+    athleteId: string,
+    requirementId: string,
+    reason: string,
+  ) =>
+    authRequest<AthleteRequirementsView>(
+      `/events/${eventId}/programs/${programId}/athletes/${athleteId}/documents/${requirementId}/contest`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+};
+
+// "Inscreva-se aqui" do atleta (2026-10-06).
+export interface AthleteRegistrationEntry {
+  programId: string;
+  programName: string;
+  athleteId: string;
+  categories: { teamName: string; categoryName: string }[];
+  pendingCount: number;
+  contestedCount: number;
+  requirements: AthleteRequirementsView;
+}
+
+export interface AthleteRegistrationEvent {
+  eventId: string;
+  name: string;
+  logoUrl: string | null;
+  startDate: string;
+  location: string;
+  registrationDeadline: string | null;
+  open: boolean;
+  entries: AthleteRegistrationEntry[];
+}
+
+export const athleteRegistrationApi = {
+  listMine: () => authRequest<AthleteRegistrationEvent[]>("/me/registrations"),
+
+  get: (eventId: string) =>
+    authRequest<AthleteRegistrationEvent>(`/events/${eventId}/my-registration`),
+
+  set: (eventId: string, athleteId: string, requirementId: string, value: string | null) =>
+    authRequest<AthleteRequirementsView>(
+      `/events/${eventId}/my-registration/${athleteId}/requirements/${requirementId}`,
+      { method: "PUT", body: JSON.stringify({ value }) },
+    ),
+
+  uploadDocument: (
+    eventId: string,
+    athleteId: string,
+    requirementId: string,
+    files: File[],
+    libraryDocumentIds: string[] = [],
+  ) =>
+    authUpload<AthleteRequirementsView>(
+      `/events/${eventId}/my-registration/${athleteId}/documents/${requirementId}`,
+      filesForm(
+        files,
+        libraryDocumentIds.length ? { libraryDocumentIds: libraryDocumentIds.join(",") } : {},
+      ),
+    ),
+
+  removeDocument: (eventId: string, athleteId: string, requirementId: string) =>
+    authRequest<AthleteRequirementsView>(
+      `/events/${eventId}/my-registration/${athleteId}/documents/${requirementId}`,
+      { method: "DELETE" },
+    ),
+
+  submit: (eventId: string, athleteId: string) =>
+    authRequest<AthleteRequirementsView>(
+      `/events/${eventId}/my-registration/${athleteId}/submit`,
+      { method: "POST" },
+    ),
+
+  openFile: (
+    eventId: string,
+    athleteId: string,
+    requirementId: string,
+    index: number,
+    fileName: string,
+  ) =>
+    openPrivateFile(
+      `/events/${eventId}/my-registration/${athleteId}/documents/${requirementId}/files/${index}`,
+      fileName,
+    ),
+
+};
+
+// Biblioteca de documentos da conta (2026-10-06).
+export interface UserDocumentView {
+  id: string;
+  label: string | null;
+  file: PrivateFileView;
+  createdAt: string;
+}
+
+export const userDocumentsApi = {
+  list: () => authRequest<UserDocumentView[]>("/me/documents"),
+
+  upload: (files: File[], label: string | null) =>
+    authUpload<UserDocumentView[]>(
+      "/me/documents",
+      filesForm(files, label ? { label } : {}),
+    ),
+
+  remove: (id: string) =>
+    authRequest<void>(`/me/documents/${id}`, { method: "DELETE" }),
+
+  openFile: (id: string, fileName: string) =>
+    openPrivateFile(`/me/documents/${id}/file`, fileName),
 };
 
 export const registrationSettingsApi = {
@@ -836,6 +1059,8 @@ export interface ProgramAthlete {
   // não se editam (cadeado).
   accountCpf: string | null;
   accountBirthDate: string | null;
+  // O próprio atleta enviou a parte dele ("Inscreva-se aqui!").
+  athleteSubmittedAt: string | null;
   createdAt: string;
   entries: ProgramAthleteEntry[];
 }
@@ -2591,7 +2816,8 @@ export type NotificationType =
   | "special_event_ended"
   | "registration_submitted"
   | "registration_request"
-  | "registration_reopened";
+  | "registration_reopened"
+  | "document_contested";
 
 export interface NotificationView {
   id: string;

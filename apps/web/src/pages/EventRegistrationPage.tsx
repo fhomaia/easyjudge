@@ -42,6 +42,7 @@ import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { CreateAthleteDialog } from "@/components/CreateAthleteDialog";
 import { AthleteChecklist } from "@/components/AthleteChecklist";
+import { RegistrationIssueGroups, issueSubject } from "@/components/RegistrationIssueGroups";
 import {
   CategoryFilters,
   EMPTY_CATEGORY_FILTER,
@@ -749,6 +750,8 @@ function ProgramHeader({
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">Inscrição no evento</p>
           <h1 className="truncate text-xl font-semibold text-foreground sm:text-2xl">{event.name}</h1>
+          {/* Sem data limite: nada a mostrar. */}
+          {(!view.open || event.registrationDeadline) && (
           <p
             className={cn(
               "mt-0.5 text-sm",
@@ -758,9 +761,10 @@ function ProgramHeader({
             {view.open
               ? event.registrationDeadline
                 ? `Inscrições até ${formatDeadline(event.registrationDeadline)}, 23:59`
-                : "Inscrições abertas, sem data limite"
+                : null
               : "Inscrições encerradas"}
           </p>
+          )}
         </div>
       </div>
       {/* Programa dono da ficha. */}
@@ -879,6 +883,7 @@ function RegistrationStatusPanel({
       <IssuesList
         title="Para enviar, corrija:"
         issues={blockingIssues}
+        teams={program.teams}
         onSetBirthDate={onSetBirthDate}
         onOpenData={onOpenData}
       />
@@ -894,6 +899,7 @@ function RegistrationStatusPanel({
             : "Documentos que os atletas ainda precisam enviar (pode enviar a ficha antes, até o prazo):"
         }
         issues={warningIssues}
+        teams={program.teams}
         onSetBirthDate={onSetBirthDate}
         onOpenData={onOpenData}
       />
@@ -993,8 +999,8 @@ function RegistrationStatusPanel({
           <p className="font-medium text-foreground">Ficha em rascunho</p>
           <p className="text-muted-foreground">
             Monte equipes, categorias e atletas e envie quando terminar
-            {deadline ? ` (até ${formatDeadline(deadline)})` : ""}. O organizador só vê sua inscrição
-            depois de enviada, e a partir daí ela não pode mais ser alterada por você.
+            {deadline ? ` (até ${formatDeadline(deadline)})` : ""}. Após o envio será necessário
+            abrir uma solicitação ao produtor do evento para fazer alterações.
           </p>
           {sendBlocker && (
             <div className="mt-1 font-medium text-amber-700 dark:text-amber-400">{sendBlocker}</div>
@@ -1405,48 +1411,52 @@ function rulesItems(category: Category): string[] {
   ].filter((item): item is string => !!item);
 }
 
-// Problemas que impedem o envio pelas regras das categorias. Atleta sem
-// data de nascimento ganha o campo ali mesmo.
+// Pendências que impedem o envio, agrupadas (RegistrationIssueGroups).
+// Atleta sem data de nascimento ganha o campo ali mesmo.
 function IssuesList({
   title,
   issues,
+  teams,
   onSetBirthDate,
   onOpenData,
 }: {
   title: string;
   issues: RegistrationIssue[];
+  teams: Team[];
   onSetBirthDate: (issue: RegistrationIssue, birthDate: string) => Promise<void>;
   onOpenData: (target: { athleteId: string; name: string }) => void;
 }) {
   return (
     <>
       {title}
-      <ul className="mt-1 list-disc space-y-1.5 pl-5">
-        {issues.map((issue, index) => (
-          <li
-            key={`${issue.kind}-${issue.teamId}-${issue.categoryId}-${issue.athleteId ?? ""}-${issue.requirementId ?? index}`}
-          >
-            {issue.message}
-            {issue.kind === "missing_birth_date" && (issue.linkId || issue.athleteId) && (
-              <BirthDateFix onSave={(date) => onSetBirthDate(issue, date)} />
-            )}
-            {issue.kind === "missing_requirement" && issue.athleteId && (
-              <button
-                type="button"
-                onClick={() =>
-                  onOpenData({
-                    athleteId: issue.athleteId as string,
-                    name: issue.message.split(":")[0],
-                  })
-                }
-                className="ml-2 text-xs font-medium text-primary hover:underline"
-              >
-                Preencher
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
+      <div className="mt-2">
+        <RegistrationIssueGroups
+          issues={issues}
+          teams={teams}
+          renderActions={(issue) => (
+            <>
+              {issue.kind === "missing_birth_date" && (issue.linkId || issue.athleteId) && (
+                <BirthDateFix onSave={(date) => onSetBirthDate(issue, date)} />
+              )}
+              {(issue.kind === "missing_requirement" || issue.kind === "missing_document") &&
+                issue.athleteId && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenData({
+                        athleteId: issue.athleteId as string,
+                        name: issueSubject(issue.message),
+                      })
+                    }
+                    className="ml-2 text-xs font-medium text-primary hover:underline"
+                  >
+                    {issue.kind === "missing_document" ? "Enviar" : "Preencher"}
+                  </button>
+                )}
+            </>
+          )}
+        />
+      </div>
     </>
   );
 }
@@ -1568,6 +1578,18 @@ function AthletesTab({
     `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, "pt-BR"),
   );
   const competing = sorted.filter((l) => entriesOf(l, eventAthletes).length > 0);
+  // Atletas que enviaram a própria inscrição (pela conta deles) mas ainda
+  // não estão em nenhuma categoria: o programa precisa encaixá-los.
+  const waiting = sorted.filter(
+    (l) =>
+      entriesOf(l, eventAthletes).length === 0 &&
+      eventAthletes.some(
+        (a) => a.email.toLowerCase() === l.email.toLowerCase() && !!a.athleteSubmittedAt,
+      ),
+  );
+  // Abas: quem compete (com a situação dos dados), quem enviou e espera
+  // categoria, e o elenco todo (onde se adiciona atleta).
+  const [subTab, setSubTab] = useState<"competing" | "waiting" | "all">("competing");
 
   return (
     <section className="grid gap-5">
@@ -1576,12 +1598,36 @@ function AthletesTab({
           <h2 className="text-lg font-semibold text-foreground">Atletas</h2>
           <p className="text-sm text-muted-foreground">Atletas vinculados ao seu programa.</p>
         </div>
-        {editable && (
+        {editable && subTab === "all" && (
           <Button className="w-full sm:w-auto" onClick={onAdd}>
             <Plus data-icon="inline-start" />
             Adicionar atleta
           </Button>
         )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["competing", `Atletas competindo (${competing.length})`],
+            ["waiting", `Sem categoria (${waiting.length})`],
+            ["all", `Todos os atletas (${sorted.length})`],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setSubTab(key)}
+            className={cn(
+              "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+              subTab === key
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border/60 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {pendingCount > 0 && (
@@ -1602,8 +1648,8 @@ function AthletesTab({
         </p>
       )}
 
+      {subTab === "competing" ? (
       <AthleteRosterSection
-        title="Atletas competindo"
         athletes={competing}
         teams={teams}
         eventAthletes={eventAthletes}
@@ -1613,8 +1659,19 @@ function AthletesTab({
         issues={view.issues ?? []}
         emptyMessage="Nenhum atleta em categoria ainda."
       />
+      ) : subTab === "waiting" ? (
       <AthleteRosterSection
-        title="Todos os atletas"
+        athletes={waiting}
+        teams={teams}
+        eventAthletes={eventAthletes}
+        editable={editable && hasPairs}
+        onEditEntries={onEditEntries}
+        onOpenData={onOpenData}
+        issues={view.issues ?? []}
+        emptyMessage="Nenhum atleta enviou a inscrição sem estar numa categoria."
+      />
+      ) : (
+      <AthleteRosterSection
         athletes={sorted}
         teams={teams}
         eventAthletes={eventAthletes}
@@ -1624,13 +1681,13 @@ function AthletesTab({
         issues={view.issues ?? []}
         emptyMessage="Seu elenco ainda não tem atletas."
       />
+      )}
     </section>
   );
 }
 
 // Uma lista de atletas do elenco com busca própria por nome ou email.
 function AthleteRosterSection({
-  title,
   athletes,
   teams,
   eventAthletes,
@@ -1640,7 +1697,6 @@ function AthleteRosterSection({
   issues,
   emptyMessage,
 }: {
-  title: string;
   athletes: AthleteLinkView[];
   teams: Team[];
   eventAthletes: ProgramAthlete[];
@@ -1661,10 +1717,7 @@ function AthleteRosterSection({
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-semibold text-foreground">
-          {title} <span className="font-normal text-muted-foreground">({athletes.length})</span>
-        </h3>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
         {athletes.length > 0 && (
           <div className="relative sm:w-72">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1693,7 +1746,9 @@ function AthleteRosterSection({
             );
             const missingData = eventAthlete
               ? issues.filter(
-                  (i) => i.kind === "missing_requirement" && i.athleteId === eventAthlete.id,
+                  (i) =>
+                    (i.kind === "missing_requirement" || i.kind === "missing_document") &&
+                    i.athleteId === eventAthlete.id,
                 ).length
               : 0;
             return (
@@ -1709,13 +1764,35 @@ function AthleteRosterSection({
                 </span>
                 <div className="grid min-w-0 flex-1 gap-1.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {`${link.firstName} ${link.lastName}`.trim()}
+                    <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+                      <span className="truncate">{`${link.firstName} ${link.lastName}`.trim()}</span>
+                      {/* Dados e documentos obrigatórios (só de quem compete). */}
+                      {eventAthlete && entries.length > 0 && (
+                        <span
+                          title={
+                            missingData > 0
+                              ? `${missingData} ${missingData === 1 ? "item pendente" : "itens pendentes"}`
+                              : undefined
+                          }
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            missingData > 0
+                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                              : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                          )}
+                        >
+                          {missingData > 0 ? "Dados incompletos" : "Dados completos"}
+                        </span>
+                      )}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{link.email}</p>
                   </div>
                   {entries.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Não participa deste evento</p>
+                    <p className="text-xs text-muted-foreground">
+                      {eventAthlete?.athleteSubmittedAt
+                        ? "Enviou a inscrição e está sem categoria"
+                        : "Não participa deste evento"}
+                    </p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {entries.map((e) => {
@@ -1743,7 +1820,9 @@ function AthleteRosterSection({
                         Escolher categorias
                       </button>
                     )}
-                    {eventAthlete && entries.length > 0 && (
+                    {/* Também pra quem enviou a inscrição sem categoria: ver o
+                        que ele mandou. */}
+                    {eventAthlete && (entries.length > 0 || !!eventAthlete.athleteSubmittedAt) && (
                       <button
                         type="button"
                         onClick={() =>
@@ -1754,12 +1833,7 @@ function AthleteRosterSection({
                         }
                         className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                       >
-                        Dados da inscrição
-                        {missingData > 0 && (
-                          <span className="rounded-full bg-amber-500/15 px-1.5 text-amber-700 dark:text-amber-400">
-                            {missingData} {missingData === 1 ? "pendente" : "pendentes"}
-                          </span>
-                        )}
+                        Dados e documentos
                       </button>
                     )}
                   </div>
@@ -2147,8 +2221,8 @@ function PairAthletesDialog({
                 : problem
                   ? ELIGIBILITY.outside
                   : ELIGIBILITY.eligible,
-              blocked: !!problem,
-              error: problem ?? undefined,
+              // Fora da regra de idade: pode marcar, vira pendência do envio.
+              warning: problem ?? undefined,
               extra: !birthDate ? (
                 <BirthDateFix compact onSave={(date) => onSetBirthDate(l.id, date)} />
               ) : undefined,
@@ -2219,13 +2293,13 @@ function AthleteEntriesPicker({
         id: `${team.id}:${category.id}`,
         label: category.name,
         hint: `Equipe ${team.name}`,
-        blocked: !!problem,
-        error: problem ?? undefined,
+        // Fora da regra de idade: pode marcar, vira pendência do envio.
+        warning: problem ?? undefined,
       };
     }),
   );
   const needsBirthDate =
-    !birthDate && items.some((i) => i.error?.startsWith("Data de nascimento"));
+    !birthDate && items.some((i) => i.warning?.startsWith("Data de nascimento"));
 
   useEffect(() => {
     if (!athlete) return;
