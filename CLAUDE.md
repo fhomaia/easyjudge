@@ -384,143 +384,36 @@ chegou lá.
 
 ## Tempo real (Socket.io self-hosted) no painel "evento ao vivo" (2026-07-28)
 
-Fecha o item 1 antigo de "Próximos passos" — decidido com o usuário
-(perguntou sobre custo de Socket.io self-hosted vs. Supabase Realtime;
-resposta: os dois são de graça, mas Socket.io não amarra a escolha
-futura de Postgres de produção — Neon vs. Supabase — a essa decisão, já
-que Realtime só existiria de graça se o Postgres também fosse
-Supabase). Plano completo em `EnterPlanMode`/`ExitPlanMode` desta
-sessão (explorado com 2 agentes Explore em paralelo, backend+frontend,
-antes de desenhar).
+Resumo; texto completo movido em 2026-10-05 para `docs/CLAUDE_HISTORY.md`.
 
-- **Padrão escolhido: "sinal, não payload".** O socket só avisa "algo
-  mudou" (tipo do sinal + `aliasId`); quem recebe refaz a MESMA chamada
-  REST que o polling antigo já fazia — zero duplicação de lógica de
-  serialização entre REST e WS. Os `setInterval` de polling continuam
-  existindo como rede de segurança (`REALTIME_FALLBACK_POLL_MS`,
-  `apps/web/src/lib/useEventLiveSocket.ts` — 2min, era 30s), pro caso
-  de reconexão de socket falhar silenciosamente — mesmo espírito do
-  buffer IndexedDB do scoring, nunca depender de uma via só.
-- **Sem `EventEmitter2` no projeto até então** (confirmado por grep
-  amplo) — todo efeito colateral sempre foi chamada direta. Injetar o
-  Gateway direto em `NotificationsService`/`EventsService` criaria
-  import circular (mesmo tipo que o projeto já evita sistematicamente
-  importando só o repositório necessário em vez do módulo inteiro).
-  `EventEmitterModule.forRoot()` registrado global em `app.module.ts`
-  resolve isso de graça — services emitem sem saber que WebSocket
-  existe.
-- **Ponto único de emissão**: `NotificationsService.create()`
-  (`apps/api/src/notifications/services/notifications.service.ts:45-72`)
-  já é o funil por onde passam TODAS as notificações do sistema
-  (apresentação movida/concluída/desistência, contestação, liberação de
-  súmulas/resultado) — um `eventEmitter.emit('notification.created',
-  {...})` logo após o `save()` cobriu todos esses gatilhos de uma vez,
-  sem tocar nos ~6 call sites espalhados em
-  `schedule`/`scoring`/`events`. Único gap real: `publishEvent`/
-  `startEvent`/`completeEvent`/`unpublishEvent`
-  (`events.service.ts`) não passavam por notificação nenhuma — ganharam
-  um `emit('event.status_changed', { aliasId, status })` cada.
-- **Novo módulo `apps/api/src/realtime/`** (`realtime.module.ts` +
-  `events.gateway.ts`, `EventsGateway`): autenticação própria no
-  handshake (não dá pra reaproveitar `JwtAuthGuard`, que é `CanActivate`
-  amarrado a `ExecutionContext.switchToHttp()`/Passport) — lê
-  `client.handshake.auth.token`, valida na mão com `JwtService.verify`
-  + mesmo `JWT_SECRET` de `jwt.strategy.ts`. Sala por evento
-  (`event:{aliasId}`) via mensagens `join`/`leave` do cliente — o
-  gateway confere membership consultando `EventMember` **direto** (repo
-  próprio, mesmo padrão de `NotificationsModule`), sem importar
-  `EventsModule` (evita o mesmo tipo de ciclo).
-- **Frontend**: `apps/web/src/lib/socket.ts` (`createEventSocket`,
-  conecta em `/api/socket.io` — mesmo prefixo do proxy `/api` já usado
-  por toda chamada REST, sem hardcode de `localhost:3000`) +
-  `useEventLiveSocket(aliasId, handlers)` (conexão por
-  componente/página, não singleton global — mais simples numa POC,
-  custo é reconectar ao trocar de subpágina do mesmo evento). `vite.config.ts`
-  ganhou `ws: true` na entrada `/api` já existente (upgrade de conexão
-  não é encaminhado pelo proxy por padrão).
-- **4 páginas ligadas** (`EventLiveDashboardPage`, `EventLiveSchedulePage`,
-  `EventLiveNotificationsPage`, `EventLiveResultsPage`) — qualquer
-  `notification.created` recarrega os dados relevantes daquela tela
-  (mais simples e barato o bastante numa POC do que filtrar por tipo);
-  `event.status_changed` recarrega o `Event` (badge de status/"Ao vivo"
-  atualiza sem reload). **Fora de escopo, deliberadamente**: a tela de
-  lançamento de nota do jurado e a visão do programa continuam do jeito
-  que estão — o requisito não-negociável "notas nunca podem ser
-  perdidas" significa que o caminho de escrita (POST HTTP + buffer
-  IndexedDB + `ScoreEvent` append-only) não devia ser tocado nesta
-  rodada.
-- **Testado ponta a ponta com evento descartável** (criado, publicado,
-  jurado de teste adicionado ao roster, testado, excluído — nunca em
-  cima de dado real): (1) protocolo puro via `socket.io-client` num
-  script Node conectando com o JWT de um jurado real, confirmando
-  `event.status_changed` (disparado por `POST .../start`) e
-  `notification.created` (disparado por liberar súmulas,
-  `PATCH .../scoring/admin/release`) chegando corretamente na sala; (2)
-  ponta a ponta pelo app de verdade — com a aba do jurado aberta na tela
-  "Início" do evento de teste, concluir o evento via outra sessão
-  (`POST .../complete`) fez a aba do jurado **navegar sozinha pra Home**
-  (reagindo ao `useEffect` que já redireciona quando `status ===
-  "completed"`), sem nenhum reload manual — prova que o sinal atravessa
-  proxy do Vite → gateway → `EventEmitter2` → hook → estado React
-  corretamente.
+- Padrão "sinal, não payload": o socket só avisa que algo mudou (tipo +
+  `aliasId`) e a tela refaz a mesma chamada REST. O polling continua
+  como rede de segurança (`REALTIME_FALLBACK_POLL_MS`, 2 min, em
+  `lib/useEventLiveSocket.ts`).
+- `EventEmitterModule.forRoot()` global evita import circular: emissão
+  em `NotificationsService.create()` (`notification.created`, cobre
+  todas as notificações) e `event.status_changed` em publicar/iniciar/
+  concluir/despublicar.
+- Módulo `realtime/` (`EventsGateway`): JWT validado na mão no
+  handshake (`client.handshake.auth.token`), sala `event:{aliasId}` via
+  `join`/`leave`, membership checada direto no repo de `EventMember`.
+- Front: `lib/socket.ts` conecta em `${API_URL}/socket.io`, conexão por
+  página (não singleton); `vite.config.ts` com `ws: true` no proxy.
+- A tela de lançamento de nota NÃO usa socket (caminho de escrita das
+  notas não foi tocado).
 
 ## Maior nota por critério na súmula do jurado (2026-07-28)
 
-Indicador de comparação entre equipes na tela de lançamento de nota:
-pra cada item de avaliação, qual equipe tem a maior nota até agora,
-comparando só com outras apresentações da MESMA categoria (mesmo
-sistema de pontuação — comparar entre categorias diferentes não faria
-sentido, confirmado com o usuário antes de implementar). Mobile mostra
-texto; desktop só marca no slider (pedido explícito do usuário: "tomar
-cuidado pra não poluir a tela").
+Resumo; texto completo movido em 2026-10-05 para `docs/CLAUDE_HISTORY.md`.
 
-- **Backend**: `ScoringService.getCriterionLeaders(categoryId,
-  criterionIds)` (novo, privado) — busca todas as `ScheduleEntry` tipo
-  `presentation` da categoria (exclui desistências, `withdrawnAt IS
-  NOT NULL`), os `Team` e `ScoreEvent` delas numa query em lote cada,
-  reusa **`computeAverageScoreByCriterion`** (o mesmo método privado já
-  existente do fix de média multi-jurado) pra obter a nota de cada
-  apresentação por critério, agrega pelo maior valor e quais equipes
-  empataram nele. Chamado dentro de `getSheet`, resultado anexado em
-  cada `ScoringCriterionView.bestScore` (`{ value, teamNames } | null`,
-  novo campo — `buildGroups` sempre inicializa como `null`, só
-  `getSheet` de fato sobrescreve; `getSheetForJudge`/Head Judge e
-  `buildPresentationDetail` deixam `null` de propósito, a feature é só
-  da folha do próprio jurado). Precisou registrar `ScheduleEntry` no
-  `TypeOrmModule.forFeature` de `scoring.module.ts` (repo direto, mesmo
-  padrão já usado ali pra `Category`/`Team` — evita depender de método
-  novo em `ScheduleService`).
-  - **Empate por arredondamento, não igualdade direta**:
-    `ScoreEvent.value` é `float` (double precision) e a MÉDIA de vários
-    jurados pode gerar ruído de arredondamento binário — comparação
-    arredonda pra 1 casa decimal (`Math.round(v * 10) / 10`, mesma
-    precisão já exibida na UI) antes de agrupar por valor, senão um
-    empate real podia não ser detectado.
-  - Equipe da própria apresentação sendo pontuada entra na comparação
-    normalmente (não há razão pra excluí-la).
-- **Frontend**: `ScoringCriteriaGroups.tsx`, mesmo gate `showScoreBands`
-  já usado pelo resto da feature de faixas (Head Judge nunca recebe
-  `true`, então nunca vê isso). Mobile: "Maior nota: 12.0 (Equipe B)"
-  quando só uma equipe lidera; quando 2+ empatadas, vira "Maior nota:
-  12.0" + linha separada "Mesma nota atribuída às equipes X, Y" — só
-  aparece quando a condição é verdadeira (nada renderiza se
-  `bestScore` for `null`). Desktop: `ScoreBandSlider.tsx` ganhou prop
-  `bestScore` opcional — marcador `Trophy` (lucide, âmbar, cor
-  deliberadamente diferente das cores de faixa) posicionado por
-  `left: (value/maxScore)*100%`, ACIMA do trilho (os nomes de faixa já
-  ocupam a linha de baixo) — nome(s) da(s) equipe(s) só aparece(m) num
-  rótulo no hover, padrão CSS `group`/`group-hover:opacity-100` já
-  usado no projeto (sem lib de tooltip nova).
-- **Testado com evento/template/categoria/3 equipes descartáveis**
-  (criados e apagados só pra este teste, nunca em cima de dado real):
-  cenário 1 (Equipe B=12, sozinha na frente) → `bestScore: {value: 12,
-  teamNames: ["Equipe B"]}`, confirmado na tela ("Maior nota: 12.0
-  (Equipe B)"); cenário 2 (Equipe C também lançada em 12, empatando com
-  B) → `bestScore: {value: 12, teamNames: ["Equipe B", "Equipe C"]}`,
-  confirmado na tela (linha de empate apareceu). Desktop confirmado via
-  DOM: exatamente 1 ícone `Trophy` renderizado (só no bloco desktop,
-  `showSlider` já é `!isMobile`), posicionado em `left: 60%` (12/20),
-  tooltip com o nome da equipe líder.
+- `ScoringService.getCriterionLeaders` (só em `getSheet`, folha do
+  próprio jurado): maior nota por critério entre apresentações da MESMA
+  categoria (sem desistências), via `computeAverageScoreByCriterion`;
+  resultado em `ScoringCriterionView.bestScore` (`{value, teamNames}`
+  ou `null`). Empate comparado arredondando pra 1 casa (média de float).
+- Front, mesmo gate `showScoreBands` (Head Judge não vê): mobile em
+  texto ("Maior nota: 12.0 (Equipe B)" / linha de empate); desktop só
+  um marcador `Trophy` acima do slider, nomes no hover.
 
 ## Rebrand pra "Cheer Cup" (2026-07-30)
 
@@ -863,80 +756,21 @@ Rodada grande no Cronograma (`SchedulePage`), commits `4abfefd`,
 
 ## Reorganização da tela de lançamento de nota + Rascunho com desenho/texto separados (2026-09-19)
 
-Rodada de ajustes pedidos direto na tela `EventLiveScoringPage`/
-`EventLiveScoringDesktopView` (jurado lançando nota), um de cada vez,
-mesma sessão. Ainda não deployada (ver "Deploy" abaixo).
+Resumo; texto completo movido em 2026-10-05 para `docs/CLAUDE_HISTORY.md`.
 
-- **Slider de faixa de pontuação só colore a faixa ATUAL** — antes
-  todas as faixas apareciam coloridas o tempo todo, achado "muito
-  distrativo" pelo usuário. `buildBandGradient` (`lib/scoreBands.ts`)
-  ganhou um 3º parâmetro opcional `highlightBand`: quando informado,
-  só o segmento que bate com a faixa atual mantém a cor de verdade, os
-  demais caem pra `var(--color-muted)`. `ScoreBandSlider.tsx` calcula
-  `currentBand` primeiro e repassa pro gradiente.
-- **Layout do desktop reorganizado**: Rascunho ao lado de Legalidade na
-  linha 1 (Comentários sobe pra essa vaga quando não há jurado de
-  legalidade na pista); faixas de pontuação na linha 2 (a última faixa
-  sozinha numa linha ímpar estica pra ocupar a largura toda,
-  `ScoringCriteriaGroups.tsx`); Comentários na linha 3 só quando já
-  ocupou a linha 1 com Legalidade. Sem altura fixa no grid da linha 1
-  (tentada e revertida — com muitos tipos de dedução cadastrados o
-  card de Legalidade ultrapassava qualquer altura fixa razoável e as
-  seções se sobrepunham); em vez disso, `LegalityDeductionsPanel` ganhou
-  `max-h-48 overflow-y-auto` só na lista de últimos registros.
-- **Bug real corrigido no `SketchCanvas` (rascunho por desenho)**:
-  trocar de aba rápido demais (antes do debounce de 900ms salvar)
-  descartava o traço em silêncio pra sempre. Causa: o cleanup do
-  `useEffect` de desmontagem tentava reler `canvasRef.current`, mas o
-  React zera essa ref pra `null` ANTES do cleanup rodar, não depois
-  (contrário à suposição inicial, confirmado testando com
-  `left_click_drag` de verdade — eventos de ponteiro sintéticos via JS
-  não disparam `setPointerCapture`). Corrigido capturando o PNG de
-  forma SÍNCRONA a cada edição (`scheduleSave`, dentro de
-  `lastDataUrlRef`) — o debounce e o cleanup de desmontagem só releem
-  esse ref, nunca o canvas.
-- **Rascunho: desenho e texto viraram campos SEPARADOS no backend**
-  (pedido do usuário depois de reportar "quando desenho apaga o que
-  tinha escrito no modo caixa de texto e vice versa" — os dois
-  dividiam o mesmo campo antes, format-sniffed pelo prefixo `data:`).
-  Novo `ScoreEventKind.SKETCH_TEXT_SET` (mesma privacidade de
-  `SKETCH_SET` — só o próprio jurado vê, nunca aparece pra Head
-  Judge/admin/programa) + migration `AddSketchTextSetToScoreEventKind`
-  (`ALTER TYPE ... ADD VALUE`, rodada no Postgres local; **ainda não
-  rodada no Neon**, ver "Deploy"). `ReducedScoringState.sketchText`
-  novo no reducer do frontend.
-- **`SketchCanvas.tsx` virou o hook `useSketchCanvas`** (arquivo
-  renomeado pra `components/scoring/useSketchCanvas.tsx`, só usado por
-  `RascunhoEditor`), devolvendo `{ toolbar, canvas }` em vez de um
-  componente monolítico — permite ao `RascunhoEditor` decidir onde
-  cada pedaço entra na árvore, em vez da barra de ferramentas do
-  desenho vir sempre grudada embaixo do canvas.
-- **Duas linhas de cabeçalho do Rascunho viraram uma só** (pedido do
-  usuário: "ganhamos uma linha de espaço na tela"): a nota "Visível
-  apenas para você" saiu de dentro do `RascunhoEditor` e foi pro lado
-  do título "RASCUNHO" no desktop (mesma linha, `EventLiveScoringDesktopView`);
-  no mobile (sem título próprio, só a aba "Rascunho") ficou numa linha
-  compacta acima do editor (`EventLiveScoringPage`). A barra de
-  ferramentas do desenho (usando o hook acima) passou a aparecer do
-  lado do toggle "Desenho livre/Caixa de texto", só quando
-  `mode === "draw"` — antes vinha numa linha própria, exclusiva do
-  modo desenho, o que também é o motivo de desenho/texto terem alturas
-  diferentes antes do `stretchToFill` (agora as duas alturas batem
-  igual em qualquer modo).
-- **Testado no navegador** com um harness descartável (`ViewerTestPage`
-  temporário, removido ao final junto com a rota `/viewer-test` de
-  `App.tsx`) renderizando `EventLiveScoringDesktopView` com uma folha
-  falsa e 9 tipos de dedução (pra also validar o scroll da lista de
-  Legalidade): confirmado visualmente que Rascunho/Legalidade não se
-  sobrepõem com as faixas abaixo; confirmado via DOM
-  (`textarea.value`/`toDataURL`) que desenhar não apaga o texto já
-  digitado e vice-versa; confirmado que a altura do card não muda ao
-  trocar de modo. **A página mobile só foi conferida por leitura de
-  código + typecheck, não testada visualmente no navegador** nesta
-  rodada.
-- **Deploy**: migration `AddSketchTextSetToScoreEventKind` ainda
-  precisa rodar no Neon (usuário, `DATABASE_URL` inline no terminal
-  dele) antes de qualquer push que inclua este backend.
+- Slider de faixas só colore a faixa ATUAL (`buildBandGradient` com
+  `highlightBand`).
+- Desktop: Rascunho ao lado de Legalidade, faixas na linha 2,
+  Comentários na 3 (ou na 1 sem Legalidade); sem altura fixa no grid,
+  lista de registros de Legalidade com `max-h-48 overflow-y-auto`.
+- Bug corrigido: traço do desenho perdido ao trocar de aba antes do
+  debounce (a ref do canvas já é `null` no cleanup); o PNG é capturado
+  de forma síncrona a cada edição (`lastDataUrlRef`).
+- Desenho e texto do Rascunho são campos separados:
+  `ScoreEventKind.SKETCH_TEXT_SET` (privado como `SKETCH_SET`),
+  `ReducedScoringState.sketchText`. `useSketchCanvas` (hook, devolve
+  `{ toolbar, canvas }`) só usado pelo `RascunhoEditor`; barra de
+  ferramentas ao lado do toggle de modo, mesma altura nos dois modos.
 
 ## Code-splitting por rota (2026-09-20)
 
@@ -2071,21 +1905,73 @@ verificações).
   - o `NavIconBadge` no item "Eventos" do menu;
   - o ponto no botão do menu do celular.
 
-## Nomenclatura de categoria (2026-10-05)
+## Nomenclatura de categoria (2026-10-05, revista em 2026-10-06)
 
-Decisão do usuário: os nomes na TELA seguem a plataforma, os do código e
-do banco não mudaram.
-- **Modalidade** = `categoryFormat` (`FORMAT_LABELS`: Team Cheer, Group
-  Stunt, Elite Stunt, Partner Stunt, Custom).
-- **Divisão** = `modality` (`MODALITY_LABELS`: All Star, Universitário,
-  Escolar).
-- **Gênero** = `division` (`DIVISION_LABELS`: COED, All Girl, All Boy).
+Na TELA: **Modalidade** = `categoryFormat` (`FORMAT_LABELS`). O que antes
+era "Divisão" (`modality`) virou o critério **Vínculo institucional**
+(propriedade `institution`, coluna `modality`) e **Gênero** (`division`)
+virou a propriedade `gender` (coluna `division`); ver a seção seguinte. O
+modal de geração automática do Cronograma continua chamando a modalidade
+de "categoria" (pedido antigo do usuário).
 
-Aplicado no formulário de categoria, na tabela (colunas Modalidade |
-Divisão | Gênero), no filtro da tela de Categorias ("Todas as divisões")
-e nos filtros da inscrição. O modal de geração automática do Cronograma
-continua chamando a modalidade de "categoria" (pedido antigo do
-usuário).
+## Critérios de divisão das categorias + tela de categoria (2026-10-06)
+
+Decisões do usuário, várias revisadas no meio da sessão (a versão final
+está aqui; a primeira, com liga/desliga por evento, foi descartada).
+
+- **Lista fixa** (o produtor não cria critério novo), ordem fixa que monta
+  o nome: Vínculo institucional, Regime de competição (Novice/Prep/Elite),
+  Faixa etária, Gênero, Nível, Tamanho (`CRITERION_ORDER`, espelhado em
+  `categories/category-criteria.ts` e `web/src/lib/categoryCriteria.ts`).
+  **Nível é obrigatório** (como a modalidade); os demais, cada categoria
+  usa se quiser (null = não usa). Tamanho só em Team Cheer e Custom
+  (`sizeAllowedFor`; nos stunts a API zera).
+- **Categoria**: `institution`/`gender` (colunas antigas `modality`/
+  `division`, de enum para varchar; os ids das opções padrão são os
+  valores antigos dos enums, então nada foi convertido), `regime`,
+  `ageGroup`, `size` guardam o id da opção. Cada combinação de modalidade
+  + todos os critérios é uma categoria (`identityKey`, sem constraint no
+  banco). `criteriaLabels` (não é coluna) vem montado na leitura pra
+  tabela, cartões e filtros.
+- **Nível**: `level` float = construção.tumbling. "4" = os dois 4; "4.2"
+  = construção 4, tumbling 2; "4.4" é recusado (use "4"). Sem tumbling =
+  `nonTumbling` e escrito **"4.0"** (stunts nunca mostram o ".0"). Nível
+  antigo 3.5 passou a significar construção 3, tumbling 5 (sem migrar).
+  A lista de níveis do evento é só a paleta da tela (1 a 7 + os criados);
+  a categoria guarda o número, sem id.
+- **Opções por evento** (`category_criteria_settings`, uma linha por
+  `aliasId`, jsonb, em `EVENT_SCOPED_ENTITIES`; sem linha = padrão; NÃO
+  passa pra outros eventos, decisão do usuário). Padrões: Faixa etária
+  Tiny 3-5, Mini 6-8, Youth 9-11, Junior 12-14, Senior 15-18, Open sem
+  limite; Tamanho XS 5-15, S 16-24, M 25-30, L 31-38, XL até 38. Data de
+  referência da idade (`ageCutoffDate`): sem valor salvo, a data do
+  evento. Opção padrão (`builtIn`, calculado na leitura) não pode ser
+  excluída (400); opção do produtor em uso por alguma categoria também
+  não (409). Regime não tem regra: Novice/Prep/Elite só pré-preenchem o
+  tempo do Team Cheer (1:30/2:00/2:30, no front); Escolar/Universitário
+  mantêm 2:45.
+- **Regra direta da categoria** (`minAthletes`/`maxAthletes`/`minAge`/
+  `maxAge`/`ageCutoffDate`): pra quem não quer criar opção de Tamanho/
+  Faixa etária. Só vale sem a divisão correspondente (a API apaga ao
+  escolher uma).
+- **Tela** `CategoryFormPage` (`/events/:id/categories/new` e
+  `.../:categoryId/edit`; os popups de criar/editar foram removidos):
+  1 Modalidade, 2 Divisões (um card por critério, caixas de marcar;
+  várias opções = uma categoria por combinação; "+ Adicionar" cria opção;
+  lápis e lixeira só nas opções do produtor; "Editar idades"/"Editar nº
+  de atletas" abrem `CriterionOptionsDialog` com "Restaurar padrão"), 3
+  Nome (automático, " • " entre as partes, "Editar nome"), 4 Apresentação
+  e regras (template, tempos e, abaixo de "Opcionais", a regra direta).
+  Editar = mesma tela com um seletor por critério. Resumo à direita; no
+  celular, os botões ficam depois do resumo. Asterisco nos obrigatórios.
+- **Migrations** `CreateCategoryCriteria` e `AddCategoryDirectRules` (só
+  acrescentam: a versão anterior da API funciona com o banco migrado).
+- **Testado**: script HTTP com conta descartável (42 verificações) e no
+  navegador (criar em lote, editar, "+ Adicionar", filtros, 412px); o
+  usuário conferiu o resto.
+- **Ainda não feito (fase 2)**: bloquear o envio da inscrição quando o
+  número de atletas ou a idade (data de nascimento na data de referência)
+  saem da regra da categoria.
 
 ## Inscrição de campeonato pelo próprio programa (2026-10-05)
 
@@ -2322,6 +2208,11 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
   navegador (só pela API).
 
 ## Próximos passos (não iniciados ainda)
+
+0. **Fase 2 dos critérios de divisão**: validar número de atletas e idade
+   no envio da inscrição (ver "Critérios de divisão das categorias").
+   Depois: regras de crossover (atleta em mais de uma equipe/categoria) e,
+   se o usuário quiser, ordenar o cronograma por qualquer critério.
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
 atleta/espectador, transição de status `completed`, endereçamento por
