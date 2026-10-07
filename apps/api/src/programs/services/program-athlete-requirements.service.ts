@@ -1,3 +1,4 @@
+import { UserRole } from '../../common/enums/user-role.enum';
 import {
   BadRequestException,
   ConflictException,
@@ -585,8 +586,7 @@ export class ProgramAthleteRequirementsService {
     const athleteName = `${athlete.firstName} ${athlete.lastName}`.trim();
     const title = `Documento contestado: ${requirement.label} de ${athleteName}`;
     const lines = [
-      `O organizador do evento ${event.name} contestou o documento "${requirement.label}" de ${athleteName}.`,
-      `Motivo: ${doc.contestReason}`,
+      `O organizador do evento ${event.name} contestou o documento "${requirement.label}" de ${athleteName}. O motivo está logo abaixo.`,
       isRegistrationOpen(event)
         ? 'Envie o documento de novo até o prazo de inscrição.'
         : 'Fale com o organizador para combinar o reenvio.',
@@ -606,16 +606,34 @@ export class ProgramAthleteRequirementsService {
           subject: `[${event.name}] ${title}`,
           heading: 'Documento contestado',
           lines,
+          message: doc.contestReason,
           actionPath: `/events/${aliasId}/registration`,
           actionLabel: 'Abrir a inscrição',
           event: { name: event.name, logoUrl: event.logoUrl },
         });
+      }
+      // Atleta com conta também recebe no app (2026-10-07). Conta Programa
+      // nunca é atleta (mesmo email só por engano): não manda pra ela.
+      const athleteUser = await this.usersService.findByEmailInsensitive(
+        athlete.email,
+      );
+      if (athleteUser && athleteUser.role !== UserRole.PROGRAM) {
+        await this.notificationsService.create(
+          aliasId,
+          NotificationType.DOCUMENT_CONTESTED,
+          NotificationAudience.ALL,
+          `Documento contestado: ${requirement.label}`,
+          undefined,
+          athleteUser.id,
+        );
       }
       await this.mailService.sendNotice({
         to: [athlete.email],
         subject: `[${event.name}] ${title}`,
         heading: 'Documento contestado',
         lines,
+        // Texto do produtor em destaque, como o pedido do programa.
+        message: doc.contestReason,
         actionPath: `/events/${aliasId}/my-registration`,
         actionLabel: 'Enviar de novo',
         event: { name: event.name, logoUrl: event.logoUrl },

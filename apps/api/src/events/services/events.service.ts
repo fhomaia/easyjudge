@@ -204,8 +204,15 @@ export class EventsService {
   // evento vem com o(s) papel(is) do próprio usuário anexado
   // (currentUserRole/currentUserRoles), pro frontend decidir tanto as
   // ações de gestão quanto essa apresentação.
-  async findAllForUser(userId: string): Promise<EventWithRole[]> {
-    const { entities, raw } = await this.eventsRepo
+  // `aliasIds` (inscrição de atleta, 2026-10-07): devolve no mesmo formato
+  // esses eventos, com ou sem vínculo (sem vínculo, `currentUserRoles`
+  // vazio). Quem chama já conferiu que a pessoa pode ver o card.
+  async findAllForUser(
+    userId: string,
+    { aliasIds: onlyAliasIds }: { aliasIds?: string[] } = {},
+  ): Promise<EventWithRole[]> {
+    if (onlyAliasIds && onlyAliasIds.length === 0) return [];
+    const query = this.eventsRepo
       .createQueryBuilder('event')
       .addSelect(
         (qb) =>
@@ -235,15 +242,19 @@ export class EventsService {
             .where('j.aliasId = event.aliasId'),
         'judges_count',
       )
-      .innerJoin(
+      .where('event.active = true')
+      .orderBy('event.createdAt', 'DESC');
+    if (onlyAliasIds) {
+      query.andWhere('event.aliasId IN (:...onlyAliasIds)', { onlyAliasIds });
+    } else {
+      query.innerJoin(
         EventMember,
         'member',
         'member.aliasId = event.aliasId AND member.userId = :userId',
         { userId },
-      )
-      .where('event.active = true')
-      .orderBy('event.createdAt', 'DESC')
-      .getRawAndEntities();
+      );
+    }
+    const { entities, raw } = await query.getRawAndEntities();
 
     // `member.roles` (coluna enum[]) NÃO pode vir de `addSelect`/`raw`
     // (bug real, achado em produção 2026-09-23): o driver `pg` não tem

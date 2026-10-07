@@ -1,3 +1,6 @@
+import type { EventWithRole } from '../../events/services/events.service';
+import { RegulationsService } from '../../regulations/services/regulations.service';
+import { RegulationDocument } from '../../regulations/entities/regulation-document.entity';
 import {
   ForbiddenException,
   Injectable,
@@ -49,6 +52,12 @@ export interface AthleteRegistrationEvent {
   registrationDeadline: string | null;
   open: boolean;
   entries: AthleteRegistrationEntry[];
+  // Só na tela do evento (getForEvent), não na lista da Home.
+  regulationDocuments?: RegulationDocument[];
+  // Só na lista da Home (listMine): o evento no formato do card, pra Home
+  // juntar a inscrição ao card do evento (ou criar o card, quando a pessoa
+  // ainda não tem vínculo com o evento).
+  event?: EventWithRole;
 }
 
 // Lado do atleta na inscrição (2026-10-06): o atleta (conta com o mesmo
@@ -77,6 +86,7 @@ export class AthleteRegistrationService {
     private readonly eventsService: EventsService,
     private readonly usersService: UsersService,
     private readonly requirementsService: ProgramAthleteRequirementsService,
+    private readonly regulationsService: RegulationsService,
   ) {}
 
   // Inscrições do atleta em eventos ainda não concluídos (Home).
@@ -104,6 +114,11 @@ export class AthleteRegistrationService {
       );
       if (view.entries.length > 0) result.push(view);
     }
+    const cards = await this.eventsService.findAllForUser(userId, {
+      aliasIds: result.map((r) => r.eventId),
+    });
+    const cardByAlias = new Map(cards.map((c) => [c.aliasId, c]));
+    for (const item of result) item.event = cardByAlias.get(item.eventId);
     return result.sort((a, b) => a.startDate.localeCompare(b.startDate));
   }
 
@@ -125,6 +140,8 @@ export class AthleteRegistrationService {
         'Nenhum programa inscreveu você neste evento.',
       );
     }
+    view.regulationDocuments =
+      await this.regulationsService.listDocumentsByAlias(event.aliasId);
     return view;
   }
 

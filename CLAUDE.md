@@ -495,7 +495,12 @@ confirmando cada ação em conta externa (criação de conta/pagamento não
    `diskStorage` por `memoryStorage` pra popular `file.buffer`.
    Diferente da `DATABASE_URL` do Neon, as credenciais R2 **foram**
    persistidas no `.env` local (mesmo raciocínio do `RESEND_API_KEY`:
-   dev local já fala com o serviço de verdade, não um stand-in). Sem
+   dev local já fala com o serviço de verdade, não um stand-in).
+   **Revisto em 2026-10-07**: as linhas `R2_*` do `.env` local ficaram
+   comentadas e o dev voltou a gravar no disco. O bucket só libera CORS
+   pra produção, então PDF enviado localmente não abria no visualizador
+   em `localhost:5173`, e os arquivos de teste se misturavam aos reais.
+   Pra testar o R2 de propósito, descomentar e reiniciar a API. Sem
    mudança nenhuma no frontend — `logoUrl`/`fileUrl` já eram usados
    como valor opaco de `<img src>`/`window.open`, funcionam igual sendo
    relativos ou absolutos.
@@ -1241,7 +1246,7 @@ antes do push).
   `AddContestationDetails`). `ContestationDialog` (programa) e
   `ContestationDetails` (súmula do jurado e detalhe). Pra testar upload
   local sem mandar pro R2 de produção, subir a API com as variáveis
-  `R2_*` vazias (o `.env` local tem as credenciais reais).
+  `R2_*` vazias (desde 2026-10-07 o `.env` local já vem assim).
 - **Mover evento especial no Cronograma ao vivo** (menu ⋯, admin/
   assessor, antes de sinalizar início, só na cópia da pista de
   apresentação): `MovePresentationDialog` manda `moveCopies: true`;
@@ -1839,6 +1844,31 @@ Migration `CreateAthleteDocuments` (rodada no Neon pelo usuário).
 - **Testado**: scripts HTTP com contas descartáveis (documentos 44,
   antes-da-categoria 16, trava 12, idade 7) e limpeza rodada contra o banco
   local. Telas NÃO conferidas no navegador (extensão desconectada).
+
+## Regulamento na inscrição, inscrição do atleta no card e contestação (2026-10-07)
+
+- **Botão "Regulamento"** (`RegulationDocumentsMenu`) abaixo do nome do
+  evento nas telas de inscrição do programa e do atleta: lista os
+  documentos da etapa Regulamento e abre no `DocumentViewerDialog`. Os
+  documentos vêm na própria view (`regulationDocuments`, via
+  `RegulationsService.listDocumentsByAlias`, ordenados por tipo), não pela
+  rota `/regulation` (exige `EventMember`, que o atleta e o programa em
+  rascunho não têm).
+- **Inscrição do atleta virou botão no card do evento** (o bloco "Suas
+  inscrições como atleta" da Home foi removido):
+  `AthleteRegistrationAction` ("Inscreva-se aqui!"/"Minha inscrição", com
+  o número de itens faltando, em vermelho se houver contestado).
+  `GET /me/registrations` traz `event` no formato do card
+  (`EventsService.findAllForUser(userId, { aliasIds })`, sem exigir
+  vínculo); a Home junta à lista. Evento sem vínculo (ficha do programa em
+  rascunho): card sem selo de status, sem número de notificações e sem
+  abrir, só o botão (decisão do usuário).
+- **Documento contestado** também gera notificação no app pra conta do
+  atleta (qualquer conta menos Programa); o link abre `/my-registration`
+  pra quem não tem papel `program`. Só aparece depois que ele tiver vínculo
+  com o evento (lido/não lido mora no `EventMember`); sem vínculo, fica
+  guardada. O motivo vai no quadro de destaque do email (`message` do
+  `sendNotice`), como o pedido do programa.
 
 ## Inscrição de campeonato pelo próprio programa (2026-10-05)
 

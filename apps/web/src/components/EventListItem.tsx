@@ -8,6 +8,7 @@ import {
   EventRegistrationAction,
   showsRegistrationAction,
 } from "@/components/EventRegistrationAction";
+import { AthleteRegistrationAction } from "@/components/AthleteRegistrationAction";
 import { useAuthStore } from "@/store/auth";
 import { EventStatusIndicator } from "@/components/EventStatusArea";
 import { EventUnreadBadge } from "@/components/EventUnreadBadge";
@@ -16,7 +17,7 @@ import { formatDate } from "@/lib/formatDate";
 import { listItemVariants } from "@/lib/motionVariants";
 import { hasEventStaffRole } from "@/lib/eventMemberRoles";
 import { cn } from "@/lib/utils";
-import type { Event } from "@/api/client";
+import type { AthleteRegistrationEvent, Event } from "@/api/client";
 
 interface EventListItemProps {
   event: Event;
@@ -33,6 +34,9 @@ interface EventListItemProps {
   onOpenLive: (event: Event) => void;
   // Abre a ficha de inscrição (conta Programa) com o raio, ver HomePage.
   onOpenRegistration?: (event: Event) => void;
+  // Inscrição da pessoa como atleta neste evento (botão no card).
+  athleteRegistration?: AthleteRegistrationEvent;
+  onOpenAthleteRegistration?: (event: Event) => void;
 }
 
 export function EventListItem({
@@ -46,6 +50,8 @@ export function EventListItem({
   onShare,
   onOpenLive,
   onOpenRegistration,
+  athleteRegistration,
+  onOpenAthleteRegistration,
 }: EventListItemProps) {
   const isAdmin = event.currentUserRole === "admin";
   const isAssessor = event.currentUserRole === "assessor";
@@ -62,14 +68,20 @@ export function EventListItem({
   // admin/assessor/judge conseguem de fato abrir antes de publicar
   // (EventMemberGuard bloqueia o resto). Pra quem não é staff, o card
   // fica só informativo ("Em breve", ver EventStatusIndicator).
-  const isClickable = (isConfigurable && isStaffViewer) || isLive;
+  // Sem vínculo com o evento (só a inscrição como atleta, ficha do
+  // programa ainda não enviada): o card não abre e não tem selo de status,
+  // só o botão da inscrição (2026-10-07).
+  const isMember = event.currentUserRoles.length > 0;
+  const isClickable = isMember && ((isConfigurable && isStaffViewer) || isLive);
 
   return (
     <motion.div
       variants={listItemVariants}
       whileHover={{ y: -2 }}
       onClick={
-        isConfigurable && isStaffViewer
+        !isMember
+          ? undefined
+          : isConfigurable && isStaffViewer
           ? canManage
             ? () => navigate(`/events/${event.aliasId}/setup`)
             // Jurado não edita configuração nenhuma — vai direto pro
@@ -91,7 +103,7 @@ export function EventListItem({
           className="size-20 rounded-xl text-lg"
         />
         {/* Conta Programa com botão de inscrição: o número vai no botão. */}
-          {!showsRegistrationAction(event, accountRole) && <EventUnreadBadge aliasId={event.aliasId} />}
+          {isMember && !showsRegistrationAction(event, accountRole) && <EventUnreadBadge aliasId={event.aliasId} />}
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-foreground">{event.name}</p>
@@ -108,11 +120,17 @@ export function EventListItem({
         </div>
       </div>
 
-      {!showsRegistrationAction(event, accountRole) && <EventStatusIndicator event={event} />}
+      {isMember && !showsRegistrationAction(event, accountRole) && <EventStatusIndicator event={event} />}
 
       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         <EventLifecycleAction event={event} starting={starting} onStart={() => onStart(event)} />
         <EventRegistrationAction event={event} onOpen={onOpenRegistration} />
+        {athleteRegistration && onOpenAthleteRegistration && (
+          <AthleteRegistrationAction
+            registration={athleteRegistration}
+            onOpen={() => onOpenAthleteRegistration(event)}
+          />
+        )}
 
         <EventActionsMenu
           event={event}

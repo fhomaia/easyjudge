@@ -1,3 +1,4 @@
+import { RegulationDocumentsMenu } from "@/components/RegulationDocumentsMenu";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -765,6 +766,7 @@ function ProgramHeader({
               : "Inscrições encerradas"}
           </p>
           )}
+          <RegulationDocumentsMenu documents={view.regulationDocuments} className="mt-2" />
         </div>
       </div>
       {/* Programa dono da ficha. */}

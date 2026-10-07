@@ -893,6 +893,10 @@ export interface AthleteRegistrationEvent {
   registrationDeadline: string | null;
   open: boolean;
   entries: AthleteRegistrationEntry[];
+  // Só na tela do evento, não na lista da Home.
+  regulationDocuments?: RegulationDocument[];
+  // Só na lista da Home: o evento no formato do card.
+  event?: Event;
 }
 
 export const athleteRegistrationApi = {
@@ -1113,6 +1117,7 @@ export interface ProgramRegistrationView {
   // Ficha enviada e evento não iniciado: pode pedir alteração/cancelamento.
   canRequest: boolean;
   requests: RegistrationRequestView[];
+  regulationDocuments: RegulationDocument[];
 }
 
 export type RegistrationRequestType = "change" | "cancel";

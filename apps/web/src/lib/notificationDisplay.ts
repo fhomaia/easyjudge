@@ -84,9 +84,13 @@ export function notificationHref(
       return `/events/${eventId}/programs?tab=requests`;
     // Pro programa: abre a ficha dele.
     case "registration_reopened":
-    // Documento de atleta contestado: o programa reenvia pela ficha.
-    case "document_contested":
       return `/events/${eventId}/registration`;
+    // Documento de atleta contestado: o programa reenvia pela ficha; o
+    // atleta (também avisado, 2026-10-07), pela tela dele.
+    case "document_contested":
+      return roles.includes("program")
+        ? `/events/${eventId}/registration`
+        : `/events/${eventId}/my-registration`;
     default:
       return null;
   }

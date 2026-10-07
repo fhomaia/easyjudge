@@ -1,3 +1,4 @@
+import { RegulationDocumentsMenu } from "@/components/RegulationDocumentsMenu";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Info, Users } from "lucide-react";
@@ -122,6 +123,10 @@ export function AthleteRegistrationPage() {
                       : "Inscrições encerradas"}
                   </p>
                   )}
+                  <RegulationDocumentsMenu
+                    documents={view.regulationDocuments ?? []}
+                    className="mt-2"
+                  />
                 </div>
               </div>
 

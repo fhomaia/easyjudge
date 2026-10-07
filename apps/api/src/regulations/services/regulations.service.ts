@@ -39,6 +39,22 @@ export class RegulationsService {
     return this.toView(eventId, regulation);
   }
 
+  // Documentos do regulamento por aliasId, sem checar acesso: quem chama
+  // já conferiu (telas de inscrição do programa e do atleta, que não
+  // dependem de EventMember).
+  async listDocumentsByAlias(aliasId: string): Promise<RegulationDocument[]> {
+    const regulation = await this.regulationsRepo.findOne({
+      where: { aliasId },
+      relations: ['documents'],
+    });
+    const order = Object.values(RegulationDocumentKind);
+    return (regulation?.documents ?? []).sort(
+      (a, b) =>
+        order.indexOf(a.kind) - order.indexOf(b.kind) ||
+        a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+  }
+
   async uploadDocument(
     eventId: string,
     kind: RegulationDocumentKind,

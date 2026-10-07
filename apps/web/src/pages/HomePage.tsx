@@ -21,14 +21,21 @@ import {
 } from "@/components/EventFiltersBar";
 import { EventListItem } from "@/components/EventListItem";
 import { EventGridItem } from "@/components/EventGridItem";
-import { AthleteRegistrationsStrip } from "@/components/AthleteRegistrationsStrip";
 import { Pagination } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
 import { BrandBackdrop } from "@/components/BrandBackdrop";
 import { EventCelebrationOverlay } from "@/components/EventCelebrationOverlay";
 import { listVariants } from "@/lib/motionVariants";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { ApiError, eventsApi, usersApi, type Event, type UserProfile } from "@/api/client";
+import {
+  ApiError,
+  athleteRegistrationApi,
+  eventsApi,
+  usersApi,
+  type AthleteRegistrationEvent,
+  type Event,
+  type UserProfile,
+} from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 
 const PAGE_SIZE = 5;
@@ -91,10 +98,26 @@ export function HomePage() {
   const isMobile = useIsMobile();
   const effectiveView: EventViewMode = isMobile ? "grid" : view;
 
+  // Inscrições como atleta (2026-10-07): viram um botão no card do evento.
+  // Evento em que a pessoa ainda não tem vínculo (ficha do programa em
+  // rascunho) entra na lista com o card que a API manda junto.
+  const [athleteRegistrations, setAthleteRegistrations] = useState<
+    Map<string, AthleteRegistrationEvent>
+  >(new Map());
+
   useEffect(() => {
     usersApi.me().then(setProfile).catch(() => setProfile(null));
-    eventsApi.list().then(setEvents).catch(() => setEvents([]));
-  }, []);
+    const registrations =
+      accountRole && accountRole !== "program"
+        ? athleteRegistrationApi.listMine().catch(() => [])
+        : Promise.resolve([]);
+    Promise.all([eventsApi.list().catch(() => []), registrations]).then(([list, regs]) => {
+      setAthleteRegistrations(new Map(regs.map((r) => [r.eventId, r])));
+      const known = new Set(list.map((e) => e.aliasId));
+      const extra = regs.flatMap((r) => (r.event && !known.has(r.eventId) ? [r.event] : []));
+      setEvents([...list, ...extra]);
+    });
+  }, [accountRole]);
 
   useEffect(() => {
     setPage(1);
@@ -195,6 +218,10 @@ export function HomePage() {
     setPendingPath(`/events/${event.aliasId}/registration`);
   }
 
+  function handleOpenAthleteRegistration(event: Event) {
+    setPendingPath(`/events/${event.aliasId}/my-registration`);
+  }
+
   async function handlePublish(event: Event) {
     setError(null);
     try {
@@ -291,9 +318,7 @@ export function HomePage() {
 
                   <EventStatCards events={events} />
 
-                  {accountRole && accountRole !== "program" && <AthleteRegistrationsStrip />}
-
-                  {error && <p className="text-sm text-destructive">{error}</p>}
+                                    {error && <p className="text-sm text-destructive">{error}</p>}
 
                   {hasAnyEvents ? (
                     <>
@@ -338,6 +363,8 @@ export function HomePage() {
                                 onShare={setShareTarget}
                                 onOpenLive={handleOpenLive}
                                 onOpenRegistration={handleOpenRegistration}
+                                athleteRegistration={athleteRegistrations.get(event.aliasId)}
+                                onOpenAthleteRegistration={handleOpenAthleteRegistration}
                               />
                             ) : (
                               <EventGridItem
@@ -352,6 +379,8 @@ export function HomePage() {
                                 onShare={setShareTarget}
                                 onOpenLive={handleOpenLive}
                                 onOpenRegistration={handleOpenRegistration}
+                                athleteRegistration={athleteRegistrations.get(event.aliasId)}
+                                onOpenAthleteRegistration={handleOpenAthleteRegistration}
                               />
                             ),
                           )}

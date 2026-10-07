@@ -1,3 +1,5 @@
+import { RegulationsService } from '../../regulations/services/regulations.service';
+import { RegulationDocument } from '../../regulations/entities/regulation-document.entity';
 import {
   BadRequestException,
   ConflictException,
@@ -97,6 +99,9 @@ export interface ProgramRegistrationView {
   // Pode mandar pedido de alteração/cancelamento ao organizador.
   canRequest: boolean;
   requests: RegistrationRequestView[];
+  // Documentos enviados na etapa Regulamento do Setup (regulamento,
+  // segurança, conduta, adicionais), pra consulta durante a inscrição.
+  regulationDocuments: RegulationDocument[];
 }
 
 export interface RegistrationIssue {
@@ -201,6 +206,7 @@ export class ProgramRegistrationService {
     @InjectRepository(AthleteLink)
     private readonly linksRepo: Repository<AthleteLink>,
     private readonly dataSource: DataSource,
+    private readonly regulationsService: RegulationsService,
   ) {}
 
   async get(eventId: string, userId: string): Promise<ProgramRegistrationView> {
@@ -268,6 +274,9 @@ export class ProgramRegistrationService {
             })
           ).map((r) => this.toRequestView(r))
         : [],
+      regulationDocuments: await this.regulationsService.listDocumentsByAlias(
+        event.aliasId,
+      ),
     };
   }
 
