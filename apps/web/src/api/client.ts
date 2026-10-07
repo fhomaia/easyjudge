@@ -702,7 +702,8 @@ export interface RegistrationIssue {
     | "age"
     | "missing_birth_date"
     | "missing_requirement"
-    | "missing_document";
+    | "missing_document"
+    | "crossover";
   teamId: string;
   categoryId: string;
   // Atleta do evento (ProgramAthlete), nos problemas de idade e de dados.
@@ -1229,10 +1230,18 @@ export const registrationApi = {
 
   // Atletas do ELENCO (ids de AthleteLinkView) da equipe na categoria;
   // inscreve a equipe na categoria se ainda não estava.
-  setPairAthletes: (eventId: string, teamId: string, categoryId: string, linkIds: string[]) =>
+  // keepAthleteIds: atletas fora do elenco (cadastrados pelo organizador)
+  // que continuam marcados; os outros saem da categoria.
+  setPairAthletes: (
+    eventId: string,
+    teamId: string,
+    categoryId: string,
+    linkIds: string[],
+    keepAthleteIds: string[],
+  ) =>
     authRequest<ProgramRegistrationView>(
       `/events/${eventId}/registration/teams/${teamId}/categories/${categoryId}/athletes`,
-      { method: "PUT", body: JSON.stringify({ linkIds }) },
+      { method: "PUT", body: JSON.stringify({ linkIds, keepAthleteIds }) },
     ),
 
   setAthleteEntries: (eventId: string, linkId: string, entries: ProgramAthleteEntry[]) =>
@@ -1860,15 +1869,34 @@ export interface DeductionRuleView {
   requiresCode: boolean;
 }
 
+// Regras de crossover do evento (2026-10-07), ver regulations/crossover-rules.ts na API.
+export interface CrossoverRules {
+  maxTeams: number | null;
+  maxCategories: number | null;
+  // Atletas reutilizados entre duas categorias de Team Cheer do mesmo gênero.
+  maxTeamCheerCrossover: number | null;
+  maxLevelDifference: number | null;
+  // allowed: vários programas; none: um só; by_institution: um programa por
+  // vínculo institucional (Escolar e Universitário contam como um só).
+  crossProgram: "allowed" | "none" | "by_institution";
+}
+
 export interface Regulation {
   eventId: string;
   documents: RegulationDocument[];
+  crossoverRules: CrossoverRules;
   updatedAt: string | null;
 }
 
 export const regulationApi = {
   get: (eventId: string) =>
     authRequest<Regulation>(`/events/${eventId}/regulation`),
+
+  setCrossoverRules: (eventId: string, rules: CrossoverRules) =>
+    authRequest<Regulation>(`/events/${eventId}/regulation/crossover-rules`, {
+      method: "PUT",
+      body: JSON.stringify(rules),
+    }),
 
   uploadDocument: (
     eventId: string,

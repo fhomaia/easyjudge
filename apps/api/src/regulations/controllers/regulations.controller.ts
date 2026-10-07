@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
   Req,
   UploadedFile,
   UseGuards,
@@ -16,6 +17,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RegulationsService } from '../services/regulations.service';
 import { RegulationDocumentKind } from '../enums/regulation-document-kind.enum';
+import { UpdateCrossoverRulesDto } from '../dto/update-crossover-rules.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -46,7 +48,12 @@ export class RegulationsController {
   // 403. Continua sem poder editar nada aqui (as outras rotas deste
   // controller continuam admin/assessor only).
   @Get()
-  @Roles(UserRole.JUDGE, UserRole.ORGANIZATION, UserRole.PROGRAM, UserRole.ATHLETE)
+  @Roles(
+    UserRole.JUDGE,
+    UserRole.ORGANIZATION,
+    UserRole.PROGRAM,
+    UserRole.ATHLETE,
+  )
   @EventRoles(
     EventMemberRole.ADMIN,
     EventMemberRole.ASSESSOR,
@@ -57,6 +64,20 @@ export class RegulationsController {
   )
   get(@Param('eventId') eventId: string) {
     return this.regulationsService.getForEvent(eventId);
+  }
+
+  @Put('crossover-rules')
+  setCrossoverRules(
+    @Param('eventId') eventId: string,
+    @Body() dto: UpdateCrossoverRulesDto,
+  ) {
+    return this.regulationsService.setCrossoverRules(eventId, {
+      ...dto,
+      maxTeams: dto.maxTeams ?? null,
+      maxCategories: dto.maxCategories ?? null,
+      maxTeamCheerCrossover: dto.maxTeamCheerCrossover ?? null,
+      maxLevelDifference: dto.maxLevelDifference ?? null,
+    });
   }
 
   @Post('documents')

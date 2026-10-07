@@ -13,6 +13,26 @@ export const issueSubject = (message: string) => message.slice(0, message.indexO
 const isAthleteData = (i: RegistrationIssue) =>
   i.kind === "missing_requirement" || i.kind === "missing_document";
 
+// Texto de um item de pendência dentro do grupo da equipe+categoria:
+// "Atleta: motivo" (ou só o motivo). Pendência de crossover ganha uma
+// etiqueta pra dizer de onde vem (regras do Regulamento).
+export function IssueText({ issue }: { issue: RegistrationIssue }) {
+  let text = afterColon(issue.message);
+  if (!isAthleteData(issue) && issue.athleteId) {
+    text = `${issue.message.slice(0, issue.message.indexOf(", "))}: ${text}`;
+  }
+  return (
+    <>
+      {issue.kind === "crossover" && (
+        <span className="mr-1.5 inline-block rounded-full bg-violet-500/15 px-2 py-0.5 align-[1px] text-[11px] font-medium text-violet-700 dark:text-violet-300">
+          Crossover
+        </span>
+      )}
+      {text}
+    </>
+  );
+}
+
 // Pendências de uma ficha de inscrição, agrupadas: primeiro por
 // equipe+categoria (número de atletas, idade, data de nascimento), depois
 // por atleta (dados e documentos que faltam). Usado na ficha do programa e
@@ -60,12 +80,6 @@ export function RegistrationIssueGroups({
     a.title.localeCompare(b.title, "pt-BR"),
   );
 
-  function itemText(issue: RegistrationIssue): string {
-    const text = afterColon(issue.message);
-    if (isAthleteData(issue) || !issue.athleteId) return text;
-    // Problema de um atleta dentro da equipe: "Atleta: motivo".
-    return `${issue.message.slice(0, issue.message.indexOf(", "))}: ${text}`;
-  }
 
   function renderGroup(
     group: { title: string; category?: string | null; items: RegistrationIssue[] },
@@ -91,7 +105,7 @@ export function RegistrationIssueGroups({
         <ul className="list-disc space-y-1.5 pl-5">
           {group.items.map((issue, index) => (
             <li key={`${issue.kind}-${issue.athleteId ?? ""}-${issue.requirementId ?? index}`}>
-              {itemText(issue)}
+              <IssueText issue={issue} />
               {renderActions?.(issue)}
             </li>
           ))}

@@ -1,3 +1,4 @@
+import { crossoverIssues } from '../crossover';
 import { RegulationsService } from '../../regulations/services/regulations.service';
 import { RegulationDocument } from '../../regulations/entities/regulation-document.entity';
 import {
@@ -110,7 +111,8 @@ export interface RegistrationIssue {
     | 'age'
     | 'missing_birth_date'
     | 'missing_requirement'
-    | 'missing_document';
+    | 'missing_document'
+    | 'crossover';
   teamId: string;
   categoryId: string;
   // Atleta do evento (ProgramAthlete), nos problemas de idade e de dados.
@@ -752,6 +754,7 @@ export class ProgramRegistrationService {
     teamId: string,
     categoryId: string,
     linkIds: string[],
+    keepAthleteIds?: string[],
   ): Promise<ProgramRegistrationView> {
     const { event, participation } = await this.loadOwnedOpen(eventId, userId);
     const team = await this.findOwnTeam(participation, teamId);
@@ -769,12 +772,38 @@ export class ProgramRegistrationService {
       userId,
       linkIds,
     );
+    // Atletas do programa fora do elenco confirmado (cadastrados pelo
+    // organizador, vínculo ainda pendente): o programa escolhe quais ficam
+    // nesta categoria (keepAthleteIds, pode incluir quem não estava). Sem a
+    // lista (cliente antigo), mantém os que já estavam.
+    const rosterEmails = new Set(
+      (await this.roster(userId)).map((l) => l.email.toLowerCase()),
+    );
+    const isOutsideRoster = (a: ProgramAthlete) =>
+      !rosterEmails.has(a.email.toLowerCase());
+    const outsideRoster = keepAthleteIds
+      ? (
+          await this.athletesRepo.findBy({
+            id: In([...new Set(keepAthleteIds)]),
+            programId: participation.id,
+          })
+        )
+          .filter(isOutsideRoster)
+          .map((a) => a.id)
+      : (
+          await this.entriesRepo.find({
+            where: { teamId: team.id, categoryId },
+            relations: ['athlete'],
+          })
+        )
+          .filter((e) => isOutsideRoster(e.athlete))
+          .map((e) => e.athleteId);
     await this.programAthletesService.setTeamCategoryAthletes(
       eventId,
       participation.id,
       team.id,
       categoryId,
-      athleteIds,
+      [...new Set([...athleteIds, ...outsideRoster])],
     );
     await this.removeUnassignedRosterAthletes(participation, userId);
     return this.get(eventId, userId);
@@ -1156,6 +1185,8 @@ export class ProgramRegistrationService {
           .getMany()
       : [];
 
+    const crossover = await this.crossoverIssuesForEvent(event, criteria);
+
     for (const participation of participations) {
       const programLinks = links.filter(
         (l) => l.programUserId === participation.userId,
@@ -1321,9 +1352,59 @@ export class ProgramRegistrationService {
         }
       }
 
+      issues.push(...(crossover.get(participation.id) ?? []));
       result.set(participation.id, { issues, documentsPendingCount });
     }
     return result;
+  }
+
+  // Pendências de crossover de todas as fichas do evento (inclusive
+  // rascunhos): o conflito pode ser com outro programa, então carrega os
+  // atletas de todos. Ver programs/crossover.ts.
+  private async crossoverIssuesForEvent(
+    event: Event,
+    criteria: CategoryCriterion[],
+  ): Promise<Map<string, RegistrationIssue[]>> {
+    const rows = await this.entriesRepo
+      .createQueryBuilder('entry')
+      .innerJoinAndSelect('entry.athlete', 'athlete')
+      .innerJoinAndSelect('entry.team', 'team')
+      .where('athlete.aliasId = :aliasId', { aliasId: event.aliasId })
+      .getMany();
+    if (rows.length === 0) return new Map();
+    const [rules, participations, categories, accountCpfs] = await Promise.all([
+      this.regulationsService.getCrossoverRulesByAlias(event.aliasId),
+      this.participationsRepo.findBy({ aliasId: event.aliasId }),
+      this.categoriesRepo.findBy({ aliasId: event.aliasId }),
+      this.usersService.findCpfsByEmails([
+        ...new Set(rows.map((r) => r.athlete.email.toLowerCase())),
+      ]),
+    ]);
+    const submittedAt = new Map(
+      participations.map((p) => [p.id, p.submittedAt]),
+    );
+    const programNames = new Map(participations.map((p) => [p.id, p.name]));
+    return crossoverIssues(
+      rows.map((r) => ({
+        programId: r.athlete.programId,
+        programSubmittedAt: submittedAt.get(r.athlete.programId) ?? null,
+        programName: programNames.get(r.athlete.programId) ?? '',
+        teamId: r.teamId,
+        teamName: r.team.name,
+        categoryId: r.categoryId,
+        athleteId: r.athleteId,
+        name: `${r.athlete.firstName} ${r.athlete.lastName}`.trim(),
+        email: r.athlete.email,
+        cpf:
+          accountCpfs.get(r.athlete.email.toLowerCase()) ??
+          r.athlete.cpf ??
+          null,
+        createdAt: r.createdAt,
+      })),
+      new Map(categories.map((c) => [c.id, c])),
+      criteria,
+      rules,
+    );
   }
 
   private async previousTeamNames(

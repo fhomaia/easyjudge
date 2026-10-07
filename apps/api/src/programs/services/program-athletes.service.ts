@@ -248,12 +248,26 @@ export class ProgramAthletesService {
     ];
     await this.assertTeamCategoryPairs(programId, unique);
 
+    // Só apaga/insere o que mudou: a hora de entrada (createdAt) decide
+    // quem fica com a pendência num conflito de crossover.
     await this.dataSource.transaction(async (manager) => {
-      await manager.delete(TeamCategoryAthlete, { athleteId });
-      if (unique.length) {
+      const current = await manager.findBy(TeamCategoryAthlete, { athleteId });
+      const key = (e: { teamId: string; categoryId: string }) =>
+        `${e.teamId}:${e.categoryId}`;
+      const wanted = new Set(unique.map(key));
+      const existing = new Set(current.map(key));
+      for (const e of current.filter((c) => !wanted.has(key(c)))) {
+        await manager.delete(TeamCategoryAthlete, {
+          athleteId,
+          teamId: e.teamId,
+          categoryId: e.categoryId,
+        });
+      }
+      const added = unique.filter((e) => !existing.has(key(e)));
+      if (added.length) {
         await manager.insert(
           TeamCategoryAthlete,
-          unique.map((e) => ({
+          added.map((e) => ({
             teamId: e.teamId,
             categoryId: e.categoryId,
             athleteId,
@@ -292,12 +306,24 @@ export class ProgramAthletesService {
       }
     }
 
+    // Só apaga/insere o que mudou (ver setAthleteEntries).
     await this.dataSource.transaction(async (manager) => {
-      await manager.delete(TeamCategoryAthlete, { teamId, categoryId });
-      if (unique.length) {
+      const current = (
+        await manager.findBy(TeamCategoryAthlete, { teamId, categoryId })
+      ).map((e) => e.athleteId);
+      const removed = current.filter((id) => !unique.includes(id));
+      if (removed.length) {
+        await manager.delete(TeamCategoryAthlete, {
+          teamId,
+          categoryId,
+          athleteId: In(removed),
+        });
+      }
+      const added = unique.filter((id) => !current.includes(id));
+      if (added.length) {
         await manager.insert(
           TeamCategoryAthlete,
-          unique.map((athleteId) => ({ teamId, categoryId, athleteId })),
+          added.map((athleteId) => ({ teamId, categoryId, athleteId })),
         );
       }
     });

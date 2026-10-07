@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useNotificationsUnreadCount } from "@/lib/useNotificationsUnreadCount";
 import { RegulationDocumentsSection } from "@/components/RegulationDocumentsSection";
+import { CrossoverRulesSection } from "@/components/CrossoverRulesSection";
 import { ScoringTemplatesSummarySection } from "@/components/ScoringTemplatesSummarySection";
 import {
   ApiError,
@@ -104,11 +105,11 @@ export function RegulationPage() {
             <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
               <div>
                 <div className="flex items-center justify-between gap-4">
-                  <h1 className="text-2xl font-semibold text-foreground">Regulamento</h1>
+                  <h1 className="text-2xl font-semibold text-foreground">Regras gerais e regulamento</h1>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Configure os documentos do evento e selecione os sistemas de pontuação
-                  disponíveis para as categorias.
+                  Configure os documentos do evento, os sistemas de pontuação disponíveis para as
+                  categorias e as regras de crossover.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Alterações salvas automaticamente
@@ -124,6 +125,12 @@ export function RegulationPage() {
               <ScoringTemplatesSummarySection
                 eventId={id!}
                 templates={templates}
+              />
+
+              <CrossoverRulesSection
+                eventId={id!}
+                rules={regulation.crossoverRules}
+                onSaved={setRegulation}
               />
 
               <div className="flex flex-col gap-4 rounded-xl border border-amber-300/60 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-400/20 dark:bg-amber-500/10">

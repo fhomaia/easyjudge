@@ -28,7 +28,9 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.PROGRAM)
 export class ProgramRegistrationController {
-  constructor(private readonly registrationService: ProgramRegistrationService) {}
+  constructor(
+    private readonly registrationService: ProgramRegistrationService,
+  ) {}
 
   @Get()
   get(@Param('eventId') eventId: string, @Req() req: AuthenticatedRequest) {
@@ -109,6 +111,7 @@ export class ProgramRegistrationController {
       teamId,
       categoryId,
       dto.linkIds,
+      dto.keepAthleteIds,
     );
   }
 

@@ -49,6 +49,14 @@ export class SetRegistrationPairAthletesDto {
   @IsArray()
   @IsUUID(undefined, { each: true })
   linkIds: string[];
+
+  // Atletas do evento fora do elenco confirmado (cadastrados pelo
+  // organizador) escalados nesta categoria; os outros saem dela.
+  // Ausente = mantém os que já estavam (cliente antigo).
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  keepAthleteIds?: string[];
 }
 
 // Lista COMPLETA de equipe+categoria de um atleta do elenco no evento.
@@ -65,7 +73,10 @@ export class CreateRegistrationRequestDto {
   type: RegistrationRequestType;
 
   // Obrigatória pra alteração; no cancelamento é justificativa opcional.
-  @ValidateIf((o: CreateRegistrationRequestDto) => o.type === RegistrationRequestType.CHANGE || !!o.message)
+  @ValidateIf(
+    (o: CreateRegistrationRequestDto) =>
+      o.type === RegistrationRequestType.CHANGE || !!o.message,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(2000)

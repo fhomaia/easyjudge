@@ -205,7 +205,7 @@ export function buildSetupSteps(
   return [
     {
       key: "regulation",
-      title: "Regulamentos",
+      title: "Regras gerais e regulamento",
       shortTitle: "Regulamento",
       description: "Defina as regras de competição, segurança e pontuação do evento.",
       completed: regulationCompleted,

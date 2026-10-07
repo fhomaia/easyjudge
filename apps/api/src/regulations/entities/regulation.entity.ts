@@ -8,8 +8,9 @@ import {
   OneToMany,
 } from 'typeorm';
 import { RegulationDocument } from './regulation-document.entity';
+import type { CrossoverRules } from '../crossover-rules';
 
-// Config de regulamento de um evento (documentos) — 1:1 com Event,
+// Config de regulamento de um evento (documentos e regras de crossover) — 1:1 com Event,
 // endereçada sempre por eventId (nunca pelo próprio id, ver
 // RegulationsService). Não existe até o primeiro upload — GET devolve
 // uma view sintética antes disso. As regras de dedução MORARAM daqui
@@ -31,6 +32,11 @@ export class Regulation {
 
   @OneToMany(() => RegulationDocument, (document) => document.regulation)
   documents: RegulationDocument[];
+
+  // Regras de crossover (2026-10-07). Null = padrão (tudo desligado), ver
+  // normalizeCrossoverRules.
+  @Column({ name: 'crossover_rules', type: 'jsonb', nullable: true })
+  crossoverRules: Partial<CrossoverRules> | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

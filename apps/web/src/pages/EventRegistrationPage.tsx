@@ -43,7 +43,7 @@ import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { CreateAthleteDialog } from "@/components/CreateAthleteDialog";
 import { AthleteChecklist } from "@/components/AthleteChecklist";
-import { RegistrationIssueGroups, issueSubject } from "@/components/RegistrationIssueGroups";
+import { IssueText, RegistrationIssueGroups, issueSubject } from "@/components/RegistrationIssueGroups";
 import {
   CategoryFilters,
   EMPTY_CATEGORY_FILTER,
@@ -61,6 +61,7 @@ import { formatDeadline } from "@/lib/registrationWindow";
 import { athleteInitials, athleteName, pluralize } from "@/lib/programAthletes";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ApiError,
   athletesApi,
@@ -632,6 +633,13 @@ export function EventRegistrationPage() {
           </DialogShell>
           <PairAthletesDialog
             target={pairTarget}
+            issues={(view.issues ?? []).filter(
+              (i) =>
+                i.teamId === pairTarget?.team.id &&
+                i.categoryId === pairTarget?.category.id &&
+                i.kind !== "missing_requirement" &&
+                i.kind !== "missing_document",
+            )}
             roster={usableRoster}
             birthDates={view.rosterBirthDates ?? {}}
             onSetBirthDate={async (linkId, birthDate) => {
@@ -648,10 +656,20 @@ export function EventRegistrationPage() {
             onNewAthlete={() => setCreateAthleteOpen(true)}
             createdLink={createdLink}
             readOnly={!editable}
-            onSave={async (target, linkIds) =>
+            onSave={async (target, linkIds, keepAthleteIds) =>
               applyView(
-                await registrationApi.setPairAthletes(id, target.team.id, target.category.id, linkIds),
+                await registrationApi.setPairAthletes(
+                  id,
+                  target.team.id,
+                  target.category.id,
+                  linkIds,
+                  keepAthleteIds,
+                ),
               )
+            }
+            pendingLinks={roster.filter((l) => !l.confirmed && l.email)}
+            onLinkConfirmed={(link) =>
+              setRoster((prev) => [link, ...prev.filter((l) => l.id !== link.id)])
             }
             onRemoveFromCategory={async (target) =>
               applyView(
@@ -1332,13 +1350,6 @@ function CategoryDropCard({
   );
 }
 
-// Grupos do popup de atletas de uma categoria com regra de idade.
-const ELIGIBILITY = {
-  eligible: "Elegíveis",
-  unknown: "Sem data de nascimento",
-  outside: "Fora da faixa etária",
-};
-
 // Idade completa na data (aniversário na própria data conta); mesma conta
 // da API (ProgramRegistrationService).
 function ageAt(birthDate: string, onDate: string): number {
@@ -1389,28 +1400,6 @@ function rulesText(category: Category): string | null {
       : ages,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
-}
-
-// Regras da categoria em itens (popup de atletas): "Número de atletas: 2
-// a 3", "Idade: até 12 anos", "Idade conferida em: 30/06/2026".
-function rulesItems(category: Category): string[] {
-  const r = category.rules;
-  if (!r) return [];
-  const range = (min: number | null, max: number | null, unit: string) =>
-    min != null && max != null
-      ? `${min} a ${max} ${unit}`
-      : min != null
-        ? `${min} ${unit} ou mais`
-        : max != null
-          ? `até ${max} ${unit}`
-          : null;
-  const athletes = range(r.minAthletes, r.maxAthletes, "atletas");
-  const ages = range(r.minAge, r.maxAge, "anos");
-  return [
-    athletes && `Número de atletas: ${athletes}`,
-    ages && `Idade: ${ages}`,
-    ages && r.ageCutoffDate && `Idade conferida em: ${r.ageCutoffDate.split("-").reverse().join("/")}`,
-  ].filter((item): item is string => !!item);
 }
 
 // Pendências que impedem o envio, agrupadas (RegistrationIssueGroups).
@@ -1939,16 +1928,20 @@ function DialogShell({
   title,
   description,
   children,
+  className,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92dvh] gap-5 overflow-y-auto p-6 sm:max-w-lg sm:p-8">
+      <DialogContent
+        className={cn("max-h-[92dvh] gap-5 overflow-y-auto p-6 sm:max-w-lg sm:p-8", className)}
+      >
         <div className="grid gap-1">
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
@@ -2073,6 +2066,10 @@ function TeamCategoriesDialog({
   );
 }
 
+// Prefixo dos itens de atletas fora do elenco no popup de atletas (o id
+// do item é o do atleta do evento, não o do vínculo).
+const OUTSIDE_PREFIX = "event-athlete:";
+
 function PairAthletesDialog({
   target,
   roster,
@@ -2085,6 +2082,9 @@ function PairAthletesDialog({
   onRemoveFromCategory,
   createdLink,
   readOnly = false,
+  pendingLinks = [],
+  onLinkConfirmed,
+  issues = [],
 }: {
   target: PairTarget | null;
   roster: AthleteLinkView[];
@@ -2098,10 +2098,20 @@ function PairAthletesDialog({
   onNewAthlete: () => void;
   // Atleta recém-criado pelo "Novo atleta" deste popup: já entra marcado.
   createdLink: AthleteLinkView | null;
-  onSave: (target: PairTarget, linkIds: string[]) => Promise<unknown>;
+  onSave: (target: PairTarget, linkIds: string[], keepAthleteIds: string[]) => Promise<unknown>;
   onRemoveFromCategory: (target: PairTarget) => Promise<unknown>;
+  // Pedidos de vínculo ainda não confirmados (atleta cadastrado pelo
+  // organizador): o popup oferece confirmar ali mesmo.
+  pendingLinks?: AthleteLinkView[];
+  onLinkConfirmed?: (link: AthleteLinkView) => void;
+  // Pendências desta equipe+categoria (como estão salvas).
+  issues?: RegistrationIssue[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [linking, setLinking] = useState<string | null>(null);
+  // Seção "Adicionar à escalação" aberta, com busca.
+  const [adding, setAdding] = useState(false);
+  const [search, setSearch] = useState("");
   const { saving, error, setError, save } = useSaver(onOpenChange);
 
   useEffect(() => {
@@ -2113,8 +2123,22 @@ function PairAthletesDialog({
         )
         .map((a) => a.email.toLowerCase()),
     );
-    setSelected(new Set(roster.filter((l) => inPair.has(l.email.toLowerCase())).map((l) => l.id)));
+    const rosterEmailSet = new Set(roster.map((l) => l.email.toLowerCase()));
+    setSelected(
+      new Set([
+        ...roster.filter((l) => inPair.has(l.email.toLowerCase())).map((l) => l.id),
+        // Fora do elenco (organizador): já marcados, podem ser desmarcados.
+        ...eventAthletes
+          .filter(
+            (a) =>
+              !rosterEmailSet.has(a.email.toLowerCase()) && inPair.has(a.email.toLowerCase()),
+          )
+          .map((a) => `${OUTSIDE_PREFIX}${a.id}`),
+      ]),
+    );
     setError(null);
+    setAdding(false);
+    setSearch("");
     // `roster`/`eventAthletes` de fora de propósito: atleta criado com o
     // popup aberto não pode zerar a seleção em andamento.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2123,6 +2147,74 @@ function PairAthletesDialog({
   useEffect(() => {
     if (createdLink) setSelected((prev) => new Set(prev).add(createdLink.id));
   }, [createdLink]);
+
+  // Candidatos à escalação: atletas do programa cadastrados pelo
+  // organizador sem vínculo reconhecido no elenco (chave com prefixo, id do
+  // atleta do evento) e o elenco confirmado (chave = id do vínculo).
+  const rosterEmails = new Set(roster.map((l) => l.email.toLowerCase()));
+  const byName = (x: Candidate, y: Candidate) => x.name.localeCompare(y.name, "pt-BR");
+  const organizerCandidates: Candidate[] = eventAthletes
+    .filter((a) => !rosterEmails.has(a.email.toLowerCase()))
+    .map((a) => ({
+      key: `${OUTSIDE_PREFIX}${a.id}`,
+      name: athleteName(a),
+      firstName: a.firstName,
+      lastName: a.lastName,
+      email: a.email,
+      birthDate: a.accountBirthDate ?? a.birthDate,
+      athlete: a,
+      link: null,
+    }))
+    .sort(byName);
+  const rosterCandidates: Candidate[] = roster
+    .map((l) => ({
+      key: l.id,
+      name: `${l.firstName} ${l.lastName}`.trim(),
+      firstName: l.firstName,
+      lastName: l.lastName,
+      email: l.email,
+      birthDate: birthDates[l.id] ?? null,
+      athlete: null,
+      link: l,
+    }))
+    .sort(byName);
+  const rules = target?.category.rules ?? null;
+  const ageNote = (c: Candidate) => {
+    if (!rules || !hasAgeRule(rules)) return null;
+    const problem = ageProblem(rules, c.birthDate);
+    const age = c.birthDate && rules.ageCutoffDate ? ageAt(c.birthDate, rules.ageCutoffDate) : null;
+    return { age, problem };
+  };
+
+  // "Adicionar ao elenco": confirma o pedido pendente (ou cria o vínculo já
+  // confirmado, se não houver pedido): o atleta passa pro elenco e continua
+  // escalado.
+  async function confirmLink(athlete: ProgramAthlete) {
+    setLinking(athlete.id);
+    setError(null);
+    try {
+      const pending = pendingLinks.find(
+        (l) => l.email.toLowerCase() === athlete.email.toLowerCase(),
+      );
+      const link = pending
+        ? await athletesApi.confirm(pending.id)
+        : await athletesApi.create({
+            firstName: athlete.firstName,
+            lastName: athlete.lastName,
+            email: athlete.email,
+          });
+      onLinkConfirmed?.(link);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.delete(`${OUTSIDE_PREFIX}${athlete.id}`)) next.add(link.id);
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível confirmar o vínculo.");
+    } finally {
+      setLinking(null);
+    }
+  }
 
   if (readOnly) {
     const inPair = target
@@ -2170,97 +2262,348 @@ function PairAthletesDialog({
     );
   }
 
+  const escalated = [...organizerCandidates, ...rosterCandidates]
+    .filter((c) => selected.has(c.key))
+    .sort(byName);
+  const query = search.trim().toLowerCase();
+  const matches = (c: Candidate) =>
+    !query || c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query);
+  const availableOrganizer = organizerCandidates.filter((c) => !selected.has(c.key) && matches(c));
+  const availableRoster = rosterCandidates.filter((c) => !selected.has(c.key) && matches(c));
+  const rulesLine = target ? rulesText(target.category) : null;
+
+  function add(key: string) {
+    setSelected((prev) => new Set(prev).add(key));
+  }
+  function closeAdding() {
+    setAdding(false);
+    setSearch("");
+  }
+  function remove(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
   return (
     <DialogShell
+      // Mesma altura nos dois passos (escalação e adicionar): só a lista
+      // do meio rola, o popup não estica nem encolhe ao trocar.
+      className="flex h-[min(680px,92dvh)] flex-col overflow-hidden"
       open={target !== null}
       onOpenChange={onOpenChange}
       title={target ? `${target.team.name} em ${target.category.name}` : ""}
-      description="Escolha os atletas que participarão desta categoria."
+      description={
+        adding
+          ? "Adicionar à escalação: toque em um atleta para escalá-lo."
+          : rulesLine
+            ? `Regras da categoria: ${rulesLine}`
+            : "Escolha os atletas desta categoria."
+      }
     >
-      {target && rulesItems(target.category).length > 0 && (
-        <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm">
-          <p className="font-medium text-foreground">Regras da categoria</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
-            {rulesItems(target.category).map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">Atletas do seu elenco</p>
-        <button
-          type="button"
-          onClick={onNewAthlete}
-          className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-        >
-          <Plus className="size-3.5" />
-          Novo atleta
-        </button>
-      </div>
-      <AthleteChecklist
-        items={[...roster]
-          .sort((a, b) =>
-            `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, "pt-BR"),
-          )
-          .map((l) => {
-            const item = {
-              id: l.id,
-              label: `${l.firstName} ${l.lastName}`.trim(),
-              hint: l.email,
-            };
-            if (!target?.category.rules || !hasAgeRule(target.category.rules)) return item;
-            const rules = target.category.rules;
-            const birthDate = birthDates[l.id] ?? null;
-            const problem = ageProblem(rules, birthDate);
-            const age =
-              birthDate && rules.ageCutoffDate ? ageAt(birthDate, rules.ageCutoffDate) : null;
-            return {
-              ...item,
-              hint: age != null ? `${age} anos · ${l.email}` : l.email,
-              group: !birthDate
-                ? ELIGIBILITY.unknown
-                : problem
-                  ? ELIGIBILITY.outside
-                  : ELIGIBILITY.eligible,
-              // Fora da regra de idade: pode marcar, vira pendência do envio.
-              warning: problem ?? undefined,
-              extra: !birthDate ? (
-                <BirthDateFix compact onSave={(date) => onSetBirthDate(l.id, date)} />
-              ) : undefined,
-            };
-          })}
-        groupOrder={
-          target?.category.rules && hasAgeRule(target.category.rules)
-            ? [ELIGIBILITY.eligible, ELIGIBILITY.unknown, ELIGIBILITY.outside]
-            : undefined
-        }
-        selected={selected}
-        onChange={setSelected}
-        searchPlaceholder="Buscar atleta..."
-        emptyMessage="Seu elenco ainda não tem atletas. Use Novo atleta."
-        countNoun={{ singular: "atleta selecionado", plural: "atletas selecionados" }}
-      />
-      <FormError message={error} />
-      {target && (
-        <SaveRow
-          saving={saving}
-          onCancel={() => onOpenChange(false)}
-          onSave={() => void save(() => onSave(target, [...selected]))}
-          extra={
-            <Button
+      <AnimatePresence mode="wait" initial={false} custom={adding ? 1 : -1}>
+      {adding ? (
+        // Segundo passo: escolher quem entra na escalação.
+        <motion.div key="add" {...STEP_MOTION} custom={adding ? 1 : -1} className={STEP_CLASS}>
+          <button
+            type="button"
+            onClick={closeAdding}
+            className="flex items-center gap-2 justify-self-start text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Voltar para a escalação
+          </button>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar atleta..."
+              className="pl-9"
+              autoFocus
+            />
+          </div>
+          <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto">
+            {availableOrganizer.length > 0 && (
+              <CandidateGroup
+                title="Sem vínculo confirmado"
+                hint="Não fazem parte do seu elenco."
+                candidates={availableOrganizer}
+                ageNote={ageNote}
+                onAdd={add}
+                linkingId={linking}
+                onAddToRoster={(c) => c.athlete && void confirmLink(c.athlete)}
+              />
+            )}
+            <CandidateGroup
+              title="Seu elenco"
+              candidates={availableRoster}
+              ageNote={ageNote}
+              onAdd={add}
+              empty={
+                query
+                  ? "Nenhum atleta encontrado."
+                  : roster.length === 0
+                    ? "Seu elenco ainda não tem atletas."
+                    : "Todos os atletas do seu elenco já estão escalados."
+              }
+              action={
+                <button
+                  type="button"
+                  onClick={onNewAthlete}
+                  className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  <Plus className="size-3.5" />
+                  Novo atleta
+                </button>
+              }
+            />
+          </div>
+          <FormError message={error} />
+          <Button type="button" className="justify-self-end" onClick={closeAdding}>
+            Concluir ({pluralize(escalated.length, "escalado", "escalados")})
+          </Button>
+        </motion.div>
+      ) : (
+        <motion.div key="list" {...STEP_MOTION} custom={adding ? 1 : -1} className={STEP_CLASS}>
+          <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto">
+          {/* Escalação: quem compete nesta equipe+categoria. */}
+          <section className="grid gap-2">
+            <p className="text-sm font-medium text-foreground">
+              Atletas escalados ({escalated.length})
+            </p>
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => void save(() => onRemoveFromCategory(target))}
+              onClick={() => setAdding(true)}
+              className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 px-3 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/5"
             >
-              Tirar da categoria
-            </Button>
-          }
-        />
+              <Plus className="size-4" />
+              Adicionar atleta à escalação
+            </button>
+            {escalated.length === 0 ? (
+              <p className="py-2 text-center text-sm text-muted-foreground">Nenhum atleta escalado.</p>
+            ) : (
+              <ul className="grid gap-1">
+                {escalated.map((c) => {
+                  const note = ageNote(c);
+                  return (
+                    <li key={c.key} className="grid min-w-0 gap-1 rounded-lg px-1 py-1.5">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          style={{ backgroundColor: getAvatarColor(c.key) }}
+                          className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                        >
+                          {athleteInitials(c)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">{c.name}</p>
+                          <TruncatedText
+                            text={note?.age != null ? `${note.age} anos · ${c.email}` : c.email}
+                            className="text-xs text-muted-foreground"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => remove(c.key)}
+                          aria-label={`Tirar ${c.name} da escalação`}
+                          title="Tirar da escalação"
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+                      <div className="grid gap-1 pl-11">
+                        {note?.problem && (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">{note.problem}</p>
+                        )}
+                        {c.link && !c.birthDate && rules && hasAgeRule(rules) && (
+                          <BirthDateFix compact onSave={(date) => onSetBirthDate(c.link!.id, date)} />
+                        )}
+                        {c.athlete && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              Não faz parte do seu elenco
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={linking !== null}
+                              onClick={() => void confirmLink(c.athlete!)}
+                            >
+                              {linking === c.athlete.id ? "Adicionando..." : "Adicionar ao elenco"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {issues.length > 0 && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+              <p className="font-medium text-destructive">
+                {pluralize(issues.length, "pendência", "pendências")}
+              </p>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-foreground">
+                {issues.map((issue, index) => (
+                  <li key={`${issue.kind}-${issue.athleteId ?? ""}-${index}`}>
+                    <IssueText issue={issue} />
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-muted-foreground">
+                As pendências são atualizadas ao salvar.
+              </p>
+            </div>
+          )}
+          </div>
+
+          <FormError message={error} />
+          {target && (
+            <SaveRow
+              saving={saving}
+              onCancel={() => onOpenChange(false)}
+              onSave={() =>
+                void save(() =>
+                  onSave(
+                    target,
+                    [...selected].filter((id) => !id.startsWith(OUTSIDE_PREFIX)),
+                    [...selected]
+                      .filter((id) => id.startsWith(OUTSIDE_PREFIX))
+                      .map((id) => id.slice(OUTSIDE_PREFIX.length)),
+                  ),
+                )
+              }
+              extra={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => void save(() => onRemoveFromCategory(target))}
+                >
+                  Tirar da categoria
+                </Button>
+              }
+            />
+          )}
+        </motion.div>
       )}
+      </AnimatePresence>
     </DialogShell>
+  );
+}
+
+// Troca de passo no popup de atletas: o passo novo desliza do lado em que
+// "fica" (adicionar à direita, escalação à esquerda). `custom` = direção.
+const STEP_CLASS = "flex min-h-0 flex-1 flex-col gap-5";
+const STEP_MOTION = {
+  variants: {
+    enter: (dir: number) => ({ x: dir * 32, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (dir: number) => ({ x: dir * -32, opacity: 0 }),
+  },
+  initial: "enter",
+  animate: "center",
+  exit: "exit",
+  transition: { duration: 0.18, ease: "easeOut" },
+} as const;
+
+// Atleta que pode ser escalado no popup de atletas da categoria.
+interface Candidate {
+  key: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  birthDate: string | null;
+  // Cadastrado pelo organizador, fora do elenco (sem vínculo confirmado).
+  athlete: ProgramAthlete | null;
+  link: AthleteLinkView | null;
+}
+
+function CandidateGroup({
+  title,
+  hint,
+  candidates,
+  ageNote,
+  onAdd,
+  empty,
+  action,
+  onAddToRoster,
+  linkingId = null,
+}: {
+  title: string;
+  hint?: string;
+  candidates: Candidate[];
+  ageNote: (c: Candidate) => { age: number | null; problem: string | null } | null;
+  onAdd: (key: string) => void;
+  empty?: string;
+  action?: ReactNode;
+  // Atletas do organizador: botão "Adicionar ao elenco" na própria linha.
+  onAddToRoster?: (c: Candidate) => void;
+  linkingId?: string | null;
+}) {
+  return (
+    <div className="grid gap-1">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {title} ({candidates.length})
+        </p>
+        {action}
+      </div>
+      {hint && <p className="px-1 text-xs text-muted-foreground">{hint}</p>}
+      {candidates.length === 0 ? (
+        empty && <p className="px-1 py-2 text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        <ul className="grid gap-0.5">
+          {candidates.map((c) => {
+            const note = ageNote(c);
+            return (
+              <li key={c.key} className="flex min-w-0 items-center gap-2 rounded-md hover:bg-muted/60">
+                <button
+                  type="button"
+                  onClick={() => onAdd(c.key)}
+                  title="Adicionar à escalação"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 text-left"
+                >
+                  <Plus className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-foreground">{c.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {note?.age != null ? `${note.age} anos · ${c.email}` : c.email}
+                    </span>
+                    {note?.problem && (
+                      <span className="block text-xs text-amber-700 dark:text-amber-400">
+                        {note.problem}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {onAddToRoster && c.athlete && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mr-2 shrink-0"
+                    disabled={linkingId !== null}
+                    onClick={() => onAddToRoster(c)}
+                  >
+                    {linkingId === c.athlete.id ? "Adicionando..." : "Adicionar ao elenco"}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 

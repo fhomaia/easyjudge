@@ -1845,6 +1845,59 @@ Migration `CreateAthleteDocuments` (rodada no Neon pelo usuário).
   antes-da-categoria 16, trava 12, idade 7) e limpeza rodada contra o banco
   local. Telas NÃO conferidas no navegador (extensão desconectada).
 
+## Regras de crossover + popup de escalação (2026-10-07)
+
+Não existe regra oficial de crossover: cada produtor configura a sua
+(decisões do usuário, várias revistas na sessão; vale o que está aqui).
+
+- **Onde**: seção "Regras de crossover" na tela do Regulamento
+  (`CrossoverRulesSection`); card do Setup e título da tela viraram
+  "Regras gerais e regulamento". `regulations.crossover_rules` (jsonb,
+  null = padrão, `normalizeCrossoverRules` em `regulations/crossover-rules.ts`),
+  `PUT /events/:eventId/regulation/crossover-rules` (admin/assessor). A tela
+  manda só os campos atuais (aba antiga mandava campos removidos e a rota
+  recusava).
+- **Regras**: fixa (atleta não compete duas vezes na mesma categoria, por
+  duas equipes ou dois programas); `crossProgram` = `by_institution`
+  (PADRÃO: um programa por vínculo institucional, Escolar e Universitário
+  contam como um só, fixo da plataforma em `SHARED_INSTITUTIONS`;
+  vínculo criado pelo produtor conta à parte) | `allowed` | `none`;
+  `maxTeams`; `maxCategories` (categorias distintas); `maxTeamCheerCrossover`
+  (atletas reutilizados entre duas categorias de Team Cheer do mesmo
+  programa e mesmo gênero, por par equipe+categoria, aceita 0);
+  `maxLevelDifference` (nível de construção, só entre categorias da MESMA
+  modalidade; cada Custom é uma). Descartadas na sessão: "não misturar
+  opções de critério" e "mesma categoria ignorando critério".
+- **Cálculo** (`programs/crossover.ts`, chamado em `computeIssuesBatch`,
+  carga de todos os programas do evento, inclusive rascunhos): mesma pessoa
+  por email ou CPF; entradas de cada pessoa em ordem de inscrição
+  (`team_category_athletes.created_at`, nova; empate desempata pelo envio da
+  ficha), cada uma conferida contra as anteriores, então a pendência fica
+  com quem inscreveu por último e ficha enviada não ganha pendência por
+  inscrição posterior de outro programa. As trocas de lista de atletas
+  (`setAthleteEntries`/`setTeamCategoryAthletes`) só apagam/inserem o que
+  mudou, pra não perder essa hora. Pendência `kind: 'crossover'`,
+  bloqueante, com etiqueta "Crossover" (`IssueText` em
+  `RegistrationIssueGroups`). A "mesma categoria por outro programa" some
+  quando a regra entre programas já barra o par (evita duplicar). Mensagens
+  nomeiam o outro programa ("pelo programa X"), menos a do vínculo.
+- **Popup de atletas da categoria (ficha do programa)** reescrito em dois
+  passos, mesma altura, animação de deslizar (framer-motion): escalação
+  (escalados com X, avisos de idade, "Não faz parte do seu elenco" +
+  "Adicionar ao elenco", pendências da categoria) e adicionar ("Sem vínculo
+  confirmado" = atletas do programa cadastrados pelo produtor fora do elenco
+  confirmado, depois "Seu elenco"). Bug achado: salvar trocava a lista
+  pelos atletas do elenco e apagava os do produtor; agora a rota recebe
+  `keepAthleteIds` (atletas do programa fora do elenco escalados; ausente =
+  mantém os que estavam). "Adicionar ao elenco" confirma o pedido de vínculo
+  pendente ou cria o vínculo já confirmado.
+- `TruncatedText`: etiqueta num portal com posição fixa (dentro de lista com
+  rolagem era cortada e fazia a lista rolar).
+- Migration `AddCrossoverRules` (coluna jsonb + `created_at` em
+  `team_category_athletes`). Testado: cenários sintéticos do cálculo, script
+  contra o serviço e cenário local no evento "Teste" (conferido pelo
+  usuário na tela).
+
 ## Regulamento na inscrição, inscrição do atleta no card e contestação (2026-10-07)
 
 - **Botão "Regulamento"** (`RegulationDocumentsMenu`) abaixo do nome do
@@ -2106,9 +2159,10 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
 
 ## Próximos passos (não iniciados ainda)
 
-0. Regras de crossover e depois pagamento da inscrição (com aba de resumo
-   da ficha). Documentos dos atletas: feito, ver "Documentos dos atletas,
-   lado do atleta e biblioteca".
+0. Pagamento da inscrição (com aba de resumo da ficha). Crossover: feito,
+   ver "Regras de crossover + popup de escalação"; a exceção de crossover
+   entre programas por nível (programa de origem sem equipe no nível)
+   ficou pra depois.
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
 atleta/espectador, transição de status `completed`, endereçamento por

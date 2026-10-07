@@ -11,10 +11,12 @@ import { EventsService } from '../../events/services/events.service';
 import { EventActivityLogService } from '../../events/services/event-activity-log.service';
 import { EventActivityAction } from '../../events/enums/event-activity-action.enum';
 import { StorageService } from '../../common/services/storage.service';
+import { CrossoverRules, normalizeCrossoverRules } from '../crossover-rules';
 
 export interface RegulationView {
   eventId: string;
   documents: RegulationDocument[];
+  crossoverRules: CrossoverRules;
   updatedAt: Date | null;
 }
 
@@ -53,6 +55,21 @@ export class RegulationsService {
         order.indexOf(a.kind) - order.indexOf(b.kind) ||
         a.createdAt.getTime() - b.createdAt.getTime(),
     );
+  }
+
+  async getCrossoverRulesByAlias(aliasId: string): Promise<CrossoverRules> {
+    const regulation = await this.regulationsRepo.findOneBy({ aliasId });
+    return normalizeCrossoverRules(regulation?.crossoverRules);
+  }
+
+  async setCrossoverRules(
+    eventId: string,
+    rules: CrossoverRules,
+  ): Promise<RegulationView> {
+    const regulation = await this.getOrCreateForEvent(eventId);
+    regulation.crossoverRules = normalizeCrossoverRules(rules);
+    await this.regulationsRepo.save(regulation);
+    return this.getForEvent(eventId);
   }
 
   async uploadDocument(
@@ -137,6 +154,7 @@ export class RegulationsService {
     return {
       eventId,
       documents: regulation?.documents ?? [],
+      crossoverRules: normalizeCrossoverRules(regulation?.crossoverRules),
       updatedAt: regulation?.updatedAt ?? null,
     };
   }
