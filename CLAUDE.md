@@ -1866,7 +1866,9 @@ Não existe regra oficial de crossover: cada produtor configura a sua
   (atletas reutilizados entre duas categorias de Team Cheer do mesmo
   programa e mesmo gênero, por par equipe+categoria, aceita 0);
   `maxLevelDifference` (nível de construção, só entre categorias da MESMA
-  modalidade; cada Custom é uma). Descartadas na sessão: "não misturar
+  modalidade, cada Custom é uma, e só dentro do MESMO programa: por outro
+  programa vale só a regra entre programas; decisão do usuário 2026-10-09,
+  sem texto na tela explicando isso). Descartadas na sessão: "não misturar
   opções de critério" e "mesma categoria ignorando critério".
 - **Cálculo** (`programs/crossover.ts`, chamado em `computeIssuesBatch`,
   carga de todos os programas do evento, inclusive rascunhos): mesma pessoa
@@ -2160,9 +2162,7 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
 ## Próximos passos (não iniciados ainda)
 
 0. Pagamento da inscrição (com aba de resumo da ficha). Crossover: feito,
-   ver "Regras de crossover + popup de escalação"; a exceção de crossover
-   entre programas por nível (programa de origem sem equipe no nível)
-   ficou pra depois.
+   ver "Regras de crossover + popup de escalação".
 
 **Nota:** os itens antigos desta lista (lançamento de notas, jornada do
 atleta/espectador, transição de status `completed`, endereçamento por

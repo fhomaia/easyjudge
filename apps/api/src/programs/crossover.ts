@@ -169,13 +169,15 @@ export function crossoverIssues(
         }
       }
 
-      // Diferença de nível só entre categorias da mesma modalidade.
+      // Diferença de nível só entre categorias da mesma modalidade, dentro
+      // do mesmo programa (por outro programa vale a regra entre programas).
       const level = construction(category);
       if (rules.maxLevelDifference != null && level != null) {
         const conflict = prior.find((p) => {
           const other = categories.get(p.categoryId);
           const otherLevel = construction(other);
           return (
+            p.programId === entry.programId &&
             !!other &&
             modalityKey(other) === modalityKey(category) &&
             otherLevel != null &&
