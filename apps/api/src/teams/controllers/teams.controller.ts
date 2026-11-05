@@ -19,6 +19,8 @@ import { AddTeamCategoryDto } from '../dto/add-team-category.dto';
 import { SetTeamCategoryAthletesDto } from '../../programs/dto/set-athlete-entries.dto';
 import { ProgramAthletesService } from '../../programs/services/program-athletes.service';
 import { ProgramAccessGuard } from '../../programs/guards/program-access.guard';
+import { AthleteRequestsService } from '../../programs/services/athlete-requests.service';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 
@@ -29,7 +31,24 @@ export class TeamsController {
   constructor(
     private readonly teamsService: TeamsService,
     private readonly programAthletesService: ProgramAthletesService,
+    private readonly athleteRequestsService: AthleteRequestsService,
   ) {}
+
+  // Conta Programa não muda as categorias de atleta com inscrição aprovada
+  // (AthleteRequestsService.assertApprovedCategoriesKept); o produtor pode.
+  private async assertKept(
+    req: AuthenticatedRequest,
+    programId: string,
+    change: Parameters<
+      AthleteRequestsService['assertApprovedCategoriesKept']
+    >[1],
+  ): Promise<void> {
+    if (req.user.role !== UserRole.PROGRAM) return;
+    await this.athleteRequestsService.assertApprovedCategoriesKept(
+      programId,
+      change,
+    );
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -69,12 +88,15 @@ export class TeamsController {
 
   @Delete(':teamId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
+  async remove(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('teamId') teamId: string,
     @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertKept(req, programId, (entries) =>
+      entries.filter((e) => e.teamId !== teamId),
+    );
     return this.teamsService.remove(
       eventId,
       programId,
@@ -99,12 +121,18 @@ export class TeamsController {
   }
 
   @Delete(':teamId/categories/:categoryId')
-  removeCategory(
+  async removeCategory(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('teamId') teamId: string,
     @Param('categoryId') categoryId: string,
+    @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertKept(req, programId, (entries) =>
+      entries.filter(
+        (e) => !(e.teamId === teamId && e.categoryId === categoryId),
+      ),
+    );
     return this.teamsService.removeCategory(
       eventId,
       programId,
@@ -115,13 +143,22 @@ export class TeamsController {
 
   // Atletas que competem por esta equipe nesta categoria (lista completa).
   @Put(':teamId/categories/:categoryId/athletes')
-  setCategoryAthletes(
+  async setCategoryAthletes(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('teamId') teamId: string,
     @Param('categoryId') categoryId: string,
     @Body() dto: SetTeamCategoryAthletesDto,
+    @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertKept(req, programId, (entries, lockedIds) => [
+      ...entries.filter(
+        (e) => !(e.teamId === teamId && e.categoryId === categoryId),
+      ),
+      ...dto.athleteIds
+        .filter((id) => lockedIds.has(id))
+        .map((athleteId) => ({ athleteId, teamId, categoryId })),
+    ]);
     return this.programAthletesService.setTeamCategoryAthletes(
       eventId,
       programId,

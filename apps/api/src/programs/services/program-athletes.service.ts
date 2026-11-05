@@ -21,6 +21,7 @@ import { EventsService } from '../../events/services/events.service';
 import { AthletesService } from '../../athletes/services/athletes.service';
 import { UsersService } from '../../users/services/users.service';
 import { ProgramParticipation } from '../entities/program-participation.entity';
+import { UserRole } from '../../common/enums/user-role.enum';
 
 export interface ProgramAthleteEntryView {
   teamId: string;
@@ -68,15 +69,49 @@ export class ProgramAthletesService {
     private readonly dataSource: DataSource,
   ) {}
 
+  // O produtor só vê os dados de atletas inscritos (2026-10-11, decisão do
+  // usuário, LGPD): com categoria, com ficha enviada pelo próprio atleta
+  // (qualquer status do pedido depois do envio) ou cadastrados por ele.
+  // Rascunho de pedido e o resto do elenco ficam entre atleta e programa.
+  async staffVisibleIds(programId: string): Promise<Set<string>> {
+    const rows: { id: string }[] = await this.athletesRepo.query(
+      `SELECT pa.id FROM program_athletes pa
+       WHERE pa.program_id = $1 AND (
+         pa.created_by_producer
+         OR pa.athlete_submitted_at IS NOT NULL
+         OR EXISTS (SELECT 1 FROM team_category_athletes t WHERE t.athlete_id = pa.id)
+         OR EXISTS (
+           SELECT 1 FROM athlete_registration_requests r
+           WHERE r.program_athlete_id = pa.id
+             AND (r.submitted_at IS NOT NULL OR r.status <> 'draft')
+         )
+       )`,
+      [programId],
+    );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  async assertStaffCanSee(programId: string, athleteId: string): Promise<void> {
+    if (!(await this.staffVisibleIds(programId)).has(athleteId)) {
+      throw new NotFoundException('Atleta não encontrado.');
+    }
+  }
+
   async list(
     eventId: string,
     programId: string,
+    // Produtor: só os atletas que ele pode ver (staffVisibleIds).
+    staff = false,
   ): Promise<ProgramAthleteView[]> {
     await this.programsService.findProgramOrThrow(eventId, programId);
-    const athletes = await this.athletesRepo.find({
+    let athletes = await this.athletesRepo.find({
       where: { programId },
       order: { firstName: 'ASC', lastName: 'ASC' },
     });
+    if (staff) {
+      const visible = await this.staffVisibleIds(programId);
+      athletes = athletes.filter((a) => visible.has(a.id));
+    }
     const entries = athletes.length
       ? await this.entriesRepo.findBy({
           athleteId: In(athletes.map((a) => a.id)),
@@ -98,6 +133,7 @@ export class ProgramAthletesService {
     programId: string,
     dto: CreateProgramAthleteDto,
     userId: string,
+    byProducer = false,
   ): Promise<ProgramAthleteView> {
     const program = await this.programsService.findProgramOrThrow(
       eventId,
@@ -111,6 +147,11 @@ export class ProgramAthletesService {
       birthDate: dto.birthDate ?? null,
     };
     this.assertValidCpfAndBirthDate(data.cpf, data.birthDate);
+    await this.assertNotProgramAccount(data.email);
+    if (byProducer) {
+      const adopted = await this.adoptHiddenAthlete(programId, data.email);
+      if (adopted) return adopted;
+    }
     await this.assertUnique(programId, data.email, data.cpf, null);
 
     const saved = await this.saveHandlingConflict(
@@ -118,6 +159,7 @@ export class ProgramAthletesService {
         programId,
         aliasId: program.aliasId,
         ...data,
+        createdByProducer: byProducer,
       }),
     );
     await this.activityLogService.record(
@@ -149,6 +191,9 @@ export class ProgramAthletesService {
     if (dto.cpf !== undefined) athlete.cpf = dto.cpf;
     if (dto.birthDate !== undefined) athlete.birthDate = dto.birthDate;
     this.assertValidCpfAndBirthDate(athlete.cpf, athlete.birthDate);
+    if (athlete.email !== previousEmail) {
+      await this.assertNotProgramAccount(athlete.email);
+    }
     await this.assertUnique(programId, athlete.email, athlete.cpf, athlete.id);
 
     const saved = await this.saveHandlingConflict(athlete);
@@ -328,6 +373,46 @@ export class ProgramAthletesService {
       }
     });
     return { athleteIds: unique };
+  }
+
+  // Conta Programa nunca é atleta: o cadastro ficaria sem dono possível.
+  private async assertNotProgramAccount(email: string): Promise<void> {
+    const user = await this.usersService.findByEmailInsensitive(email);
+    if (user?.role === UserRole.PROGRAM) {
+      throw new BadRequestException(
+        'Este email é de uma conta Programa e não pode ser usado para um atleta.',
+      );
+    }
+  }
+
+  // Produtor inscrevendo um email que já existe no programa mas que ele não
+  // vê (pedido do atleta em rascunho, ou inscrição que o programa começou e
+  // não terminou): ele assume esse atleta (2026-10-11, decisão do usuário).
+  // O rascunho do pedido do atleta é descartado; com as categorias gravadas
+  // pelo produtor, o atleta vê a inscrição como feita pelo programa.
+  private async adoptHiddenAthlete(
+    programId: string,
+    email: string,
+  ): Promise<ProgramAthleteView | null> {
+    const existing = await this.athletesRepo
+      .createQueryBuilder('a')
+      .where('a.programId = :programId', { programId })
+      .andWhere('LOWER(a.email) = :email', { email })
+      .getOne();
+    if (!existing) return null;
+    if ((await this.staffVisibleIds(programId)).has(existing.id)) return null;
+    await this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        `DELETE FROM athlete_registration_requests
+         WHERE program_athlete_id = $1 AND status = 'draft'`,
+        [existing.id],
+      );
+      await manager.update(ProgramAthlete, existing.id, {
+        createdByProducer: true,
+      });
+    });
+    existing.createdByProducer = true;
+    return (await this.withAccount([this.toView(existing, [])]))[0];
   }
 
   private async findAthleteOrThrow(

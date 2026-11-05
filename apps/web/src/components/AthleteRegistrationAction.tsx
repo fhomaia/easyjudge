@@ -1,14 +1,14 @@
 import { ClipboardList } from "lucide-react";
 import { formatDeadline } from "@/lib/registrationWindow";
-import { cn } from "@/lib/utils";
 import type { AthleteRegistrationEvent } from "@/api/client";
 
 // Botão da inscrição como atleta no card do evento da Home (2026-10-07,
-// substitui o bloco "Suas inscrições como atleta"). Completar dados e
-// documentos é OPCIONAL pro atleta (o programa pode fazer tudo):
-// "Inscreva-se aqui!" até o programa ou o atleta enviar; depois, "Minha
-// inscrição". O número no canto é o que falta (vermelho com documento
-// contestado).
+// substitui o bloco "Suas inscrições como atleta"). "Inscreva-se aqui!"
+// enquanto nenhum pedido saiu do rascunho (2026-10-10: pedido de inscrição
+// do atleta); depois, "Minha inscrição". O número no canto só aparece
+// quando há algo a resolver: documento contestado ou correção pedida pelo
+// programa. O que falta preencher fica no título (só dos programas em que
+// o atleta já começou um pedido), não no número.
 export function AthleteRegistrationAction({
   registration,
   onOpen,
@@ -16,14 +16,25 @@ export function AthleteRegistrationAction({
   registration: AthleteRegistrationEvent;
   onOpen: () => void;
 }) {
-  const pending = registration.entries.reduce((sum, e) => sum + e.pendingCount, 0);
-  const contested = registration.entries.reduce((sum, e) => sum + e.contestedCount, 0);
-  const submitted = registration.entries.every(
-    (e) => e.requirements.programSubmitted || !!e.requirements.athleteSubmittedAt,
+  // Mesmo critério de "Seus programas": pedido começado ou já inscrito.
+  const started = registration.entries.filter((e) => !!e.request || e.categories.length > 0);
+  const pending = started.reduce((sum, e) => sum + e.pendingCount, 0);
+  const contested = started.reduce((sum, e) => sum + e.contestedCount, 0);
+  // Algum pedido enviado (ou já inscrito pelo programa).
+  const submitted = registration.entries.some(
+    (e) =>
+      e.categories.length > 0 ||
+      e.request?.status === "submitted" ||
+      e.request?.status === "approved",
   );
-  const programs = registration.entries.map((e) => e.programName).join(", ");
+  const corrections = registration.entries.filter(
+    (e) => e.request?.status === "changes_requested" && !e.request.expired,
+  ).length;
+  const programs = started.map((e) => e.programName).join(", ");
   const status =
-    contested > 0
+    corrections > 0
+      ? "O programa pediu uma correção"
+      : contested > 0
       ? contested === 1
         ? "1 documento contestado"
         : `${contested} documentos contestados`
@@ -35,7 +46,7 @@ export function AthleteRegistrationAction({
           ? "Inscrição enviada"
           : null;
   const title = [
-    `Inscrição como atleta (${programs})`,
+    programs ? `Inscrição como atleta (${programs})` : "Inscrição como atleta",
     status,
     registration.open && registration.registrationDeadline
       ? `Até ${formatDeadline(registration.registrationDeadline)}`
@@ -43,7 +54,7 @@ export function AthleteRegistrationAction({
   ]
     .filter(Boolean)
     .join(" · ");
-  const badge = contested > 0 ? contested : pending;
+  const badge = contested + corrections;
 
   return (
     <button
@@ -60,12 +71,7 @@ export function AthleteRegistrationAction({
       <ClipboardList className="size-3.5" />
       {submitted ? "Minha inscrição" : "Inscreva-se aqui!"}
       {badge > 0 && (
-        <span
-          className={cn(
-            "absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none text-white",
-            contested > 0 ? "bg-destructive" : "bg-amber-500",
-          )}
-        >
+        <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-white">
           {badge > 9 ? "9+" : badge}
         </span>
       )}

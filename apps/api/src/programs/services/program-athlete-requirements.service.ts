@@ -11,6 +11,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { cpf as cpfValidator } from 'cpf-cnpj-validator';
+import {
+  AthleteRegistrationRequest,
+  OPEN_REQUEST_STATUSES,
+} from '../entities/athlete-registration-request.entity';
 import { ProgramAthlete } from '../entities/program-athlete.entity';
 import { ProgramParticipation } from '../entities/program-participation.entity';
 import { TeamCategoryAthlete } from '../entities/team-category-athlete.entity';
@@ -175,6 +179,8 @@ export class ProgramAthleteRequirementsService {
     private readonly programAthletesService: ProgramAthletesService,
     @InjectRepository(AthleteRequirementDocument)
     private readonly documentsRepo: Repository<AthleteRequirementDocument>,
+    @InjectRepository(AthleteRegistrationRequest)
+    private readonly requestsRepo: Repository<AthleteRegistrationRequest>,
     private readonly privateFiles: PrivateFilesService,
     private readonly userDocuments: UserDocumentsService,
     private readonly notificationsService: NotificationsService,
@@ -186,13 +192,22 @@ export class ProgramAthleteRequirementsService {
     programId: string,
     athleteId: string,
     actor: RequirementActor = 'staff',
+    // Categorias escolhidas mas ainda não gravadas ("Inscrever atleta" do
+    // programa): o que é pedido já vale pra elas.
+    plannedCategoryIds: string[] = [],
   ): Promise<AthleteRequirementsView> {
     const { athlete, participation, event } = await this.load(
       eventId,
       programId,
       athleteId,
     );
-    return this.buildView(event, participation, athlete, actor);
+    return this.buildView(
+      event,
+      participation,
+      athlete,
+      actor,
+      plannedCategoryIds,
+    );
   }
 
   // Inscrição do atleta do elenco que o programa ainda não pôs em
@@ -221,10 +236,13 @@ export class ProgramAthleteRequirementsService {
     participation: ProgramParticipation,
     athlete: ProgramAthlete,
     actor: RequirementActor,
+    plannedCategoryIds: string[] = [],
   ): Promise<AthleteRequirementsView> {
     const settings = await this.settingsService.getByAlias(event.aliasId);
     const saved = !!athlete.id;
-    const categories = saved ? await this.athleteCategories(athlete.id) : [];
+    const categories = saved
+      ? await this.athleteCategories(athlete.id, plannedCategoryIds)
+      : [];
     const values = saved
       ? await this.valuesRepo.findBy({ programAthleteId: athlete.id })
       : [];
@@ -648,38 +666,6 @@ export class ProgramAthleteRequirementsService {
     return this.list(eventId, programId, athleteId, 'staff');
   }
 
-  // O próprio atleta envia a parte dele (opcional: o programa pode fazer
-  // tudo). Só enquanto a ficha do programa está em rascunho e no prazo;
-  // depois disso a tela do atleta vira "Minha inscrição". Precisa dos dados
-  // obrigatórios e, salvo permissão do produtor, dos documentos.
-  async athleteSubmit(
-    eventId: string,
-    programId: string,
-    athleteId: string,
-  ): Promise<AthleteRequirementsView> {
-    const view = await this.list(eventId, programId, athleteId, 'athlete');
-    if (view.programSubmitted) {
-      throw new ConflictException(
-        'O programa já enviou a inscrição: não é preciso enviar de novo.',
-      );
-    }
-    if (!view.documentsEditable) {
-      throw new ForbiddenException(
-        'As inscrições deste evento estão encerradas.',
-      );
-    }
-    const missing = pendingRequirements(view, { includeOptionalDocs: false });
-    if (missing.length > 0) {
-      throw new BadRequestException(
-        `Falta: ${missing.map((i) => i.requirement.label).join(', ')}.`,
-      );
-    }
-    await this.athletesRepo.update(athleteId, {
-      athleteSubmittedAt: new Date(),
-    });
-    return this.list(eventId, programId, athleteId, 'athlete');
-  }
-
   private assertDocumentsWindow(
     actor: RequirementActor,
     event: Event,
@@ -746,12 +732,26 @@ export class ProgramAthleteRequirementsService {
       : null;
   }
 
-  private async athleteCategories(athleteId: string): Promise<Category[]> {
+  // Categorias em que o atleta está e, com pedido de inscrição aberto
+  // (2026-10-10), as que ele pediu: o que é pedido vale pra elas.
+  private async athleteCategories(
+    athleteId: string,
+    plannedCategoryIds: string[] = [],
+  ): Promise<Category[]> {
     const entries = await this.entriesRepo.findBy({ athleteId });
-    if (entries.length === 0) return [];
-    return this.categoriesRepo.findBy({
-      id: In([...new Set(entries.map((e) => e.categoryId))]),
+    const requests = await this.requestsRepo.findBy({
+      programAthleteId: athleteId,
+      status: In(OPEN_REQUEST_STATUSES),
     });
+    const ids = [
+      ...new Set([
+        ...entries.map((e) => e.categoryId),
+        ...requests.flatMap((r) => r.categoryIds),
+        ...plannedCategoryIds,
+      ]),
+    ];
+    if (ids.length === 0) return [];
+    return this.categoriesRepo.findBy({ id: In(ids) });
   }
 
   // Conta do atleta (pelo email) e vínculo no elenco do programa.

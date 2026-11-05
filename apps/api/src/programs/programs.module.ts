@@ -9,6 +9,8 @@ import { Category } from '../categories/entities/category.entity';
 import { ProgramRegistrationController } from './controllers/program-registration.controller';
 import { ProgramRegistrationAdminController } from './controllers/program-registration-admin.controller';
 import { RegistrationRequest } from './entities/registration-request.entity';
+import { AthleteRegistrationRequest } from './entities/athlete-registration-request.entity';
+import { AthleteRequestsService } from './services/athlete-requests.service';
 import { RegistrationSettings } from './entities/registration-settings.entity';
 import { AthleteRequirementValue } from './entities/athlete-requirement-value.entity';
 import { AthleteLink } from '../athletes/entities/athlete-link.entity';
@@ -44,6 +46,7 @@ import { RegulationsModule } from '../regulations/regulations.module';
       Team,
       Category,
       RegistrationRequest,
+      AthleteRegistrationRequest,
       RegistrationSettings,
       AthleteRequirementValue,
       AthleteLink,
@@ -75,7 +78,8 @@ import { RegulationsModule } from '../regulations/regulations.module';
     RegistrationSettingsService,
     ProgramAthleteRequirementsService,
     AthleteRegistrationService,
+    AthleteRequestsService,
   ],
-  exports: [ProgramsService, ProgramAthletesService],
+  exports: [ProgramsService, ProgramAthletesService, AthleteRequestsService],
 })
 export class ProgramsModule {}

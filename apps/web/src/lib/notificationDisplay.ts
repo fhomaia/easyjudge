@@ -3,6 +3,8 @@ import {
   CalendarCheck,
   ClipboardList,
   FileWarning,
+  UserCheck,
+  UserPlus,
   Flag,
   Gavel,
   Hourglass,
@@ -38,6 +40,8 @@ export const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   registration_request: MessageSquare,
   registration_reopened: Unlock,
   document_contested: FileWarning,
+  athlete_registration_submitted: UserPlus,
+  athlete_registration_answered: UserCheck,
 };
 
 export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/formatRelativeTime";
@@ -91,6 +95,12 @@ export function notificationHref(
       return roles.includes("program")
         ? `/events/${eventId}/registration`
         : `/events/${eventId}/my-registration`;
+    // Pedido de inscrição de atleta (2026-10-10): o programa responde na
+    // aba de pedidos da ficha; o atleta vê a resposta na inscrição dele.
+    case "athlete_registration_submitted":
+      return `/events/${eventId}/registration?tab=requests`;
+    case "athlete_registration_answered":
+      return `/events/${eventId}/my-registration`;
     default:
       return null;
   }

@@ -20,6 +20,7 @@ import { EventThumbnail } from "@/components/EventThumbnail";
 import { EditProgramDialog } from "@/components/EditProgramDialog";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { ProgramAthleteDialog } from "@/components/ProgramAthleteDialog";
+import { ProducerEnrollAthleteDialog } from "@/components/ProducerEnrollAthleteDialog";
 import { AthleteEntriesDialog } from "@/components/AthleteEntriesDialog";
 import { TeamSituationBadge } from "@/components/TeamSituationBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -594,7 +595,7 @@ function AthletesTab({
             <h2 className="text-lg font-semibold text-foreground">Atletas ({athletes.length})</h2>
             <Button className="w-full sm:w-auto" onClick={() => setCreateOpen(true)}>
               <Plus data-icon="inline-start" />
-              Adicionar atleta
+              Inscrever atleta
             </Button>
           </div>
 
@@ -727,17 +728,26 @@ function AthletesTab({
       <ProgramAthleteDialog
         eventId={eventId}
         programId={program.id}
-        open={createOpen || editTarget !== null}
+        open={editTarget !== null}
         athlete={editTarget}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreateOpen(false);
-            setEditTarget(null);
-          }
-        }}
+        onOpenChange={(open) => !open && setEditTarget(null)}
         onSaved={(athlete) => {
           upsert(athlete);
           setSelectedId(athlete.id);
+        }}
+      />
+
+      <ProducerEnrollAthleteDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        eventId={eventId}
+        program={program}
+        athletes={athletes}
+        onAthleteSaved={upsert}
+        onEnrolled={(athlete) => {
+          upsert(athlete);
+          setSelectedId(athlete.id);
+          onEntriesChanged();
         }}
       />
 

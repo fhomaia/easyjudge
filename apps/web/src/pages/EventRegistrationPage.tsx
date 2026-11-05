@@ -1,6 +1,6 @@
 import { RegulationDocumentsMenu } from "@/components/RegulationDocumentsMenu";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   DndContext,
   DragOverlay,
@@ -14,6 +14,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
@@ -39,9 +40,11 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DatePicker } from "@/components/DatePicker";
 import { TruncatedText } from "@/components/TruncatedText";
 import { AthleteRequirementsPanel } from "@/components/AthleteRequirementsPanel";
+import { AthleteRequestsTab } from "@/components/AthleteRequestsTab";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { CreateAthleteDialog } from "@/components/CreateAthleteDialog";
+import { EnrollAthleteDialog } from "@/components/EnrollAthleteDialog";
 import { AthleteChecklist } from "@/components/AthleteChecklist";
 import { IssueText, RegistrationIssueGroups, issueSubject } from "@/components/RegistrationIssueGroups";
 import {
@@ -57,7 +60,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RegistrationRequestItem } from "@/components/RegistrationRequestItem";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { getAvatarColor } from "@/lib/avatarColor";
-import { formatDeadline } from "@/lib/registrationWindow";
+import { closedRegistrationLabel, formatDeadline } from "@/lib/registrationWindow";
 import { athleteInitials, athleteName, pluralize } from "@/lib/programAthletes";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { cn } from "@/lib/utils";
@@ -70,6 +73,7 @@ import {
   teamsApi,
   usersApi,
   type AthleteLinkView,
+  type AthleteRequestStatus,
   type Category,
   type CategoryRules,
   type ProgramAthlete,
@@ -82,6 +86,7 @@ import {
 import { useAuthStore } from "@/store/auth";
 
 type Tab = "registration" | "athletes";
+type AthleteSubTab = "competing" | "requests" | "waiting" | "all";
 
 // Popup de atletas de uma equipe numa categoria em que ela já está.
 interface PairTarget {
@@ -107,7 +112,18 @@ export function EventRegistrationPage() {
   const [view, setView] = useState<ProgramRegistrationView | null>(null);
   const [eventAthletes, setEventAthletes] = useState<ProgramAthlete[]>([]);
   const [roster, setRoster] = useState<AthleteLinkView[]>([]);
-  const [tab, setTab] = useState<Tab>("registration");
+  // `?tab=requests`: notificação de pedido de atleta abre direto os
+  // pedidos (dentro da aba Atletas).
+  const [searchParams] = useSearchParams();
+  const fromRequestsLink = searchParams.get("tab") === "requests";
+  const [tab, setTab] = useState<Tab>(fromRequestsLink ? "athletes" : "registration");
+  const [athleteSubTab, setAthleteSubTab] = useState<AthleteSubTab>(
+    fromRequestsLink ? "requests" : "competing",
+  );
+  function openAthleteRequests() {
+    setTab("athletes");
+    setAthleteSubTab("requests");
+  }
   const [error, setError] = useState<string | null>(null);
   const unreadHere = useNotificationsUnreadStore((s) => (id ? (s.byEvent[id] ?? 0) : 0));
   const [actionError, setActionError] = useState<string | null>(null);
@@ -130,6 +146,10 @@ export function EventRegistrationPage() {
   } | null>(null);
   const [athleteTarget, setAthleteTarget] = useState<AthleteLinkView | null>(null);
   const [createAthleteOpen, setCreateAthleteOpen] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  // Atleta já escolhido (botão "Inscrever atleta" da lista): o popup abre
+  // direto nas categorias.
+  const [enrollLink, setEnrollLink] = useState<AthleteLinkView | null>(null);
   const [createdLink, setCreatedLink] = useState<AthleteLinkView | null>(null);
   // Mesma comemoração (fumaça + frase) de publicar evento, ao enviar a ficha.
   const [celebration, setCelebration] = useState<"submit" | "resubmit" | null>(null);
@@ -326,6 +346,7 @@ export function EventRegistrationPage() {
                     await applyView(await registrationApi.createRequest(id, type, message));
                   }}
                   onOpenData={setDataTarget}
+                  onOpenAthleteRequests={openAthleteRequests}
                   onSetBirthDate={async (issue, birthDate) => {
                     if (!id) return;
                     // A data fica no elenco (vale pra todos os eventos);
@@ -346,7 +367,7 @@ export function EventRegistrationPage() {
                 )
               )}
 
-              <div className="flex gap-6 border-b border-border">
+              <div className="scrollbar-none flex gap-6 overflow-x-auto border-b border-border">
                 {(
                   [
                     ["registration", "Inscrição"],
@@ -356,15 +377,26 @@ export function EventRegistrationPage() {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setTab(key)}
+                    onClick={() => {
+                      // Pedido esperando resposta: a aba Atletas abre nos pedidos.
+                      if (key === "athletes" && tab !== "athletes" && view.athleteRequestsPendingCount > 0) {
+                        setAthleteSubTab("requests");
+                      }
+                      setTab(key);
+                    }}
                     className={cn(
-                      "-mb-px border-b-2 px-1 pb-2.5 text-sm font-medium transition-colors",
+                      "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors",
                       tab === key
                         ? "border-primary text-primary"
                         : "border-transparent text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {label}
+                    {key === "athletes" && view.athleteRequestsPendingCount > 0 && (
+                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white">
+                        {view.athleteRequestsPendingCount > 9 ? "9+" : view.athleteRequestsPendingCount}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -509,9 +541,37 @@ export function EventRegistrationPage() {
                     pendingCount={pendingRoster}
                     eventAthletes={eventAthletes}
                     editable={editable}
-                    onAdd={() => setCreateAthleteOpen(true)}
+                    onAdd={() =>
+                      void run(async () => {
+                        if (await ensureProgramId()) {
+                          setEnrollLink(null);
+                          setEnrollOpen(true);
+                        }
+                      })
+                    }
                     onEditEntries={setAthleteTarget}
+                    onEnroll={(link) =>
+                      void run(async () => {
+                        if (await ensureProgramId()) {
+                          setEnrollLink(link);
+                          setEnrollOpen(true);
+                        }
+                      })
+                    }
                     onOpenData={setDataTarget}
+                    subTab={athleteSubTab}
+                    onSubTab={setAthleteSubTab}
+                    requests={
+                      id && (
+                        <AthleteRequestsTab
+                          eventId={id}
+                          view={view}
+                          editable={editable}
+                          onChanged={load}
+                          onOpenData={setDataTarget}
+                        />
+                      )
+                    }
                   />
                 )}
               </LockedOverlay>
@@ -533,6 +593,7 @@ export function EventRegistrationPage() {
                     await applyView(await registrationApi.createRequest(id, type, message));
                   }}
                   onOpenData={setDataTarget}
+                  onOpenAthleteRequests={openAthleteRequests}
                   onSetBirthDate={async (issue, birthDate) => {
                     if (!id) return;
                     // A data fica no elenco (vale pra todos os eventos);
@@ -653,7 +714,13 @@ export function EventRegistrationPage() {
                 setCreatedLink(null);
               }
             }}
-            onNewAthlete={() => setCreateAthleteOpen(true)}
+            lockedAthleteIds={view.lockedAthleteIds ?? []}
+            onNewAthlete={() => {
+              // Atleta ainda não inscrito: passa pelo "Inscrever atleta".
+              setPairTarget(null);
+              setEnrollLink(null);
+              setEnrollOpen(true);
+            }}
             createdLink={createdLink}
             readOnly={!editable}
             onSave={async (target, linkIds, keepAthleteIds) =>
@@ -695,6 +762,18 @@ export function EventRegistrationPage() {
             onSave={async (link, entries) =>
               applyView(await registrationApi.setAthleteEntries(id, link.id, entries))
             }
+          />
+          <EnrollAthleteDialog
+            open={enrollOpen}
+            initialLink={enrollLink}
+            onOpenChange={setEnrollOpen}
+            eventId={id}
+            view={view}
+            roster={usableRoster}
+            enrolledEmails={eventAthletes.filter((a) => a.entries.length > 0).map((a) => a.email)}
+            onLinkCreated={(link) => setRoster((prev) => [link, ...prev])}
+            onEnrolled={applyView}
+            onDataChanged={() => void load()}
           />
           <CreateAthleteDialog
             open={createAthleteOpen}
@@ -781,7 +860,7 @@ function ProgramHeader({
               ? event.registrationDeadline
                 ? `Inscrições até ${formatDeadline(event.registrationDeadline)}, 23:59`
                 : null
-              : "Inscrições encerradas"}
+              : closedRegistrationLabel(event.registrationStatus)}
           </p>
           )}
           <RegulationDocumentsMenu documents={view.regulationDocuments} className="mt-2" />
@@ -861,6 +940,7 @@ function RegistrationStatusPanel({
   onRequest,
   onSetBirthDate,
   onOpenData,
+  onOpenAthleteRequests,
 }: {
   // Rascunho e ficha liberada: faixa curta no topo e painel completo
   // (pendências + enviar) no fim. Ficha enviada: só no topo.
@@ -870,6 +950,8 @@ function RegistrationStatusPanel({
   onRequest: (type: RegistrationRequestType, message: string) => Promise<void>;
   onSetBirthDate: (issue: RegistrationIssue, birthDate: string) => Promise<void>;
   onOpenData: (target: { athleteId: string; name: string }) => void;
+  // Aba "Pedidos de atletas" (pedidos sem resposta impedem o envio).
+  onOpenAthleteRequests: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [requestType, setRequestType] = useState<RegistrationRequestType | null>(null);
@@ -887,8 +969,18 @@ function RegistrationStatusPanel({
   );
   // O que ainda impede o envio (a API também barra).
   // Lista com marcadores (no celular a frase corrida ficava embolada).
+  const awaitingRequests = view.athleteRequestsPendingCount;
   const sendBlocker =
-    teamsInCategories === 0 ? (
+    awaitingRequests > 0 ? (
+      <>
+        Para enviar, responda{" "}
+        {awaitingRequests === 1 ? "o pedido de inscrição" : `os ${awaitingRequests} pedidos de inscrição`}{" "}
+        de atletas.{" "}
+        <button type="button" onClick={onOpenAthleteRequests} className="underline">
+          Ver pedidos
+        </button>
+      </>
+    ) : teamsInCategories === 0 ? (
       "Para enviar, coloque ao menos uma equipe em uma categoria."
     ) : pendingNames.length > 0 ? (
       <>
@@ -930,7 +1022,7 @@ function RegistrationStatusPanel({
     teamsWithout > 0
       ? `\nAtenção: ${pluralize(teamsWithout, "equipe", "equipes")} sem categoria não ${teamsWithout === 1 ? "será inscrita" : "serão inscritas"}.`
       : "",
-    "\nDepois de enviar, você não poderá mais alterar a ficha. Para mudar algo, peça ao organizador.",
+    "\nDepois de enviar, você não poderá mais alterar a ficha nem receber pedidos de atletas. Para mudar algo, peça ao organizador.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -940,7 +1032,10 @@ function RegistrationStatusPanel({
       <Button
         className="w-full shrink-0 sm:w-auto"
         disabled={
-          teamsInCategories === 0 || pendingNames.length > 0 || blockingIssues.length > 0
+          awaitingRequests > 0 ||
+          teamsInCategories === 0 ||
+          pendingNames.length > 0 ||
+          blockingIssues.length > 0
         }
         onClick={() => setConfirmOpen(true)}
       >
@@ -972,20 +1067,32 @@ function RegistrationStatusPanel({
   if (placement === "bottom" && !building) return null;
   if (placement === "top" && building) {
     const pendingCount =
-      (teamsInCategories === 0 ? 1 : 0) + pendingNames.length + blockingIssues.length;
+      (awaitingRequests > 0 ? 1 : 0) +
+      (teamsInCategories === 0 ? 1 : 0) +
+      pendingNames.length +
+      blockingIssues.length;
     return (
-      <div className="flex flex-col gap-1 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-        <p>
-          <span className="font-medium text-foreground">
-            {reopened ? "Ficha liberada para edição" : "Ficha em rascunho"}
-          </span>
-          <span className="text-muted-foreground">
-            {" · "}
-            {pendingCount > 0
-              ? `${pluralize(pendingCount, "pendência", "pendências")} para enviar`
-              : "pronta para enviar"}
-          </span>
-        </p>
+      <div className="grid gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+        <div className="grid gap-1">
+          <p>
+            <span className="font-medium text-foreground">
+              {reopened ? "Ficha liberada para edição" : "Ficha em rascunho"}
+            </span>
+            <span className="text-muted-foreground">
+              {" · "}
+              {pendingCount > 0
+                ? `${pluralize(pendingCount, "pendência", "pendências")} para enviar`
+                : "pronta para enviar"}
+            </span>
+          </p>
+          {/* O envio é o sinal de "terminei" pro organizador. */}
+          <p className="text-muted-foreground">
+            Inscreva todos os seus atletas e responda os pedidos de inscrição deles. Depois, envie
+            a ficha no fim desta página
+            {deadline ? `, até ${formatDeadline(deadline)} às 23:59` : ""}. Só com a ficha enviada o
+            organizador considera a inscrição do seu programa concluída.
+          </p>
+        </div>
         <button
           type="button"
           onClick={() =>
@@ -993,7 +1100,7 @@ function RegistrationStatusPanel({
               .getElementById("registration-submit")
               ?.scrollIntoView({ behavior: "smooth", block: "center" })
           }
-          className="self-start text-sm font-medium text-primary hover:underline sm:self-auto"
+          className="justify-self-start text-sm font-medium text-primary hover:underline"
         >
           {pendingCount > 0 ? "Ver pendências" : "Ir para o envio"}
         </button>
@@ -1320,6 +1427,7 @@ function CategoryDropCard({
         <div className="flex flex-wrap gap-2">
           {teams.map((team) => {
             const count = team.categories.find((c) => c.id === category.id)?.athletesCount ?? 0;
+            const own = issues.filter((i) => i.teamId === team.id);
             return (
               <PairTeamCard
                 key={team.id}
@@ -1333,9 +1441,13 @@ function CategoryDropCard({
                     <span className="font-medium text-amber-700 dark:text-amber-400">
                       Atletas pendentes
                     </span>
-                  ) : issues.some((i) => i.teamId === team.id) ? (
+                  ) : own.some((i) => !isDataIssue(i)) ? (
                     <span className="font-medium text-destructive">
                       {pluralize(count, "atleta", "atletas")} · fora da regra
+                    </span>
+                  ) : own.length > 0 ? (
+                    <span className="font-medium text-amber-700 dark:text-amber-400">
+                      {pluralize(count, "atleta", "atletas")} · dados pendentes
                     </span>
                   ) : (
                     pluralize(count, "atleta", "atletas")
@@ -1346,7 +1458,85 @@ function CategoryDropCard({
           })}
         </div>
       )}
+      {/* O motivo: regra da categoria quebrada (vermelho) ou dado/documento
+          que falta (âmbar). */}
+      {issues.length > 0 && <CategoryIssueNotes issues={issues} teams={teams} />}
     </div>
+  );
+}
+
+// Estágio da inscrição do atleta (as mesmas etapas que ele vê): Cadastro
+// (correção pedida pelo programa) -> Aprovação (pedido esperando o programa)
+// -> Pagamento (em alguma categoria: aprovado ou inscrito pelo programa).
+function AthleteStageTag({
+  enrolled,
+  status,
+}: {
+  enrolled: boolean;
+  status: AthleteRequestStatus | undefined;
+}) {
+  const [label, tone] =
+    status === "correction_requested"
+      ? ["Aprovação (correção)", "bg-amber-500/15 text-amber-700 dark:text-amber-400"]
+      : enrolled
+        ? ["Aguardando pagamento", "bg-primary/10 text-primary"]
+        : status === "submitted"
+          ? ["Aprovação", "bg-amber-500/15 text-amber-700 dark:text-amber-400"]
+          : status === "changes_requested"
+            ? ["Cadastro (correção)", "bg-sky-500/15 text-sky-700 dark:text-sky-400"]
+            : status === "rejected"
+              ? ["Recusado", "bg-destructive/10 text-destructive"]
+              : ["Não inscrito", "bg-muted text-muted-foreground"];
+  return (
+    <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", tone)}>
+      {label}
+    </span>
+  );
+}
+
+// Dado ou documento pedido que falta (não é regra da categoria).
+function isDataIssue(issue: RegistrationIssue): boolean {
+  return issue.kind === "missing_requirement" || issue.kind === "missing_document";
+}
+
+const ISSUE_NOTES_LIMIT = 3;
+
+function CategoryIssueNotes({ issues, teams }: { issues: RegistrationIssue[]; teams: Team[] }) {
+  const [expanded, setExpanded] = useState(false);
+  // Regras primeiro (impedem mais coisa que dado pendente).
+  const sorted = [...issues].sort((a, b) => Number(isDataIssue(a)) - Number(isDataIssue(b)));
+  const unique = sorted.filter((issue, index) => sorted.findIndex((i) => i.message === issue.message && i.teamId === issue.teamId) === index);
+  const shown = expanded ? unique : unique.slice(0, ISSUE_NOTES_LIMIT);
+  const multipleTeams = new Set(unique.map((i) => i.teamId)).size > 1;
+  return (
+    <ul className="grid gap-1 text-xs">
+      {shown.map((issue, index) => (
+        <li
+          key={`${issue.teamId}-${index}`}
+          className={cn(
+            "flex items-start gap-1.5",
+            isDataIssue(issue) ? "text-amber-700 dark:text-amber-400" : "text-destructive",
+          )}
+        >
+          <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+          <span>
+            {multipleTeams && `${teams.find((t) => t.id === issue.teamId)?.name ?? "Equipe"}: `}
+            {issue.message}
+          </span>
+        </li>
+      ))}
+      {unique.length > ISSUE_NOTES_LIMIT && (
+        <li>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="font-medium text-primary hover:underline"
+          >
+            {expanded ? "Mostrar menos" : `Ver mais ${unique.length - ISSUE_NOTES_LIMIT}`}
+          </button>
+        </li>
+      )}
+    </ul>
   );
 }
 
@@ -1552,7 +1742,11 @@ function AthletesTab({
   editable,
   onAdd,
   onEditEntries,
+  onEnroll,
   onOpenData,
+  subTab,
+  onSubTab,
+  requests,
 }: {
   view: ProgramRegistrationView;
   roster: AthleteLinkView[];
@@ -1561,7 +1755,12 @@ function AthletesTab({
   editable: boolean;
   onAdd: () => void;
   onEditEntries: (link: AthleteLinkView) => void;
+  onEnroll: (link: AthleteLinkView) => void;
   onOpenData: (target: { athleteId: string; name: string }) => void;
+  subTab: AthleteSubTab;
+  onSubTab: (tab: AthleteSubTab) => void;
+  // Pedidos de inscrição dos atletas (AthleteRequestsTab).
+  requests: ReactNode;
 }) {
   const teams = view.program?.teams ?? [];
   const hasPairs = teams.some((t) => t.categories.length > 0);
@@ -1578,9 +1777,10 @@ function AthletesTab({
         (a) => a.email.toLowerCase() === l.email.toLowerCase() && !!a.athleteSubmittedAt,
       ),
   );
-  // Abas: quem compete (com a situação dos dados), quem enviou e espera
-  // categoria, e o elenco todo (onde se adiciona atleta).
-  const [subTab, setSubTab] = useState<"competing" | "waiting" | "all">("competing");
+  // Abas: quem compete (com a situação dos dados), os pedidos de
+  // inscrição, quem enviou e espera categoria, e o elenco todo (onde se
+  // adiciona atleta).
+  const pendingRequests = view.athleteRequestsPendingCount;
 
   return (
     <section className="grid gap-5">
@@ -1589,17 +1789,20 @@ function AthletesTab({
           <h2 className="text-lg font-semibold text-foreground">Atletas</h2>
           <p className="text-sm text-muted-foreground">Atletas vinculados ao seu programa.</p>
         </div>
-        {editable && subTab === "all" && (
+        {editable && (
           <Button className="w-full sm:w-auto" onClick={onAdd}>
             <Plus data-icon="inline-start" />
-            Adicionar atleta
+            Inscrever atleta
           </Button>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {/* No celular, uma linha só com rolagem lateral (quebrando em várias
+          linhas ficava desalinhado); no computador quebra normalmente. */}
+      <div className="scrollbar-none -m-1 flex gap-2 overflow-x-auto p-1 sm:flex-wrap sm:overflow-visible">
         {(
           [
+            ["requests", `Pedidos de inscrição (${view.athleteRequestsCount ?? 0})`],
             ["competing", `Atletas competindo (${competing.length})`],
             ["waiting", `Sem categoria (${waiting.length})`],
             ["all", `Todos os atletas (${sorted.length})`],
@@ -1608,12 +1811,19 @@ function AthletesTab({
           <button
             key={key}
             type="button"
-            onClick={() => setSubTab(key)}
+            onClick={(e) => {
+              onSubTab(key);
+              e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }}
             className={cn(
-              "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+              "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
               subTab === key
                 ? "border-primary bg-primary text-primary-foreground"
-                : "border-border/60 text-muted-foreground hover:text-foreground",
+                : key === "requests" && pendingRequests > 0
+                  ? "border-amber-400 bg-amber-500/15 font-semibold text-amber-800 hover:bg-amber-500/25 dark:text-amber-300"
+                  : "border-border/60 text-muted-foreground hover:text-foreground",
+              // Pedido esperando resposta: destaque também quando aberto.
+              subTab === key && key === "requests" && pendingRequests > 0 && "ring-2 ring-amber-400 ring-offset-1 ring-offset-background",
             )}
           >
             {label}
@@ -1621,6 +1831,10 @@ function AthletesTab({
         ))}
       </div>
 
+      {subTab === "requests" ? (
+        requests
+      ) : (
+      <>
       {pendingCount > 0 && (
         <p className="text-sm text-muted-foreground">
           {pendingCount === 1
@@ -1646,6 +1860,9 @@ function AthletesTab({
         eventAthletes={eventAthletes}
         editable={editable && hasPairs}
         onEditEntries={onEditEntries}
+        onEnroll={onEnroll}
+        lockedAthleteIds={view.lockedAthleteIds ?? []}
+        requestStatuses={view.athleteRequestStatuses ?? {}}
         onOpenData={onOpenData}
         issues={view.issues ?? []}
         emptyMessage="Nenhum atleta em categoria ainda."
@@ -1657,6 +1874,9 @@ function AthletesTab({
         eventAthletes={eventAthletes}
         editable={editable && hasPairs}
         onEditEntries={onEditEntries}
+        onEnroll={onEnroll}
+        lockedAthleteIds={view.lockedAthleteIds ?? []}
+        requestStatuses={view.athleteRequestStatuses ?? {}}
         onOpenData={onOpenData}
         issues={view.issues ?? []}
         emptyMessage="Nenhum atleta enviou a inscrição sem estar numa categoria."
@@ -1668,10 +1888,15 @@ function AthletesTab({
         eventAthletes={eventAthletes}
         editable={editable && hasPairs}
         onEditEntries={onEditEntries}
+        onEnroll={onEnroll}
+        lockedAthleteIds={view.lockedAthleteIds ?? []}
+        requestStatuses={view.athleteRequestStatuses ?? {}}
         onOpenData={onOpenData}
         issues={view.issues ?? []}
         emptyMessage="Seu elenco ainda não tem atletas."
       />
+      )}
+      </>
       )}
     </section>
   );
@@ -1684,6 +1909,9 @@ function AthleteRosterSection({
   eventAthletes,
   editable,
   onEditEntries,
+  onEnroll,
+  lockedAthleteIds = [],
+  requestStatuses = {},
   onOpenData,
   issues,
   emptyMessage,
@@ -1693,6 +1921,9 @@ function AthleteRosterSection({
   eventAthletes: ProgramAthlete[];
   editable: boolean;
   onEditEntries: (link: AthleteLinkView) => void;
+  onEnroll: (link: AthleteLinkView) => void;
+  lockedAthleteIds?: string[];
+  requestStatuses?: Record<string, AthleteRequestStatus>;
   onOpenData: (target: { athleteId: string; name: string }) => void;
   issues: RegistrationIssue[];
   emptyMessage: string;
@@ -1755,8 +1986,13 @@ function AthleteRosterSection({
                 </span>
                 <div className="grid min-w-0 flex-1 gap-1.5">
                   <div className="min-w-0">
-                    <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-                      <span className="truncate">{`${link.firstName} ${link.lastName}`.trim()}</span>
+                    {/* Selos em cima, nome embaixo: no celular, lado a lado o
+                        nome sumia. */}
+                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                      <AthleteStageTag
+                        enrolled={entries.length > 0}
+                        status={eventAthlete ? requestStatuses[eventAthlete.id] : undefined}
+                      />
                       {/* Dados e documentos obrigatórios (só de quem compete). */}
                       {eventAthlete && entries.length > 0 && (
                         <span
@@ -1775,6 +2011,9 @@ function AthleteRosterSection({
                           {missingData > 0 ? "Dados incompletos" : "Dados completos"}
                         </span>
                       )}
+                    </div>
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {`${link.firstName} ${link.lastName}`.trim()}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{link.email}</p>
                   </div>
@@ -1802,13 +2041,17 @@ function AthleteRosterSection({
                     </div>
                   )}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    {editable && (
+                    {/* Inscrição aprovada: categorias só mudam com pedido de
+                        correção do atleta, então nem oferece. */}
+                    {editable && !(eventAthlete && lockedAthleteIds.includes(eventAthlete.id)) && (
                       <button
                         type="button"
-                        onClick={() => onEditEntries(link)}
+                        onClick={() => (entries.length > 0 ? onEditEntries(link) : onEnroll(link))}
                         className="text-xs font-medium text-primary hover:underline"
                       >
-                        Escolher categorias
+                        {/* Sem categoria: inscrição completa (categorias, depois
+                            dados e documentos obrigatórios). */}
+                        {entries.length > 0 ? "Escolher categorias" : "Inscrever atleta"}
                       </button>
                     )}
                     {/* Também pra quem enviou a inscrição sem categoria: ver o
@@ -2078,6 +2321,7 @@ function PairAthletesDialog({
   eventAthletes,
   onOpenChange,
   onNewAthlete,
+  lockedAthleteIds,
   onSave,
   onRemoveFromCategory,
   createdLink,
@@ -2096,6 +2340,8 @@ function PairAthletesDialog({
   readOnly?: boolean;
   onOpenChange: (open: boolean) => void;
   onNewAthlete: () => void;
+  // Inscrição aprovada: categorias travadas, não entram em outra escalação.
+  lockedAthleteIds: string[];
   // Atleta recém-criado pelo "Novo atleta" deste popup: já entra marcado.
   createdLink: AthleteLinkView | null;
   onSave: (target: PairTarget, linkIds: string[], keepAthleteIds: string[]) => Promise<unknown>;
@@ -2153,6 +2399,21 @@ function PairAthletesDialog({
   // atleta do evento) e o elenco confirmado (chave = id do vínculo).
   const rosterEmails = new Set(roster.map((l) => l.email.toLowerCase()));
   const byName = (x: Candidate, y: Candidate) => x.name.localeCompare(y.name, "pt-BR");
+  // Pra ADICIONAR à escalação: só quem já está inscrito no evento (em
+  // alguma categoria) e sem inscrição aprovada travada; atleta novo entra
+  // pelo "Inscrever atleta". Quem já está escalado aparece sempre.
+  const lockedEmails = new Set(
+    eventAthletes
+      .filter((a) => lockedAthleteIds.includes(a.id))
+      .map((a) => a.email.toLowerCase()),
+  );
+  const enrolledEmails = new Set(
+    eventAthletes
+      .filter((a) => a.entries.length > 0 && !lockedAthleteIds.includes(a.id))
+      .map((a) => a.email.toLowerCase()),
+  );
+  const canAdd = (c: Candidate) => enrolledEmails.has(c.email.toLowerCase());
+  const isLocked = (c: Candidate) => lockedEmails.has(c.email.toLowerCase());
   const organizerCandidates: Candidate[] = eventAthletes
     .filter((a) => !rosterEmails.has(a.email.toLowerCase()))
     .map((a) => ({
@@ -2268,8 +2529,12 @@ function PairAthletesDialog({
   const query = search.trim().toLowerCase();
   const matches = (c: Candidate) =>
     !query || c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query);
-  const availableOrganizer = organizerCandidates.filter((c) => !selected.has(c.key) && matches(c));
-  const availableRoster = rosterCandidates.filter((c) => !selected.has(c.key) && matches(c));
+  const availableOrganizer = organizerCandidates.filter(
+    (c) => !selected.has(c.key) && canAdd(c) && matches(c),
+  );
+  const availableRoster = rosterCandidates.filter(
+    (c) => !selected.has(c.key) && canAdd(c) && matches(c),
+  );
   const rulesLine = target ? rulesText(target.category) : null;
 
   function add(key: string) {
@@ -2338,16 +2603,15 @@ function PairAthletesDialog({
               />
             )}
             <CandidateGroup
-              title="Seu elenco"
+              title="Atletas inscritos"
+              hint="Só aparecem atletas já inscritos no evento. Para incluir outro, inscreva antes."
               candidates={availableRoster}
               ageNote={ageNote}
               onAdd={add}
               empty={
                 query
                   ? "Nenhum atleta encontrado."
-                  : roster.length === 0
-                    ? "Seu elenco ainda não tem atletas."
-                    : "Todos os atletas do seu elenco já estão escalados."
+                  : "Nenhum outro atleta inscrito. Use \"Inscrever atleta\"."
               }
               action={
                 <button
@@ -2356,7 +2620,7 @@ function PairAthletesDialog({
                   className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                 >
                   <Plus className="size-3.5" />
-                  Novo atleta
+                  Inscrever atleta
                 </button>
               }
             />
@@ -2404,15 +2668,27 @@ function PairAthletesDialog({
                             className="text-xs text-muted-foreground"
                           />
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => remove(c.key)}
-                          aria-label={`Tirar ${c.name} da escalação`}
-                          title="Tirar da escalação"
-                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        >
-                          <X className="size-4" />
-                        </button>
+                        {/* Inscrição aprovada: só sai da categoria com pedido de
+                            correção do atleta. */}
+                        {isLocked(c) ? (
+                          <span
+                            title="Inscrição aprovada: as categorias só mudam se o atleta pedir uma correção."
+                            className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400"
+                          >
+                            <Lock className="size-3" />
+                            Aprovado
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => remove(c.key)}
+                            aria-label={`Tirar ${c.name} da escalação`}
+                            title="Tirar da escalação"
+                            className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        )}
                       </div>
                       <div className="grid gap-1 pl-11">
                         {note?.problem && (

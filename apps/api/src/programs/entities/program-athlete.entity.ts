@@ -64,6 +64,11 @@ export class ProgramAthlete {
   })
   athleteSubmittedAt: Date | null;
 
+  // Cadastrado pelo produtor (2026-10-11): ele vê esse atleta mesmo sem
+  // categoria. Ver ProgramAthletesService.staffVisibleIds.
+  @Column({ name: 'created_by_producer', default: false })
+  createdByProducer: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

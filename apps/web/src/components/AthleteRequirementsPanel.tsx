@@ -53,8 +53,30 @@ export function programRequirementsAdapter(
   eventId: string,
   programId: string,
   athleteId: string,
-  { canContest = false } = {},
+  { canContest = false, plannedCategoryIds }: { canContest?: boolean; plannedCategoryIds?: string[] } = {},
 ): RequirementsAdapter {
+  // Com categorias ainda não gravadas, as respostas de gravação não as
+  // consideram: relê a lista com elas depois de cada mudança.
+  if (plannedCategoryIds) {
+    const list = () => athleteRequirementsApi.list(eventId, programId, athleteId, plannedCategoryIds);
+    const base = programRequirementsAdapter(eventId, programId, athleteId, { canContest });
+    return {
+      ...base,
+      list,
+      set: async (requirementId, value) => {
+        await base.set(requirementId, value);
+        return list();
+      },
+      uploadDocument: async (requirementId, files, libraryIds) => {
+        await base.uploadDocument(requirementId, files, libraryIds);
+        return list();
+      },
+      removeDocument: async (requirementId) => {
+        await base.removeDocument(requirementId);
+        return list();
+      },
+    };
+  }
   return {
     list: () => athleteRequirementsApi.list(eventId, programId, athleteId),
     set: (requirementId, value) =>
@@ -151,6 +173,12 @@ export function AthleteRequirementsPanel({
     setView(null);
     load();
   }, [load]);
+
+  // Visão nova vinda de fora (ex.: o atleta mudou as categorias): troca no
+  // lugar, sem recarregar (sumir e voltar faz a tela pular).
+  useEffect(() => {
+    if (initialView) setView(initialView);
+  }, [initialView]);
 
   function applyView(next: AthleteRequirementsView) {
     setView(next);

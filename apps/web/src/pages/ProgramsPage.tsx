@@ -3,7 +3,10 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   Building2,
+  Lock,
   Mail,
+  Pause,
+  Play,
   MapPin,
   Plus,
   QrCode,
@@ -28,6 +31,7 @@ import { isSelfRegistered, pluralize } from "@/lib/programAthletes";
 import { RegistrationRequirementsSection } from "@/components/RegistrationRequirementsSection";
 import { EventRequestsTab } from "@/components/EventRequestsTab";
 import { ShareEventDialog } from "@/components/ShareEventDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DatePicker } from "@/components/DatePicker";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -67,12 +71,21 @@ export function ProgramsPage() {
   // ?program=<id> filtra).
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const tab: Tab =
-    tabParam === "requests" ? "requests" : tabParam === "registration" ? "registration" : "programs";
   const programFilter = searchParams.get("program");
   const [requests, setRequests] = useState<EventRegistrationRequestView[]>([]);
   // Evento (pro convite de inscrição: código/QR e prazo).
   const [event, setEvent] = useState<Event | null>(null);
+  // Inscrições nunca liberadas (2026-10-11): o produtor passa primeiro
+  // pela aba Configurações; as outras abas aparecem bloqueadas. Pausar
+  // não bloqueia nada aqui.
+  const tabsLocked = event !== null && event.registrationStatus === "not_started";
+  const tab: Tab = tabsLocked
+    ? "registration"
+    : tabParam === "requests"
+      ? "requests"
+      : tabParam === "registration"
+        ? "registration"
+        : "programs";
   const [shareOpen, setShareOpen] = useState(false);
   const pendingRequests = requests.filter((r) => !r.resolvedAt).length;
 
@@ -193,7 +206,12 @@ export function ProgramsPage() {
                 )}
               </div>
             </div>
-            <Button className="w-full sm:w-auto" onClick={() => setCreateProgramOpen(true)}>
+            <Button
+              className="w-full sm:w-auto"
+              disabled={tabsLocked}
+              title={tabsLocked ? "Libere as inscrições para inscrever programas." : undefined}
+              onClick={() => setCreateProgramOpen(true)}
+            >
               <Plus data-icon="inline-start" />
               Inscrever programa
             </Button>
@@ -206,26 +224,34 @@ export function ProgramsPage() {
                 ["programs", "Inscrições"],
                 ["requests", "Solicitações"],
               ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => showTab(key)}
-                className={cn(
-                  "-mb-px border-b-2 px-1 pb-2.5 text-sm font-medium transition-colors",
-                  tab === key
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-                {key === "requests" && pendingRequests > 0 && (
-                  <span className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-                    {pendingRequests}
-                  </span>
-                )}
-              </button>
-            ))}
+            ).map(([key, label]) => {
+              const locked = tabsLocked && key !== "registration";
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={locked}
+                  title={locked ? "Libere as inscrições na aba Configurações para usar esta aba." : undefined}
+                  onClick={() => showTab(key)}
+                  className={cn(
+                    "-mb-px flex items-center gap-1.5 border-b-2 px-1 pb-2.5 text-sm font-medium transition-colors",
+                    tab === key
+                      ? "border-primary text-primary"
+                      : locked
+                        ? "cursor-not-allowed border-transparent text-muted-foreground/60"
+                        : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {locked && <Lock className="size-3.5" />}
+                  {label}
+                  {key === "requests" && pendingRequests > 0 && (
+                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                      {pendingRequests}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {tab === "registration" ? (
@@ -234,15 +260,21 @@ export function ProgramsPage() {
             <div className="grid gap-6">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
-                  Configurações da inscrição
+                  Configure e libere as inscrições
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Prazo, compartilhamento e o que cada atleta precisa informar ou enviar.
+                  Defina o prazo, compartilhe o evento e escolha o que cada atleta precisa informar
+                  ou enviar.{" "}
+                  {event?.registrationStatus === "not_started"
+                    ? "Programas e atletas só conseguem se inscrever depois que você liberar as inscrições, no fim desta página."
+                    : "Para pausar ou retomar as inscrições, use a seção no fim desta página."}
                 </p>
               </div>
               {event?.eventCode && <RegistrationInvite onShare={() => setShareOpen(true)} />}
               {event && <DeadlineSection event={event} onSaved={setEvent} />}
               {id && <RegistrationRequirementsSection eventId={id} />}
+              {/* No fim: o produtor confere tudo acima antes de liberar. */}
+              {event && <ReleaseSection event={event} onSaved={setEvent} />}
             </div>
           ) : tab === "requests" && id ? (
             <EventRequestsTab
@@ -324,28 +356,31 @@ export function ProgramsPage() {
             </div>
           )}
 
-          <div className="mt-auto flex flex-col gap-4 rounded-xl border border-amber-300/60 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-400/20 dark:bg-amber-500/10">
-            <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-600 dark:text-amber-400">
-                <Star className="size-5" />
+          {/* Só depois da primeira liberação das inscrições (2026-10-11). */}
+          {event && event.registrationStatus !== "not_started" && (
+            <div className="mt-auto flex flex-col gap-4 rounded-xl border border-amber-300/60 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-400/20 dark:bg-amber-500/10">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-600 dark:text-amber-400">
+                  <Star className="size-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Próxima etapa recomendada</p>
+                  <p className="text-sm text-muted-foreground">
+                    Agora monte o cronograma do evento, definindo a ordem de apresentação de cada
+                    equipe.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-semibold text-foreground">Próxima etapa recomendada</p>
-                <p className="text-sm text-muted-foreground">
-                  Agora monte o cronograma do evento, definindo a ordem de apresentação de cada
-                  equipe.
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => navigate(`/events/${id}/schedule`)}
+                className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+              >
+                Ir para cronograma
+                <ArrowRight className="size-4" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate(`/events/${id}/schedule`)}
-              className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
-            >
-              Ir para cronograma
-              <ArrowRight className="size-4" />
-            </button>
-          </div>
+          )}
         </div>
       )}
 
@@ -403,6 +438,116 @@ function RegistrationInvite({ onShare }: { onShare: () => void }) {
   );
 }
 
+// Liberar/pausar as inscrições (2026-10-11). Antes de liberar (ou com
+// elas pausadas), programas e atletas veem o evento como "Em breve" e não
+// conseguem se inscrever nem mexer na ficha. Só antes da primeira
+// liberação as abas Inscrições e Solicitações ficam bloqueadas pro
+// produtor.
+function ReleaseSection({
+  event,
+  onSaved,
+}: {
+  event: Event;
+  onSaved: (event: Event) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const status = event.registrationStatus;
+  const open = isRegistrationOpen(event);
+  const next = status === "open" ? "paused" : "open";
+
+  const badge =
+    status === "not_started"
+      ? { label: "Inscrições não liberadas", className: "bg-muted text-muted-foreground" }
+      : status === "paused"
+        ? {
+            label: "Inscrições pausadas",
+            className: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+          }
+        : open
+          ? {
+              label: "Inscrições abertas",
+              className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+            }
+          : {
+              label: "Inscrições encerradas",
+              className: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+            };
+
+  const text =
+    status === "not_started"
+      ? "Confira as configurações acima e libere as inscrições quando estiver tudo pronto. Até lá, programas e atletas veem o evento como \"Em breve\", e as abas Inscrições e Solicitações ficam bloqueadas."
+      : status === "paused"
+        ? "Programas e atletas não conseguem se inscrever nem alterar as fichas, e veem o evento como \"Em breve\". Você continua acompanhando as inscrições e respondendo as solicitações."
+        : open
+          ? "Programas e atletas já podem se inscrever. Pausar impede novas inscrições e alterações até você retomar."
+          : "O prazo de inscrição terminou. Para reabrir, mude o prazo abaixo.";
+
+  const canStart = event.status === "created" || event.status === "published";
+
+  return (
+    <section
+      className={cn(
+        "grid gap-3 rounded-xl border p-4 sm:p-5",
+        status === "open"
+          ? "border-border/60 bg-card"
+          : "border-amber-300/60 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-500/10",
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h2 className="font-semibold text-foreground">Liberação das inscrições</h2>
+        <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", badge.className)}>
+          {badge.label}
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground">{text}</p>
+      {canStart && (status !== "open" || open) && (
+        <div>
+          {status === "open" ? (
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setConfirming(true)}>
+              <Pause data-icon="inline-start" />
+              Pausar inscrições
+            </Button>
+          ) : (
+            // Mesmo estilo do "Inscreva-se aqui!" do card da Home.
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-violet-600 to-indigo-700 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 sm:w-auto"
+            >
+              <Play className="size-3.5" />
+              {status === "not_started" ? "Liberar inscrições" : "Retomar inscrições"}
+            </button>
+          )}
+        </div>
+      )}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={
+          next === "open"
+            ? status === "paused"
+              ? "Retomar inscrições?"
+              : "Liberar inscrições?"
+            : "Pausar inscrições?"
+        }
+        description={
+          next === "open"
+            ? "Programas e atletas poderão se inscrever pelo link ou código do evento."
+            : "Programas e atletas não vão conseguir se inscrever nem alterar as fichas até você retomar. O que já foi feito continua salvo."
+        }
+        confirmLabel={
+          next === "open" ? (status === "paused" ? "Retomar" : "Liberar") : "Pausar"
+        }
+        confirmingLabel="Salvando..."
+        confirmVariant="default"
+        onConfirm={async () => {
+          onSaved(await eventsApi.update(event.aliasId, { registrationStatus: next }));
+        }}
+      />
+    </section>
+  );
+}
+
 // Prazo de inscrição em destaque na aba Inscrições (2026-10-06): um dia
 // (até 23:59 de Brasília, no máximo o início do evento) ou sem data
 // limite. Salva assim que uma data válida é escolhida ou "Sem data limite"
@@ -419,7 +564,6 @@ function DeadlineSection({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const open = isRegistrationOpen(event);
 
   async function save(value: string | null) {
     setSaving(true);
@@ -438,19 +582,7 @@ function DeadlineSection({
   const [y, m, d] = event.startDate.split("-").map(Number);
   return (
     <section className="grid gap-3 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 className="font-semibold text-foreground">Prazo de inscrição</h2>
-        <span
-          className={cn(
-            "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-            open
-              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-              : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-          )}
-        >
-          {open ? "Inscrições abertas" : "Inscrições encerradas"}
-        </span>
-      </div>
+      <h2 className="font-semibold text-foreground">Prazo de inscrição</h2>
       <p className="text-sm text-muted-foreground">
         Os programas montam e enviam a ficha até as 23:59 (horário de Brasília) do dia escolhido.
         O prazo não pode passar da data de início do evento.
@@ -536,11 +668,31 @@ function RegistrationTags({
         {STATUS_FILTER_LABELS[status]}
       </span>
       {/* Inscrição feita pelo organizador e nunca enviada pelo próprio
-          programa (se ele envia pela ficha dele, a tag some). */}
-      {!isSelfRegistered(program) &&
+          programa (se ele envia pela ficha dele, a tag some). Rascunho
+          nunca é do organizador: pode ter sido aberto pelo pedido de um
+          atleta (2026-10-10). */}
+      {!!program.submittedAt &&
+        !isSelfRegistered(program) &&
         !(program.userId && program.submittedBy === program.userId) && (
         <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
           Inscrito pelo organizador
+        </span>
+      )}
+      {/* Ficha aberta por atletas pra um programa sem conta: espera o
+          programa se cadastrar com esse email. */}
+      {!program.userId && !program.submittedAt && (
+        <span
+          title={`Atletas pediram inscrição por este programa. Ele foi avisado em ${program.email} e responde depois de criar a conta.`}
+          className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs font-medium text-muted-foreground"
+        >
+          Programa sem conta
+        </span>
+      )}
+      {(program.pendingAthleteRequestsCount ?? 0) > 0 && (
+        <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-400">
+          {program.pendingAthleteRequestsCount === 1
+            ? "1 pedido de atleta aguardando o programa"
+            : `${program.pendingAthleteRequestsCount} pedidos de atletas aguardando o programa`}
         </span>
       )}
       {blocking > 0 && (

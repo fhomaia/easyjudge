@@ -1,7 +1,7 @@
-import type { EventStatus } from "@/api/client";
+import type { EventStatus, RegistrationStatus } from "@/api/client";
 
 // Inscrição pelo próprio programa: aberta com o evento em rascunho ou
-// publicado e até 23:59 (Brasília) do dia `registrationDeadline`; sem data
+// publicado, liberada pelo produtor (2026-10-11) e até 23:59 (Brasília) do dia `registrationDeadline`; sem data
 // = sem limite. Mesma regra de apps/api/src/events/registration-window.ts
 // (a API é quem decide; isto só serve pra mostrar o botão).
 export function todayInBrasilia(now = new Date()): string {
@@ -11,9 +11,18 @@ export function todayInBrasilia(now = new Date()): string {
 export function isRegistrationOpen(event: {
   status: EventStatus;
   registrationDeadline: string | null;
+  registrationStatus: RegistrationStatus;
 }): boolean {
   if (event.status !== "created" && event.status !== "published") return false;
+  if (event.registrationStatus !== "open") return false;
   return event.registrationDeadline === null || todayInBrasilia() <= event.registrationDeadline;
+}
+
+// Texto de inscrição fechada nas telas de inscrição (programa e atleta).
+export function closedRegistrationLabel(status: RegistrationStatus): string {
+  if (status === "paused") return "Inscrições pausadas pelo organizador";
+  if (status === "not_started") return "Inscrições ainda não liberadas";
+  return "Inscrições encerradas";
 }
 
 // "yyyy-MM-dd" -> "dd/mm/aaaa"
@@ -24,7 +33,12 @@ export function formatDeadline(date: string): string {
 // Conta Programa que entra num evento pelo link/QR/código com a inscrição
 // aberta vai direto pra ela (fluxo mais curto); senão, null.
 export function registrationPathAfterJoin(
-  event: { aliasId: string; status: EventStatus; registrationDeadline: string | null },
+  event: {
+    aliasId: string;
+    status: EventStatus;
+    registrationDeadline: string | null;
+    registrationStatus: RegistrationStatus;
+  },
   accountRole: string | null,
 ): string | null {
   return accountRole === "program" && isRegistrationOpen(event)

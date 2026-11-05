@@ -9,6 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { RegistrationStatus } from '../enums/registration-status.enum';
 import { EventStatus } from '../enums/event-status.enum';
 
 @Entity('events')
@@ -43,6 +44,16 @@ export class Event {
   // events/registration-window.ts.
   @Column({ name: 'registration_deadline', type: 'date', nullable: true })
   registrationDeadline: string | null;
+
+  // Liberação das inscrições pelo produtor (2026-10-11): só 'open' deixa
+  // programas e atletas se inscreverem (ver isRegistrationOpen).
+  @Column({
+    name: 'registration_status',
+    type: 'varchar',
+    length: 20,
+    default: RegistrationStatus.NOT_STARTED,
+  })
+  registrationStatus: RegistrationStatus;
 
   @Column({ name: 'logo_url', type: 'varchar', nullable: true })
   logoUrl: string | null;

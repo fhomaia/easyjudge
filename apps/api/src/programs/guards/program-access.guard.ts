@@ -8,7 +8,10 @@ import {
 import { Reflector } from '@nestjs/core';
 import { EventsService } from '../../events/services/events.service';
 import { EventMemberRole } from '../../events/enums/event-member-role.enum';
-import { isRegistrationOpen } from '../../events/registration-window';
+import {
+  isRegistrationOpen,
+  registrationClosedMessage,
+} from '../../events/registration-window';
 import {
   programCanEditRegistration,
   REGISTRATION_LOCKED_MESSAGE,
@@ -85,7 +88,7 @@ export class ProgramAccessGuard implements CanActivate {
         throw new ForbiddenException(
           program.submittedAt && isRegistrationOpen(event)
             ? REGISTRATION_LOCKED_MESSAGE
-            : 'As inscrições deste evento estão encerradas.',
+            : registrationClosedMessage(event),
         );
       }
     }
