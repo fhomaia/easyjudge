@@ -2166,6 +2166,92 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
   **Não testado**: QR pela câmera e a tela de inscrição encerrada no
   navegador (só pela API).
 
+## Pedidos de inscrição do atleta + liberação das inscrições (2026-10-10/11)
+
+Feito em 2026-10-10/11, commitado em 2026-11-05 na branch
+`feat/inscricao-atleta-pedidos` e juntado ao master em 2026-11-10.
+Muda o fluxo de "Inscrição de campeonato pelo próprio programa" e de
+"Documentos dos atletas" (seções acima). Decisões do usuário, várias
+revistas no meio da sessão (vale o que está aqui).
+
+- **Fluxo por atleta: Cadastro → Aprovação → Pagamento** (pagamento é a
+  fase 3, ainda não feita). Um pedido por atleta + programa + evento
+  (`AthleteRegistrationRequest`, `athlete_registration_requests`,
+  migration `CreateAthleteRegistrationRequests`; status `draft`,
+  `submitted`, `changes_requested`, `approved`, `rejected`,
+  `correction_requested`). Qualquer conta menos Programa pode pedir; o
+  atleta manda dados/documentos do evento e as CATEGORIAS que quer (a
+  equipe quem escolhe é o programa, na aprovação). Atleta não cancela o
+  próprio pedido enviado; recusado pode pedir de novo.
+- **Rotas do atleta** (`AthleteRegistrationController`):
+  `events/:id/my-registration/programs` (adicionar programa pelo email),
+  `.../:athleteId/request` (PUT salva, DELETE descarta rascunho),
+  `.../:athleteId/submit`, `.../:athleteId/correction`. Pedido pra
+  programa sem ficha no evento cria a ficha em RASCUNHO; programa sem
+  conta fica como convite pendente pelo email (o atleta nunca é barrado
+  de enviar).
+- **Programa** (`AthleteRequestsService`, rotas
+  `events/:id/registration/athlete-requests[/:id/approve|request-changes|reject|keep]`):
+  recebe notificação; aprova (pode editar antes), pede correção (volta
+  pro atleta) ou recusa. Aprovar confirma o `AthleteLink`
+  automaticamente. Pedido aprovado TRAVA as categorias pra conta
+  Programa (qualquer mudança no conjunto de categorias do atleta:
+  tirar/pôr categoria, remover/mover/excluir equipe, excluir atleta;
+  trocar de equipe na mesma categoria pode). Só destrava quando o atleta
+  pede correção (`correction_requested`); o programa responde "Aprovar
+  com mudanças" ou "Manter como está" (`keep`). O produtor não trava.
+  Aba **Pedidos** na ficha do programa (`AthleteRequestsTab`,
+  `?tab=requests`).
+- **Ficha do programa continua sendo enviada e travada**: enviar = "todos
+  os meus atletas estão dentro", o sinal pro produtor. Não envia com
+  pedido pendente (bloqueia, não recusa sozinho). Depois de enviada, o
+  atleta não pede mais pra esse programa ("Este programa já fechou a
+  inscrição"). O atleta conta como inscrito pro produtor quando o
+  programa envia a ficha.
+- **"Inscrever atleta" pelo programa** (`EnrollAthleteDialog`, rotas
+  `registration/athletes/:linkId/prepare|enroll`): Atleta → Categorias →
+  Dados e documentos; as categorias só são gravadas no fim, com dados e
+  documentos obrigatórios completos (mesma regra do envio do atleta).
+  Atleta inscrito pelo programa (sem pedido) fica livre pra editar até o
+  PAGAMENTO; na fase 3 a regra vira uma só pros dois casos: pago = travado.
+- **Liberação das inscrições pelo produtor**: `Event.registrationStatus`
+  `not_started|open|paused` (migration `AddEventRegistrationStatus`;
+  eventos que já existiam ficaram `open`, novos nascem `not_started`).
+  `isRegistrationOpen` (back e front) agora também exige `open`. Tela de
+  Inscrições: aba Configurações com título "Configure e libere as
+  inscrições" e a seção de liberação NO FIM (Liberar/Retomar com o mesmo
+  degradê do "Inscreva-se aqui!", Pausar contornado). Abas Inscrições e
+  Solicitações bloqueadas só antes da PRIMEIRA liberação (pausar não
+  bloqueia). Card da Home mostra "Em breve" pra programa/atleta/
+  espectador quando não está `open`; banner "Próxima etapa recomendada"
+  só depois da primeira liberação.
+- **Produtor inscrevendo atleta** (`ProducerEnrollAthleteDialog`, aba
+  Atletas do `ProgramDetailPage`): nome+email → categorias (pares
+  equipe+categoria, `TeamCategoryRowsEditor`) → dados/documentos; as
+  categorias são gravadas no fim.
+- **Produtor só vê atletas inscritos** (`staffVisibleIds` em
+  `ProgramAthletesService`, 404 pelo `assertVisible` do controller):
+  `program_athletes.created_by_producer` (migration
+  `AddProgramAthleteCreatedByProducer`, preenchida pros atletas antigos
+  sem pedido) OU `athlete_submitted_at` OU tem categoria OU tem pedido
+  enviado. Produtor inscrevendo o email de um atleta ESCONDIDO adota a
+  linha (`adoptHiddenAthlete`, descarta o rascunho de pedido dele);
+  email de conta Programa dá 400.
+- **Pontas abertas**: CPF igual ao de um atleta escondido com outro email
+  continua dando 409 "Já existe um atleta com este CPF neste programa"
+  (adoção é só por email; juntar foi considerado arriscado). Sugerido
+  só deixar a mensagem mais clara, sem resposta do usuário ainda.
+  Sugestões não respondidas: dar SPECTATOR na inscrição; tirar o filtro
+  "Sem categoria"; contar pedidos de correção na etiqueta azul do
+  produtor e etiquetas de etapa por atleta.
+- **Demo local**: `scripts/demo-inscricoes/` (`seed.mjs`/`cleanup.mjs`)
+  monta o cenário no banco LOCAL (recusa rodar contra Neon/Render/
+  produção); API local com `RESEND_API_KEY=` vazio.
+- **Testado**: scripts HTTP com contas descartáveis (fase 1: 41
+  verificações; liberação, inscrição pelo produtor, visibilidade e
+  adoção também passaram). Telas NÃO testadas pela automação no
+  navegador (extensão desconectada); conferidas pelo usuário.
+
 ## Próximos passos (não iniciados ainda)
 
 0. Pagamento da inscrição (com aba de resumo da ficha). Crossover: feito,
