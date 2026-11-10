@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/FormError";
 import {
   EventFormFields,
-  registrationDeadlineError,
   type EventFormValues,
 } from "@/components/EventFormFields";
 import { EventPhotoField } from "@/components/EventPhotoField";
@@ -27,7 +26,6 @@ const initialForm: EventFormValues = {
   location: "",
   venue: "",
   address: "",
-  registrationDeadline: "",
 };
 
 export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEventDialogProps) {
@@ -60,11 +58,6 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
       setError("Selecione a data de início.");
       return;
     }
-    const deadlineError = registrationDeadlineError(form);
-    if (deadlineError) {
-      setError(deadlineError);
-      return;
-    }
     setLoading(true);
     try {
       let event = await eventsApi.create({
@@ -73,7 +66,6 @@ export function CreateEventDialog({ open, onOpenChange, onCreated }: CreateEvent
         location: form.location,
         venue: form.venue,
         address: form.address,
-        registrationDeadline: form.registrationDeadline,
       });
       if (photo) {
         event = await eventsApi.uploadLogo(event.aliasId, photo);

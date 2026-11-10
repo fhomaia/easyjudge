@@ -11,7 +11,6 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FormError } from "@/components/FormError";
 import {
   EventFormFields,
-  registrationDeadlineError,
   type EventFormValues,
 } from "@/components/EventFormFields";
 import { EventPhotoField } from "@/components/EventPhotoField";
@@ -30,7 +29,6 @@ function toFormValues(event: Event): EventFormValues {
     location: event.location,
     venue: event.venue ?? "",
     address: event.address ?? "",
-    registrationDeadline: event.registrationDeadline,
   };
 }
 
@@ -85,11 +83,6 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
       setError("Selecione a data de início.");
       return;
     }
-    const deadlineError = registrationDeadlineError(form);
-    if (deadlineError) {
-      setError(deadlineError);
-      return;
-    }
     setLoading(true);
     try {
       let updated = await eventsApi.update(event.aliasId, {
@@ -98,7 +91,6 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
         location: form.location,
         venue: form.venue,
         address: form.address,
-        registrationDeadline: form.registrationDeadline,
       });
       if (photo) {
         try {

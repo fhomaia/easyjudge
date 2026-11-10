@@ -1,7 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/DatePicker";
-import { Checkbox } from "@/components/ui/checkbox";
 
 export interface EventFormValues {
   name: string;
@@ -9,9 +8,6 @@ export interface EventFormValues {
   location: string;
   venue: string;
   address: string;
-  // Data limite da inscrição pelo programa: "" = ainda não escolhida,
-  // null = "Sem data limite" marcado.
-  registrationDeadline: string | null;
 }
 
 interface EventFormFieldsProps {
@@ -20,27 +16,11 @@ interface EventFormFieldsProps {
   disabled?: boolean;
 }
 
-// "yyyy-MM-dd" -> Date local (meia-noite), pro limite do calendário.
-function parseDate(value: string): Date | undefined {
-  const [y, m, d] = value.split("-").map(Number);
-  return y && m && d ? new Date(y, m - 1, d) : undefined;
-}
-
-// Validação comum de criar/editar: devolve a mensagem de erro ou null.
-export function registrationDeadlineError(form: EventFormValues): string | null {
-  if (form.registrationDeadline === "") {
-    return 'Escolha a data limite de inscrição ou marque "Sem data limite".';
-  }
-  if (form.registrationDeadline !== null && form.registrationDeadline > form.startDate) {
-    return "A data limite de inscrição não pode ser depois do início do evento.";
-  }
-  return null;
-}
-
 // "Dias de competição" saiu do formulário (2026-07-16) — o número de
 // dias do evento agora é controlado na tela de Cronograma, através do
 // botão "+ Dia" (faz mais sentido lá, já que é onde os dias
-// efetivamente existem/são usados).
+// efetivamente existem/são usados). O prazo de inscrição também saiu
+// (2026-11-10): é escolhido na tela de Inscrições, ao liberar.
 export function EventFormFields({ form, onChange, disabled = false }: EventFormFieldsProps) {
   return (
     <>
@@ -64,28 +44,6 @@ export function EventFormFields({ form, onChange, disabled = false }: EventFormF
           onChange={(value) => onChange("startDate", value)}
           disabled={disabled}
         />
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="event-registration-deadline">Inscrições dos programas até</Label>
-        <DatePicker
-          id="event-registration-deadline"
-          value={form.registrationDeadline ?? ""}
-          onChange={(value) => onChange("registrationDeadline", value)}
-          maxDate={parseDate(form.startDate)}
-          disabled={disabled || form.registrationDeadline === null}
-        />
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Checkbox
-            checked={form.registrationDeadline === null}
-            onCheckedChange={(value) => onChange("registrationDeadline", value === true ? null : "")}
-            disabled={disabled}
-          />
-          Sem data limite
-        </label>
-        <p className="text-xs text-muted-foreground">
-          Os programas se inscrevem pelo link ou QR do evento até as 23:59 desse dia.
-        </p>
       </div>
 
       <div className="grid gap-2">

@@ -358,6 +358,17 @@ export class EventsService {
     }
 
     Object.assign(event, stripUndefined(dto));
+    // O prazo não fica mais no formulário do evento (2026-11-10): mudar
+    // só a data de início pra antes do prazo precisa dizer onde corrigir.
+    if (
+      dto.registrationDeadline === undefined &&
+      event.registrationDeadline !== null &&
+      event.registrationDeadline > event.startDate
+    ) {
+      throw new BadRequestException(
+        'A nova data de início fica antes do prazo de inscrição. Ajuste o prazo em Inscrições > Configurações e tente de novo.',
+      );
+    }
     assertRegistrationDeadline(event.registrationDeadline, event.startDate);
     // Editar NÃO despublica (decisão do usuário, 2026-10-05): o evento
     // publicado continua publicado. Despublicar só pelo "Reverter

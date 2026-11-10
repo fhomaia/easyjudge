@@ -263,15 +263,18 @@ export function ProgramsPage() {
                   Configure e libere as inscrições
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Defina o prazo, compartilhe o evento e escolha o que cada atleta precisa informar
-                  ou enviar.{" "}
+                  Compartilhe o evento e escolha o que cada atleta precisa informar ou enviar.{" "}
                   {event?.registrationStatus === "not_started"
-                    ? "Programas e atletas só conseguem se inscrever depois que você liberar as inscrições, no fim desta página."
+                    ? "Programas e atletas só conseguem se inscrever depois que você liberar as inscrições, no fim desta página, onde também escolhe o prazo."
                     : "Para pausar ou retomar as inscrições, use a seção no fim desta página."}
                 </p>
               </div>
               {event?.eventCode && <RegistrationInvite onShare={() => setShareOpen(true)} />}
-              {event && <DeadlineSection event={event} onSaved={setEvent} />}
+              {/* Antes da primeira liberação o prazo é escolhido junto com
+                  ela (ReleaseSection); depois, editado aqui. */}
+              {event && event.registrationStatus !== "not_started" && (
+                <DeadlineSection event={event} onSaved={setEvent} />
+              )}
               {id && <RegistrationRequirementsSection eventId={id} />}
               {/* No fim: o produtor confere tudo acima antes de liberar. */}
               {event && <ReleaseSection event={event} onSaved={setEvent} />}
@@ -452,6 +455,17 @@ function ReleaseSection({
 }) {
   const [confirming, setConfirming] = useState(false);
   const status = event.registrationStatus;
+  // Prazo escolhido na primeira liberação (2026-11-10): saiu do formulário
+  // do evento, e "sem valor" não pode virar "sem data limite" sem o
+  // produtor escolher. "" = ainda não escolhido; null = sem data limite.
+  const [deadline, setDeadline] = useState<string | null>(event.registrationDeadline ?? "");
+  const choosingDeadline = status === "not_started";
+  const deadlineError =
+    deadline === ""
+      ? "Escolha o prazo de inscrição para liberar."
+      : deadline !== null && deadline > event.startDate
+        ? "O prazo não pode passar da data de início do evento."
+        : null;
   const open = isRegistrationOpen(event);
   const next = status === "open" ? "paused" : "open";
 
@@ -480,7 +494,7 @@ function ReleaseSection({
         ? "Programas e atletas não conseguem se inscrever nem alterar as fichas, e veem o evento como \"Em breve\". Você continua acompanhando as inscrições e respondendo as solicitações."
         : open
           ? "Programas e atletas já podem se inscrever. Pausar impede novas inscrições e alterações até você retomar."
-          : "O prazo de inscrição terminou. Para reabrir, mude o prazo abaixo.";
+          : "O prazo de inscrição terminou. Para reabrir, mude o prazo acima.";
 
   const canStart = event.status === "created" || event.status === "published";
 
@@ -500,6 +514,19 @@ function ReleaseSection({
         </span>
       </div>
       <p className="text-sm text-muted-foreground">{text}</p>
+      {choosingDeadline && canStart && (
+        <div className="grid gap-2 rounded-lg border border-border/60 bg-card p-3 sm:p-4">
+          <p className="text-sm font-medium text-foreground">Prazo de inscrição</p>
+          <p className="text-xs text-muted-foreground">
+            Os programas montam e enviam a ficha até as 23:59 (horário de Brasília) do dia
+            escolhido. O prazo não pode passar da data de início do evento.
+          </p>
+          <DeadlineFields value={deadline} onChange={setDeadline} startDate={event.startDate} />
+          {deadline !== "" && deadlineError && (
+            <p className="text-sm text-destructive">{deadlineError}</p>
+          )}
+        </div>
+      )}
       {canStart && (status !== "open" || open) && (
         <div>
           {status === "open" ? (
@@ -512,7 +539,9 @@ function ReleaseSection({
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-violet-600 to-indigo-700 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 sm:w-auto"
+              disabled={choosingDeadline && deadlineError !== null}
+              title={choosingDeadline && deadlineError ? deadlineError : undefined}
+              className="flex w-full items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-violet-600 to-indigo-700 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               <Play className="size-3.5" />
               {status === "not_started" ? "Liberar inscrições" : "Retomar inscrições"}
@@ -532,7 +561,9 @@ function ReleaseSection({
         }
         description={
           next === "open"
-            ? "Programas e atletas poderão se inscrever pelo link ou código do evento."
+            ? choosingDeadline
+              ? `Programas e atletas poderão se inscrever pelo link ou código do evento. ${deadlineSummary(deadline)}`
+              : "Programas e atletas poderão se inscrever pelo link ou código do evento."
             : "Programas e atletas não vão conseguir se inscrever nem alterar as fichas até você retomar. O que já foi feito continua salvo."
         }
         confirmLabel={
@@ -541,7 +572,14 @@ function ReleaseSection({
         confirmingLabel="Salvando..."
         confirmVariant="default"
         onConfirm={async () => {
-          onSaved(await eventsApi.update(event.aliasId, { registrationStatus: next }));
+          onSaved(
+            await eventsApi.update(
+              event.aliasId,
+              choosingDeadline
+                ? { registrationStatus: next, registrationDeadline: deadline || null }
+                : { registrationStatus: next },
+            ),
+          );
         }}
       />
     </section>
@@ -579,7 +617,6 @@ function DeadlineSection({
     }
   }
 
-  const [y, m, d] = event.startDate.split("-").map(Number);
   return (
     <section className="grid gap-3 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
       <h2 className="font-semibold text-foreground">Prazo de inscrição</h2>
@@ -588,33 +625,16 @@ function DeadlineSection({
         O prazo não pode passar da data de início do evento.
       </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="w-full sm:w-56">
-          <DatePicker
-            value={deadline ?? ""}
-            onChange={(value) => {
-              setDeadline(value);
-              if (value) void save(value);
-            }}
-            maxDate={y && m && d ? new Date(y, m - 1, d) : undefined}
-            disabled={deadline === null || saving}
-          />
-        </div>
-        <label className="flex items-center gap-2 text-sm text-foreground">
-          <Checkbox
-            checked={deadline === null}
-            disabled={saving}
-            onCheckedChange={(value) => {
-              if (value === true) {
-                setDeadline(null);
-                void save(null);
-              } else {
-                setDeadline("");
-                setSaved(false);
-              }
-            }}
-          />
-          Sem data limite
-        </label>
+        <DeadlineFields
+          value={deadline}
+          startDate={event.startDate}
+          disabled={saving}
+          onChange={(value) => {
+            setDeadline(value);
+            if (value === "") setSaved(false);
+            else void save(value);
+          }}
+        />
         <span className="text-xs text-muted-foreground" aria-live="polite">
           {saving ? "Salvando..." : saved ? "Salvo" : deadline === "" ? "Escolha a data." : ""}
         </span>
@@ -622,6 +642,48 @@ function DeadlineSection({
       {error && <p className="text-sm text-destructive">{error}</p>}
     </section>
   );
+}
+
+// Data do prazo ou "Sem data limite". value: "" = nada escolhido (data
+// vazia e caixa desmarcada), null = sem data limite, senão "yyyy-MM-dd".
+function DeadlineFields({
+  value,
+  onChange,
+  startDate,
+  disabled = false,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  startDate: string;
+  disabled?: boolean;
+}) {
+  const [y, m, d] = startDate.split("-").map(Number);
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="w-full sm:w-56">
+        <DatePicker
+          value={value ?? ""}
+          onChange={(next) => next && onChange(next)}
+          maxDate={y && m && d ? new Date(y, m - 1, d) : undefined}
+          disabled={value === null || disabled}
+        />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <Checkbox
+          checked={value === null}
+          disabled={disabled}
+          onCheckedChange={(checked) => onChange(checked === true ? null : "")}
+        />
+        Sem data limite
+      </label>
+    </div>
+  );
+}
+
+function deadlineSummary(deadline: string | null): string {
+  if (deadline === null) return "Sem data limite de inscrição.";
+  const [y, m, d] = deadline.split("-");
+  return `Inscrições até ${d}/${m}/${y}, 23:59 (horário de Brasília).`;
 }
 
 type RegistrationStatus = "draft" | "submitted" | "reopened";

@@ -1944,10 +1944,15 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
   Não pode ser depois de `startDate` (400). Regra em
   `events/registration-window.ts` (`isRegistrationOpen`: status
   created/published e hoje em Brasília <= prazo), espelhada em
-  `web/src/lib/registrationWindow.ts`. No form do evento
-  (`EventFormFields`): data + checkbox "Sem data limite"; um dos dois é
-  obrigatório ao salvar (`registrationDeadlineError`). Eventos antigos
-  ficam com nulo (= inscrição aberta enquanto rascunho/publicado).
+  `web/src/lib/registrationWindow.ts`. **Desde 2026-11-10 o prazo saiu
+  do formulário do evento** (criar e "Dados do evento"): antes da
+  primeira liberação, é escolhido na própria seção "Liberação das
+  inscrições" (data ou "Sem data limite", obrigatório pra liberar; o
+  PATCH manda status e prazo juntos); depois, editado na seção "Prazo de
+  inscrição" da aba Configurações (que só aparece após a 1ª liberação).
+  Mudar a data de início pra antes do prazo dá 400 apontando pra
+  Inscrições > Configurações. Eventos antigos ficam com nulo (= sem
+  data limite).
 - **Nada despublica sozinho** (decisão do usuário, 2026-10-05):
   `updateEvent` não troca mais `published -> created`; edita a versão
   ativa e ela continua publicada (versão não muda). Despublicar só pelos
