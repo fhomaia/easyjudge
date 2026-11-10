@@ -7,7 +7,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, IsNull, Not, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  Not,
+  Repository,
+} from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'crypto';
 import { generateEventCode } from '../../common/utils/generate-event-code';
@@ -405,6 +412,7 @@ export class EventsService {
         venue: event.venue,
         address: event.address,
         registrationDeadline: event.registrationDeadline,
+        registrationStatus: event.registrationStatus,
         logoUrl: event.logoUrl,
         createdById: event.createdById,
         eventCode,
@@ -715,7 +723,9 @@ export class EventsService {
   // ficha de inscrição. Email da conta quando a linha não tem.
   async findManagerEmails(aliasId: string): Promise<string[]> {
     const event = await this.eventsRepo.findOneBy({ aliasId, active: true });
-    const owner = event ? await this.usersService.findById(event.createdById) : null;
+    const owner = event
+      ? await this.usersService.findById(event.createdById)
+      : null;
     const rows: { email: string | null }[] = await this.membersRepo
       .createQueryBuilder('m')
       .leftJoin('m.user', 'u')

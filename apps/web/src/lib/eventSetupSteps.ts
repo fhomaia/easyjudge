@@ -244,21 +244,29 @@ export function buildSetupSteps(
             : `${programs.pendingRequestsCount} solicitações de programas pendentes`
           : null,
       updatedAt: programs.updatedAt,
-      // Sem inscrições: configurar e divulgar (aba Configurações); com
-      // inscrições: acompanhar a lista; com solicitação pendente: a aba
-      // Solicitações (2026-10-06).
+      // Inscrições nunca liberadas: só a aba Configurações está
+      // disponível (2026-10-11); pausadas e sem solicitação pendente: o
+      // botão leva pra lá pra retomar. Liberadas e sem inscrições:
+      // configurar e divulgar; com inscrições: acompanhar a lista; com
+      // solicitação pendente: a aba Solicitações (2026-10-06).
       actionLabel:
-        programs.pendingRequestsCount > 0
-          ? "Ver solicitações"
-          : programs.programsCount > 0
-            ? "Ver inscrições"
-            : "Configurar inscrições",
+        event.registrationStatus === "not_started"
+          ? "Configurar inscrições"
+          : programs.pendingRequestsCount > 0
+            ? "Ver solicitações"
+            : event.registrationStatus === "paused"
+              ? "Retomar inscrições"
+              : programs.programsCount > 0
+                ? "Ver inscrições"
+                : "Configurar inscrições",
       href:
-        programs.pendingRequestsCount > 0
-          ? `/events/${event.aliasId}/programs?tab=requests`
-          : programs.programsCount > 0
-            ? `/events/${event.aliasId}/programs`
-            : `/events/${event.aliasId}/programs?tab=registration`,
+        event.registrationStatus === "not_started"
+          ? `/events/${event.aliasId}/programs?tab=registration`
+          : programs.pendingRequestsCount > 0
+            ? `/events/${event.aliasId}/programs?tab=requests`
+            : event.registrationStatus === "paused" || programs.programsCount === 0
+              ? `/events/${event.aliasId}/programs?tab=registration`
+              : `/events/${event.aliasId}/programs`,
     },
     {
       // Cronograma vem antes de Painel de jurados nesta lista (pedido

@@ -105,6 +105,8 @@ export class ProgramParticipation {
   categoriesCount?: number;
   // Pedidos da ficha de inscrição não resolvidos (só findAllForEvent).
   pendingRequestsCount?: number;
+  // Pedidos de inscrição de atletas esperando resposta do programa.
+  pendingAthleteRequestsCount?: number;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

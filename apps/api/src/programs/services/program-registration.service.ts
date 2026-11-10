@@ -26,7 +26,11 @@ import type { CategoryCriterion } from '../../categories/category-criteria';
 import { CategoryStatus } from '../../categories/enums/category-status.enum';
 import { Event } from '../../events/entities/event.entity';
 import { EventsService } from '../../events/services/events.service';
-import { isRegistrationOpen } from '../../events/registration-window';
+import {
+  isRegistrationOpen,
+  registrationClosedMessage,
+} from '../../events/registration-window';
+import { RegistrationStatus } from '../../events/enums/registration-status.enum';
 import { UsersService } from '../../users/services/users.service';
 import {
   AthletesService,
@@ -49,6 +53,12 @@ import { NotificationType } from '../../notifications/enums/notification-type.en
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 import { MailService } from '../../auth/services/mail.service';
 import { AthleteEntryDto } from '../dto/set-athlete-entries.dto';
+import {
+  pendingRequirements,
+  ProgramAthleteRequirementsService,
+} from './program-athlete-requirements.service';
+import { AthleteRequestsService } from './athlete-requests.service';
+import { AthleteRequestStatus } from '../entities/athlete-registration-request.entity';
 
 export interface RegistrationRequestView {
   id: string;
@@ -69,6 +79,7 @@ export interface ProgramRegistrationView {
     logoUrl: string | null;
     status: string;
     registrationDeadline: string | null;
+    registrationStatus: RegistrationStatus;
   };
   open: boolean;
   // Inscrição deste programa no evento (com equipes e categorias), ou
@@ -103,6 +114,19 @@ export interface ProgramRegistrationView {
   // Documentos enviados na etapa Regulamento do Setup (regulamento,
   // segurança, conduta, adicionais), pra consulta durante a inscrição.
   regulationDocuments: RegulationDocument[];
+  // Pedidos de inscrição de atletas esperando resposta (bloqueiam o envio).
+  athleteRequestsPendingCount: number;
+  // Limite de categorias por atleta (regras de crossover; null = sem
+  // limite), pra aprovação dos pedidos.
+  maxCategoriesPerAthlete: number | null;
+  // Todos os pedidos de atletas (qualquer situação, menos rascunho).
+  athleteRequestsCount: number;
+  // Último pedido de cada atleta do evento (id do ProgramAthlete), sem
+  // rascunhos: estágio da inscrição na aba Atletas.
+  athleteRequestStatuses: Record<string, AthleteRequestStatus>;
+  // Atletas do evento com inscrição aprovada: o programa não muda as
+  // categorias deles (só com pedido de correção do atleta).
+  lockedAthleteIds: string[];
 }
 
 export interface RegistrationIssue {
@@ -209,6 +233,8 @@ export class ProgramRegistrationService {
     private readonly linksRepo: Repository<AthleteLink>,
     private readonly dataSource: DataSource,
     private readonly regulationsService: RegulationsService,
+    private readonly athleteRequestsService: AthleteRequestsService,
+    private readonly requirementsService: ProgramAthleteRequirementsService,
   ) {}
 
   async get(eventId: string, userId: string): Promise<ProgramRegistrationView> {
@@ -243,6 +269,7 @@ export class ProgramRegistrationService {
         logoUrl: event.logoUrl,
         status: event.status,
         registrationDeadline: event.registrationDeadline,
+        registrationStatus: event.registrationStatus,
       },
       open: isRegistrationOpen(event),
       program,
@@ -279,6 +306,31 @@ export class ProgramRegistrationService {
       regulationDocuments: await this.regulationsService.listDocumentsByAlias(
         event.aliasId,
       ),
+      athleteRequestsPendingCount: participation
+        ? await this.athleteRequestsService.countAwaitingProgram(
+            participation.id,
+          )
+        : 0,
+      athleteRequestsCount: participation
+        ? await this.athleteRequestsService.countVisibleToProgram(
+            participation.id,
+          )
+        : 0,
+      athleteRequestStatuses: participation
+        ? Object.fromEntries(
+            await this.athleteRequestsService.latestStatuses(participation.id),
+          )
+        : {},
+      lockedAthleteIds: participation
+        ? [
+            ...(await this.athleteRequestsService.approvedAthleteIds(
+              participation.id,
+            )),
+          ]
+        : [],
+      maxCategoriesPerAthlete: (
+        await this.regulationsService.getCrossoverRulesByAlias(event.aliasId)
+      ).maxCategories,
     };
   }
 
@@ -335,6 +387,18 @@ export class ProgramRegistrationService {
     userId: string,
   ): Promise<ProgramRegistrationView> {
     const { participation } = await this.loadOwnedOpen(eventId, userId);
+    // Pedidos de atletas sem resposta impedem o envio (2026-10-10): enviar
+    // a ficha fecha o programa pra novos pedidos.
+    const awaiting = await this.athleteRequestsService.countAwaitingProgram(
+      participation.id,
+    );
+    if (awaiting > 0) {
+      throw new BadRequestException(
+        awaiting === 1
+          ? 'Responda o pedido de inscrição de atleta antes de enviar.'
+          : `Responda os ${awaiting} pedidos de inscrição de atletas antes de enviar.`,
+      );
+    }
     const withCategory = await this.teamsRepo
       .createQueryBuilder('team')
       .innerJoin('team.categories', 'category')
@@ -693,6 +757,13 @@ export class ProgramRegistrationService {
     const current = team.categories.map((c) => c.id);
     const toAdd = wanted.filter((id) => !current.includes(id));
     const toRemove = current.filter((id) => !wanted.includes(id));
+    await this.athleteRequestsService.assertApprovedCategoriesKept(
+      participation.id,
+      (entries) =>
+        entries.filter(
+          (e) => !(e.teamId === team.id && toRemove.includes(e.categoryId)),
+        ),
+    );
     const relation = this.teamsRepo
       .createQueryBuilder()
       .relation(Team, 'categories')
@@ -727,6 +798,15 @@ export class ProgramRegistrationService {
       throw new ConflictException('A equipe já está na categoria de destino.');
     }
     await this.assertEventCategories(event, [toCategoryId]);
+    await this.athleteRequestsService.assertApprovedCategoriesKept(
+      participation.id,
+      (entries) =>
+        entries.map((e) =>
+          e.teamId === team.id && e.categoryId === fromCategoryId
+            ? { ...e, categoryId: toCategoryId }
+            : e,
+        ),
+    );
     // Idade fora da regra da categoria nova não impede (2026-10-06): vira
     // pendência que barra o envio (computeIssues), como o nº de atletas.
     await this.dataSource.transaction(async (manager) => {
@@ -798,12 +878,51 @@ export class ProgramRegistrationService {
         )
           .filter((e) => isOutsideRoster(e.athlete))
           .map((e) => e.athleteId);
+    const finalIds = new Set([...athleteIds, ...outsideRoster]);
+    // Na escalação só entra quem já está inscrito no evento (em alguma
+    // categoria, 2026-10-11): inscrever atleta novo é pelo "Inscrever
+    // atleta", que exige os dados obrigatórios.
+    const inPair = new Set(
+      (await this.entriesRepo.findBy({ teamId: team.id, categoryId })).map(
+        (e) => e.athleteId,
+      ),
+    );
+    const newcomers = [...finalIds].filter((id) => !inPair.has(id));
+    if (newcomers.length > 0) {
+      const enrolled = new Set(
+        (await this.entriesRepo.findBy({ athleteId: In(newcomers) })).map(
+          (e) => e.athleteId,
+        ),
+      );
+      const notEnrolled = newcomers.filter((id) => !enrolled.has(id));
+      if (notEnrolled.length > 0) {
+        const names = (
+          await this.athletesRepo.findBy({ id: In(notEnrolled) })
+        ).map((a) => `${a.firstName} ${a.lastName}`.trim());
+        // Linhas criadas agora por athleteIdsForLinks, sem categoria.
+        await this.removeUnassignedRosterAthletes(participation, userId);
+        throw new BadRequestException(
+          `${names.join(', ')} ainda não ${names.length === 1 ? 'está inscrito' : 'estão inscritos'} no evento. Use "Inscrever atleta" na aba Atletas.`,
+        );
+      }
+    }
+    await this.athleteRequestsService.assertApprovedCategoriesKept(
+      participation.id,
+      (entries, lockedIds) => [
+        ...entries.filter(
+          (e) => !(e.teamId === team.id && e.categoryId === categoryId),
+        ),
+        ...[...finalIds]
+          .filter((id) => lockedIds.has(id))
+          .map((athleteId) => ({ athleteId, teamId: team.id, categoryId })),
+      ],
+    );
     await this.programAthletesService.setTeamCategoryAthletes(
       eventId,
       participation.id,
       team.id,
       categoryId,
-      [...new Set([...athleteIds, ...outsideRoster])],
+      [...finalIds],
     );
     await this.removeUnassignedRosterAthletes(participation, userId);
     return this.get(eventId, userId);
@@ -816,12 +935,39 @@ export class ProgramRegistrationService {
     linkId: string,
     entries: AthleteEntryDto[],
   ): Promise<ProgramRegistrationView> {
-    const { participation } = await this.loadOwnedOpen(eventId, userId);
+    const { event, participation } = await this.loadOwnedOpen(eventId, userId);
+    // Equipe que ainda não estava na categoria entra nela (popup "Inscrever
+    // atleta", como na aprovação de pedido).
+    await this.assertEventCategories(event, [
+      ...new Set(entries.map((e) => e.categoryId)),
+    ]);
+    for (const teamId of new Set(entries.map((e) => e.teamId))) {
+      const team = await this.findOwnTeam(participation, teamId);
+      const missing = entries.filter(
+        (e) =>
+          e.teamId === teamId &&
+          !team.categories.some((c) => c.id === e.categoryId),
+      );
+      for (const categoryId of new Set(missing.map((e) => e.categoryId))) {
+        await this.teamsRepo
+          .createQueryBuilder()
+          .relation(Team, 'categories')
+          .of(team.id)
+          .add(categoryId);
+      }
+    }
     const [athleteId] = await this.athleteIdsForLinks(
       eventId,
       participation,
       userId,
       [linkId],
+    );
+    await this.athleteRequestsService.assertApprovedCategoriesKept(
+      participation.id,
+      (current) => [
+        ...current.filter((e) => e.athleteId !== athleteId),
+        ...entries.map((e) => ({ athleteId, ...e })),
+      ],
     );
     await this.programAthletesService.setAthleteEntries(
       eventId,
@@ -831,6 +977,59 @@ export class ProgramRegistrationService {
     );
     await this.removeUnassignedRosterAthletes(participation, userId);
     return this.get(eventId, userId);
+  }
+
+  // "Inscrever atleta" (2026-10-10): o atleta do evento nasce antes das
+  // categorias, pra receber dados e documentos; sem categoria e sem dado,
+  // sai na próxima limpeza (removeUnassignedRosterAthletes).
+  async prepareAthlete(
+    eventId: string,
+    userId: string,
+    linkId: string,
+  ): Promise<{ athleteId: string }> {
+    const { participation } = await this.loadOwnedOpen(eventId, userId);
+    const [athleteId] = await this.athleteIdsForLinks(
+      eventId,
+      participation,
+      userId,
+      [linkId],
+    );
+    return { athleteId };
+  }
+
+  // Grava as categorias só com o que é obrigatório preenchido, como no
+  // envio do pedido pelo próprio atleta (mesmas regras: dados sempre,
+  // documentos salvo permissão do produtor).
+  async enrollAthlete(
+    eventId: string,
+    userId: string,
+    linkId: string,
+    entries: AthleteEntryDto[],
+  ): Promise<ProgramRegistrationView> {
+    if (entries.length === 0) {
+      throw new BadRequestException('Escolha ao menos uma categoria.');
+    }
+    const { participation } = await this.loadOwnedOpen(eventId, userId);
+    const [athleteId] = await this.athleteIdsForLinks(
+      eventId,
+      participation,
+      userId,
+      [linkId],
+    );
+    const view = await this.requirementsService.list(
+      eventId,
+      participation.id,
+      athleteId,
+      'program',
+      entries.map((e) => e.categoryId),
+    );
+    const missing = pendingRequirements(view, { includeOptionalDocs: false });
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Falta: ${missing.map((i) => i.requirement.label).join(', ')}.`,
+      );
+    }
+    return this.setAthleteEntries(eventId, userId, linkId, entries);
   }
 
   private async loadForUser(
@@ -876,15 +1075,13 @@ export class ProgramRegistrationService {
     throw new ConflictException(
       participation.submittedAt && isRegistrationOpen(event)
         ? REGISTRATION_LOCKED_MESSAGE
-        : 'As inscrições deste evento estão encerradas.',
+        : registrationClosedMessage(event),
     );
   }
 
   private assertOpen(event: Event): void {
     if (!isRegistrationOpen(event)) {
-      throw new ConflictException(
-        'As inscrições deste evento estão encerradas.',
-      );
+      throw new ConflictException(registrationClosedMessage(event));
     }
   }
 
@@ -990,6 +1187,11 @@ export class ProgramRegistrationService {
         'NOT EXISTS (SELECT 1 FROM team_category_athletes e WHERE e.athlete_id = a.id)',
       )
       .andWhere('a.athleteSubmittedAt IS NULL')
+      // Atleta com pedido de inscrição (2026-10-10) fica: o pedido aponta
+      // pra ele.
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM athlete_registration_requests r WHERE r.program_athlete_id = a.id)',
+      )
       .andWhere('a.cpf IS NULL AND a.birthDate IS NULL')
       .andWhere(
         'NOT EXISTS (SELECT 1 FROM athlete_requirement_values v WHERE v.program_athlete_id = a.id)',

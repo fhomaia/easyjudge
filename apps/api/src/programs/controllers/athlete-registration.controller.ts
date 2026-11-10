@@ -23,6 +23,12 @@ import {
 } from '../../common/config/athlete-document-upload.config';
 import { SetRequirementValueDto } from '../dto/set-requirement-value.dto';
 import { AthleteRegistrationService } from '../services/athlete-registration.service';
+import { AthleteRequestsService } from '../services/athlete-requests.service';
+import {
+  AddAthleteRequestProgramDto,
+  RequestAthleteChangesDto,
+  SaveAthleteRequestDto,
+} from '../dto/athlete-request.dto';
 import { ProgramAthleteRequirementsService } from '../services/program-athlete-requirements.service';
 
 // "Inscreva-se aqui" do atleta (2026-10-06). Acesso pela conta cujo email
@@ -34,6 +40,7 @@ export class AthleteRegistrationController {
   constructor(
     private readonly registrationService: AthleteRegistrationService,
     private readonly requirementsService: ProgramAthleteRequirementsService,
+    private readonly requestsService: AthleteRequestsService,
   ) {}
 
   @Get('me/registrations')
@@ -161,6 +168,54 @@ export class AthleteRegistrationController {
     );
   }
 
+  // Adicionar programa pelo email (pedido de inscrição, 2026-10-10).
+  @Post('events/:eventId/my-registration/programs')
+  async addProgram(
+    @Param('eventId') eventId: string,
+    @Body() dto: AddAthleteRequestProgramDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.assertAthleteAccount(req);
+    const { athleteId, warning } = await this.requestsService.addProgram(
+      req.user.userId,
+      eventId,
+      dto,
+    );
+    return {
+      athleteId,
+      warning,
+      registration: await this.registrationService.getForEvent(
+        req.user.userId,
+        eventId,
+      ),
+    };
+  }
+
+  // Rascunho do pedido: categorias e recado.
+  @Put('events/:eventId/my-registration/:athleteId/request')
+  async saveRequest(
+    @Param('eventId') eventId: string,
+    @Param('athleteId') athleteId: string,
+    @Body() dto: SaveAthleteRequestDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const { programId, athleteId: id } = await this.resolve(
+      req,
+      eventId,
+      athleteId,
+      true,
+    );
+    await this.requestsService.save(
+      req.user.userId,
+      eventId,
+      programId,
+      id,
+      dto,
+    );
+    return this.registrationService.getForEvent(req.user.userId, eventId);
+  }
+
+  // Envia o pedido de inscrição ao programa.
   @Post('events/:eventId/my-registration/:athleteId/submit')
   async submit(
     @Param('eventId') eventId: string,
@@ -173,7 +228,49 @@ export class AthleteRegistrationController {
       athleteId,
       true,
     );
-    return this.requirementsService.athleteSubmit(eventId, programId, id);
+    await this.requestsService.submit(req.user.userId, eventId, programId, id);
+    return this.registrationService.getForEvent(req.user.userId, eventId);
+  }
+
+  // Exclui a ficha ainda não enviada ao programa.
+  @Delete('events/:eventId/my-registration/:athleteId/request')
+  async discard(
+    @Param('eventId') eventId: string,
+    @Param('athleteId') athleteId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const { programId, athleteId: id } = await this.resolve(
+      req,
+      eventId,
+      athleteId,
+      false,
+    );
+    await this.requestsService.discard(req.user.userId, eventId, programId, id);
+    return this.registrationService.getForEvent(req.user.userId, eventId);
+  }
+
+  // Inscrição aprovada: o atleta pede uma correção ao programa.
+  @Post('events/:eventId/my-registration/:athleteId/correction')
+  async requestCorrection(
+    @Param('eventId') eventId: string,
+    @Param('athleteId') athleteId: string,
+    @Body() dto: RequestAthleteChangesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const { programId, athleteId: id } = await this.resolve(
+      req,
+      eventId,
+      athleteId,
+      false,
+    );
+    await this.requestsService.requestCorrection(
+      req.user.userId,
+      eventId,
+      programId,
+      id,
+      dto.message,
+    );
+    return this.registrationService.getForEvent(req.user.userId, eventId);
   }
 
   // Salvar algo cria o atleta do evento quando o programa ainda não o

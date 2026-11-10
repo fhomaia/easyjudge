@@ -1,5 +1,6 @@
 import {
   IsDateString,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -8,6 +9,7 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { RegistrationStatus } from '../enums/registration-status.enum';
 
 export class UpdateEventDto {
   @IsOptional()
@@ -46,4 +48,9 @@ export class UpdateEventDto {
   @ValidateIf((_, value) => value !== null)
   @IsDateString()
   registrationDeadline?: string | null;
+
+  // Liberar/pausar as inscrições; não volta pra 'not_started'.
+  @IsOptional()
+  @IsIn([RegistrationStatus.OPEN, RegistrationStatus.PAUSED])
+  registrationStatus?: RegistrationStatus;
 }

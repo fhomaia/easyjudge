@@ -12,6 +12,10 @@ import { ProgramParticipation } from '../entities/program-participation.entity';
 import { ProgramAthlete } from '../entities/program-athlete.entity';
 import { TeamCategoryAthlete } from '../entities/team-category-athlete.entity';
 import { RegistrationRequest } from '../entities/registration-request.entity';
+import {
+  AthleteRegistrationRequest,
+  AthleteRequestStatus,
+} from '../entities/athlete-registration-request.entity';
 import { ProgramProfile } from '../entities/program-profile.entity';
 import { CreateProgramParticipationDto } from '../dto/create-program-participation.dto';
 import { UpdateProgramParticipationDto } from '../dto/update-program-participation.dto';
@@ -71,6 +75,8 @@ export class ProgramsService {
     private readonly teamCategoryAthletesRepo: Repository<TeamCategoryAthlete>,
     @InjectRepository(RegistrationRequest)
     private readonly requestsRepo: Repository<RegistrationRequest>,
+    @InjectRepository(AthleteRegistrationRequest)
+    private readonly athleteRequestsRepo: Repository<AthleteRegistrationRequest>,
     private readonly eventsService: EventsService,
     private readonly usersService: UsersService,
     private readonly athletesService: AthletesService,
@@ -221,6 +227,9 @@ export class ProgramsService {
     const pendingRequests = await this.countPendingRequestsByProgram(
       participations.map((p) => p.id),
     );
+    const pendingAthleteRequests = await this.countPendingAthleteRequests(
+      participations.map((p) => p.id),
+    );
     for (const p of participations) {
       p.teamsCount = p.teams.length;
       p.categoriesCount = p.teams.reduce(
@@ -229,6 +238,7 @@ export class ProgramsService {
       );
       p.athletesCount = athleteCounts.get(p.id) ?? 0;
       p.pendingRequestsCount = pendingRequests.get(p.id) ?? 0;
+      p.pendingAthleteRequestsCount = pendingAthleteRequests.get(p.id) ?? 0;
     }
     // Perfis numa consulta só (antes era uma por programa: com 50
     // programas, ~2 s em produção).
@@ -258,6 +268,78 @@ export class ProgramsService {
       .groupBy('r.programId')
       .getRawMany();
     return new Map(rows.map((r) => [r.programId, Number(r.count)]));
+  }
+
+  // Pedidos de inscrição de atletas enviados e ainda sem resposta do
+  // programa (o produtor vê quem está esperando o programa responder).
+  private async countPendingAthleteRequests(
+    programIds: string[],
+  ): Promise<Map<string, number>> {
+    if (programIds.length === 0) return new Map();
+    const rows: { programId: string; count: string }[] =
+      await this.athleteRequestsRepo
+        .createQueryBuilder('r')
+        .select('r.programId', 'programId')
+        .addSelect('COUNT(*)', 'count')
+        .where({
+          programId: In(programIds),
+          status: AthleteRequestStatus.SUBMITTED,
+        })
+        .groupBy('r.programId')
+        .getRawMany();
+    return new Map(rows.map((r) => [r.programId, Number(r.count)]));
+  }
+
+  // Ficha em rascunho criada pelo pedido de inscrição de um atleta, pra um
+  // programa que ainda não tinha ficha no evento (2026-10-10). Com conta,
+  // o programa ganha SPECTATOR se ainda não tem vínculo com o evento (vê o
+  // card na Home e as notificações). Sem conta, a ficha espera o cadastro
+  // do programa com esse email (linkUnclaimedProgramsByEmail).
+  async createDraftForAthleteRequest(
+    aliasId: string,
+    createdById: string,
+    program: { user: User } | { name: string; email: string },
+  ): Promise<ProgramParticipation> {
+    if ('user' in program) {
+      const { user } = program;
+      const profile = await this.getOrCreateProfile(user.id);
+      const saved = await this.participationsRepo.save(
+        this.participationsRepo.create({
+          aliasId,
+          createdById,
+          userId: user.id,
+          name: profile.name,
+          email: profile.contactEmail || user.email,
+          city: profile.city ?? '',
+          state: profile.state ?? '',
+          submittedAt: null,
+        }),
+      );
+      const member = await this.eventsService.findMemberByIdentity(aliasId, {
+        userId: user.id,
+        email: user.email,
+      });
+      if (!member) {
+        await this.eventsService.upsertMemberRole(
+          aliasId,
+          EventMemberRole.SPECTATOR,
+          { userId: user.id, email: user.email, firstName: profile.name },
+        );
+      }
+      return saved;
+    }
+    return this.participationsRepo.save(
+      this.participationsRepo.create({
+        aliasId,
+        createdById,
+        userId: null,
+        name: program.name,
+        email: program.email,
+        city: '',
+        state: '',
+        submittedAt: null,
+      }),
+    );
   }
 
   private async countAthletesByProgram(
@@ -578,7 +660,7 @@ export class ProgramsService {
 
     const name = user.teamOrInstitutionName || buildUserDisplayName(user);
     const seed = unclaimed.find((p) => p.city && p.state);
-    await this.getOrCreateProfile(userId, {
+    const profile = await this.getOrCreateProfile(userId, {
       name,
       contactEmail: user.email,
       city: seed?.city ?? null,
@@ -592,20 +674,38 @@ export class ProgramsService {
       .where('id IN (:...ids)', { ids: unclaimed.map((p) => p.id) })
       .execute();
 
+    // Rascunho aberto pelo pedido de um atleta tem o email como nome:
+    // passa a usar o nome da conta. Ficha cadastrada pelo produtor
+    // (enviada) mantém o nome que ele deu.
+    const drafts = unclaimed.filter((p) => !p.submittedAt);
+    if (drafts.length > 0) {
+      await this.participationsRepo.update(
+        { id: In(drafts.map((p) => p.id)) },
+        { name: profile.name },
+      );
+    }
+
     // Mesmo raciocínio de JudgesService.linkUnclaimedJudgesByEmail —
     // garante o papel "programa" no roster de acessos de cada evento
     // recém-reclamado.
     const distinctAliasIds = new Set(unclaimed.map((p) => p.aliasId));
     for (const aliasId of distinctAliasIds) {
+      // Ficha em rascunho (criada pelo pedido de um atleta, 2026-10-10):
+      // o papel PROGRAM só vem no envio; até lá, SPECTATOR (card na Home
+      // e notificações).
+      const submitted = unclaimed.some(
+        (p) => p.aliasId === aliasId && p.submittedAt,
+      );
       await this.eventsService.upsertMemberRole(
         aliasId,
-        EventMemberRole.PROGRAM,
+        submitted ? EventMemberRole.PROGRAM : EventMemberRole.SPECTATOR,
         {
           userId,
           email: user.email,
           firstName: buildUserDisplayName(user),
         },
       );
+      if (!submitted) continue;
       // Mesmo raciocínio do create() — replica pros atletas já
       // vinculados a este programa.
       await this.athletesService.grantEventAccessForNewProgramEvent(
@@ -613,6 +713,13 @@ export class ProgramsService {
         aliasId,
       );
     }
+
+    // Pedidos de atletas que esperavam a conta do programa: avisa
+    // (AthleteRequestsService).
+    this.eventEmitter.emit('program.claimed', {
+      userId,
+      participationIds: unclaimed.map((p) => p.id),
+    });
 
     return unclaimed.length;
   }

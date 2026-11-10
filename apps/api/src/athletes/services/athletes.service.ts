@@ -179,7 +179,47 @@ export class AthletesService {
       endedAt: IsNull(),
     });
     if (!link) throw new NotFoundException('Vínculo não encontrado.');
+    await this.assertNoRegistrationInProgress(link);
     await this.endLink(link);
+  }
+
+  // O atleta não cancela o próprio pedido (2026-10-10), então também não
+  // sai do programa enquanto tem inscrição em andamento com ele num evento
+  // que ainda não começou: pedido enviado, em correção ou aprovado, ou
+  // atleta numa categoria da ficha. Rascunho e pedido recusado não
+  // seguram. SQL direto pra não ligar este módulo ao de programas.
+  private async assertNoRegistrationInProgress(link: AthleteLink) {
+    const athlete = link.athleteUserId
+      ? await this.usersService.findById(link.athleteUserId)
+      : null;
+    const rows: { name: string }[] = await this.linksRepo.query(
+      `SELECT e.name FROM events e
+         JOIN program_participations p ON p.alias_id = e.alias_id
+         JOIN program_athletes pa ON pa.program_id = p.id
+        WHERE e.active AND e.status IN ('created', 'published')
+          AND (p.user_id = $1
+               OR (p.user_id IS NULL AND LOWER(p.email) = LOWER($2)))
+          AND (EXISTS (SELECT 1 FROM athlete_registration_requests r
+                        WHERE r.program_athlete_id = pa.id
+                          AND r.athlete_user_id = $3
+                          AND r.status IN ('submitted', 'changes_requested', 'approved'))
+               OR (LOWER(pa.email) = LOWER($4)
+                   AND EXISTS (SELECT 1 FROM team_category_athletes t
+                                WHERE t.athlete_id = pa.id)))
+        ORDER BY e.start_date
+        LIMIT 1`,
+      [
+        link.programUserId,
+        link.programEmail,
+        link.athleteUserId,
+        athlete?.email ?? link.email ?? '',
+      ],
+    );
+    if (rows.length > 0) {
+      throw new ConflictException(
+        `Você tem uma inscrição com este programa no evento ${rows[0].name}. Para sair, fale com o programa.`,
+      );
+    }
   }
 
   // Atleta saindo da equipe (qualquer um dos lados). Convite/pedido que
@@ -335,6 +375,46 @@ export class AthletesService {
     if (programUserId && athleteUserId) {
       await this.syncEventAccessForLink(saved);
     }
+  }
+
+  // Programa aprovou o pedido de inscrição do atleta (2026-10-10): aprovar
+  // a inscrição aprova o vínculo junto (decisão do usuário). Confirma o
+  // vínculo ativo entre os dois (pedido pendente, por conta ou email) ou
+  // cria um já confirmado.
+  async ensureConfirmedLink(
+    programUserId: string,
+    athleteUserId: string,
+  ): Promise<void> {
+    const programUser = await this.usersService.findById(programUserId);
+    const athleteUser = await this.usersService.findById(athleteUserId);
+    if (!programUser || !athleteUser) {
+      throw new NotFoundException('Conta não encontrada.');
+    }
+    const existing = await this.linksRepo
+      .createQueryBuilder('link')
+      .where('link.endedAt IS NULL')
+      .andWhere(
+        '(link.programUserId = :programUserId OR LOWER(link.programEmail) = LOWER(:programEmail))',
+        { programUserId, programEmail: programUser.email },
+      )
+      .andWhere(
+        '(link.athleteUserId = :athleteUserId OR LOWER(link.email) = LOWER(:email))',
+        { athleteUserId, email: athleteUser.email },
+      )
+      .getOne();
+    const link =
+      existing ??
+      this.linksRepo.create({
+        programEmail: programUser.email,
+        firstName: athleteUser.firstName,
+        lastName: athleteUser.lastName,
+        email: athleteUser.email,
+        createdById: programUserId,
+      });
+    link.programUserId = programUserId;
+    link.athleteUserId = athleteUserId;
+    link.confirmedAt = link.confirmedAt ?? new Date();
+    await this.syncEventAccessForLink(await this.linksRepo.save(link));
   }
 
   async listMyPrograms(athleteUserId: string): Promise<AthleteLinkView[]> {

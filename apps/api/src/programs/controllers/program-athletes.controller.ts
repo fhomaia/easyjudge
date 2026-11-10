@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UploadedFiles,
   UseGuards,
@@ -17,6 +18,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { isUUID } from 'class-validator';
 import { ProgramAthletesService } from '../services/program-athletes.service';
 import { CreateProgramAthleteDto } from '../dto/create-program-athlete.dto';
 import { UpdateProgramAthleteDto } from '../dto/update-program-athlete.dto';
@@ -37,6 +39,7 @@ import type { RequirementActor } from '../services/program-athlete-requirements.
 const actorOf = (req: AuthenticatedRequest): RequirementActor =>
   req.user.role === UserRole.PROGRAM ? 'program' : 'staff';
 import { ProgramAthleteRequirementsService } from '../services/program-athlete-requirements.service';
+import { AthleteRequestsService } from '../services/athlete-requests.service';
 import { SetRequirementValueDto } from '../dto/set-requirement-value.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
@@ -49,21 +52,38 @@ export class ProgramAthletesController {
   constructor(
     private readonly athletesService: ProgramAthletesService,
     private readonly requirementsService: ProgramAthleteRequirementsService,
+    private readonly athleteRequestsService: AthleteRequestsService,
   ) {}
+
+  // Produtor: só atletas inscritos, com ficha enviada ou cadastrados por
+  // ele (ProgramAthletesService.staffVisibleIds); o resto dá 404.
+  private async assertVisible(
+    req: AuthenticatedRequest,
+    programId: string,
+    athleteId: string,
+  ): Promise<void> {
+    if (actorOf(req) === 'staff') {
+      await this.athletesService.assertStaffCanSee(programId, athleteId);
+    }
+  }
 
   // Dados pedidos na inscrição (aba Configurações) e as respostas do atleta.
   @Get(':athleteId/requirements')
-  listRequirements(
+  async listRequirements(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
     @Req() req: AuthenticatedRequest,
+    // `?categoryIds=a,b`: categorias escolhidas ainda não gravadas.
+    @Query('categoryIds') categoryIds?: string,
   ) {
+    await this.assertVisible(req, programId, athleteId);
     return this.requirementsService.list(
       eventId,
       programId,
       athleteId,
       actorOf(req),
+      (categoryIds ?? '').split(',').filter((id) => isUUID(id)),
     );
   }
 
@@ -77,7 +97,7 @@ export class ProgramAthletesController {
       athleteDocumentUploadOptions,
     ),
   )
-  setDocument(
+  async setDocument(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
@@ -85,6 +105,7 @@ export class ProgramAthletesController {
     @UploadedFiles() files: Express.Multer.File[],
     @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertVisible(req, programId, athleteId);
     return this.requirementsService.setDocument(
       eventId,
       programId,
@@ -98,13 +119,14 @@ export class ProgramAthletesController {
 
   @Delete(':athleteId/documents/:requirementId')
   @DocumentWrite()
-  removeDocument(
+  async removeDocument(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
     @Param('requirementId') requirementId: string,
     @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertVisible(req, programId, athleteId);
     return this.requirementsService.removeDocument(
       eventId,
       programId,
@@ -115,13 +137,15 @@ export class ProgramAthletesController {
   }
 
   @Get(':athleteId/documents/:requirementId/files/:index')
-  documentFile(
+  async documentFile(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
+    @Req() req: AuthenticatedRequest,
     @Param('requirementId') requirementId: string,
     @Param('index', ParseIntPipe) index: number,
   ) {
+    await this.assertVisible(req, programId, athleteId);
     return this.requirementsService.streamDocumentFile(
       eventId,
       programId,
@@ -133,7 +157,7 @@ export class ProgramAthletesController {
 
   // Só o produtor contesta.
   @Post(':athleteId/documents/:requirementId/contest')
-  contestDocument(
+  async contestDocument(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
@@ -141,6 +165,7 @@ export class ProgramAthletesController {
     @Body() dto: ContestDocumentDto,
     @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertVisible(req, programId, athleteId);
     if (actorOf(req) !== 'staff') {
       throw new ForbiddenException('Só o organizador contesta documentos.');
     }
@@ -155,7 +180,7 @@ export class ProgramAthletesController {
   }
 
   @Put(':athleteId/requirements/:requirementId')
-  setRequirement(
+  async setRequirement(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
@@ -163,6 +188,7 @@ export class ProgramAthletesController {
     @Body() dto: SetRequirementValueDto,
     @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertVisible(req, programId, athleteId);
     return this.requirementsService.set(
       eventId,
       programId,
@@ -178,8 +204,13 @@ export class ProgramAthletesController {
   findAll(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.athletesService.list(eventId, programId);
+    return this.athletesService.list(
+      eventId,
+      programId,
+      actorOf(req) === 'staff',
+    );
   }
 
   @Post()
@@ -195,17 +226,19 @@ export class ProgramAthletesController {
       programId,
       dto,
       req.user.userId,
+      actorOf(req) === 'staff',
     );
   }
 
   @Patch(':athleteId')
-  update(
+  async update(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
     @Body() dto: UpdateProgramAthleteDto,
     @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertVisible(req, programId, athleteId);
     return this.athletesService.update(
       eventId,
       programId,
@@ -217,12 +250,20 @@ export class ProgramAthletesController {
 
   @Delete(':athleteId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
+  async remove(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
     @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertVisible(req, programId, athleteId);
+    // Conta Programa não tira atleta com inscrição aprovada (pagamento).
+    if (actorOf(req) === 'program') {
+      await this.athleteRequestsService.assertApprovedCategoriesKept(
+        programId,
+        (entries) => entries.filter((e) => e.athleteId !== athleteId),
+      );
+    }
     return this.athletesService.remove(
       eventId,
       programId,
@@ -232,12 +273,23 @@ export class ProgramAthletesController {
   }
 
   @Put(':athleteId/entries')
-  setEntries(
+  async setEntries(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,
     @Param('athleteId') athleteId: string,
     @Body() dto: SetAthleteEntriesDto,
+    @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertVisible(req, programId, athleteId);
+    if (actorOf(req) === 'program') {
+      await this.athleteRequestsService.assertApprovedCategoriesKept(
+        programId,
+        (entries) => [
+          ...entries.filter((e) => e.athleteId !== athleteId),
+          ...dto.entries.map((e) => ({ athleteId, ...e })),
+        ],
+      );
+    }
     return this.athletesService.setAthleteEntries(
       eventId,
       programId,

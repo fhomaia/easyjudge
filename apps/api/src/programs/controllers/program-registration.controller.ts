@@ -9,6 +9,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ProgramRegistrationService } from '../services/program-registration.service';
+import { AthleteRequestsService } from '../services/athlete-requests.service';
+import {
+  ApproveAthleteRequestDto,
+  RejectAthleteRequestDto,
+  RequestAthleteChangesDto,
+} from '../dto/athlete-request.dto';
 import {
   CreateRegistrationRequestDto,
   MoveTeamCategoryDto,
@@ -30,7 +36,78 @@ import type { AuthenticatedRequest } from '../../auth/types/authenticated-reques
 export class ProgramRegistrationController {
   constructor(
     private readonly registrationService: ProgramRegistrationService,
+    private readonly athleteRequestsService: AthleteRequestsService,
   ) {}
+
+  // Pedidos de inscrição de atletas (2026-10-10).
+  @Get('athlete-requests')
+  listAthleteRequests(
+    @Param('eventId') eventId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.athleteRequestsService.listForProgram(eventId, req.user.userId);
+  }
+
+  @Post('athlete-requests/:requestId/approve')
+  approveAthleteRequest(
+    @Param('eventId') eventId: string,
+    @Param('requestId') requestId: string,
+    @Body() dto: ApproveAthleteRequestDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.athleteRequestsService.approve(
+      eventId,
+      req.user.userId,
+      requestId,
+      dto.entries,
+    );
+  }
+
+  @Post('athlete-requests/:requestId/request-changes')
+  requestAthleteChanges(
+    @Param('eventId') eventId: string,
+    @Param('requestId') requestId: string,
+    @Body() dto: RequestAthleteChangesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.athleteRequestsService.requestChanges(
+      eventId,
+      req.user.userId,
+      requestId,
+      dto.message,
+    );
+  }
+
+  @Post('athlete-requests/:requestId/reject')
+  rejectAthleteRequest(
+    @Param('eventId') eventId: string,
+    @Param('requestId') requestId: string,
+    @Body() dto: RejectAthleteRequestDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.athleteRequestsService.reject(
+      eventId,
+      req.user.userId,
+      requestId,
+      dto.message,
+    );
+  }
+
+  // Pedido de correção de inscrição aprovada: mantém como estava.
+  @Post('athlete-requests/:requestId/keep')
+  keepAthleteRequest(
+    @Param('eventId') eventId: string,
+    @Param('requestId') requestId: string,
+    @Body() dto: RejectAthleteRequestDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.athleteRequestsService.keep(
+      eventId,
+      req.user.userId,
+      requestId,
+      dto.message,
+    );
+  }
 
   @Get()
   get(@Param('eventId') eventId: string, @Req() req: AuthenticatedRequest) {
@@ -112,6 +189,36 @@ export class ProgramRegistrationController {
       categoryId,
       dto.linkIds,
       dto.keepAthleteIds,
+    );
+  }
+
+  // "Inscrever atleta": cria o atleta do evento (dados e documentos antes
+  // das categorias) e, no fim, grava as categorias conferindo o que falta.
+  @Post('athletes/:linkId/prepare')
+  prepareAthlete(
+    @Param('eventId') eventId: string,
+    @Param('linkId') linkId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.registrationService.prepareAthlete(
+      eventId,
+      req.user.userId,
+      linkId,
+    );
+  }
+
+  @Post('athletes/:linkId/enroll')
+  enrollAthlete(
+    @Param('eventId') eventId: string,
+    @Param('linkId') linkId: string,
+    @Body() dto: SetRegistrationAthleteEntriesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.registrationService.enrollAthlete(
+      eventId,
+      req.user.userId,
+      linkId,
+      dto.entries,
     );
   }
 

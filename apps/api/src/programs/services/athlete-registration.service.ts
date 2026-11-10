@@ -17,9 +17,23 @@ import { Event } from '../../events/entities/event.entity';
 import { EventStatus } from '../../events/enums/event-status.enum';
 import { EventsService } from '../../events/services/events.service';
 import { isRegistrationOpen } from '../../events/registration-window';
+import { RegistrationStatus } from '../../events/enums/registration-status.enum';
 import { UsersService } from '../../users/services/users.service';
 import { AthleteLink } from '../../athletes/entities/athlete-link.entity';
 import type { User } from '../../users/entities/user.entity';
+import { UserRole } from '../../common/enums/user-role.enum';
+import { CategoryStatus } from '../../categories/enums/category-status.enum';
+import { CategoryCriteriaService } from '../../categories/services/category-criteria.service';
+import {
+  AthleteRegistrationRequest,
+  AthleteRequestStatus,
+  OPEN_REQUEST_STATUSES,
+} from '../entities/athlete-registration-request.entity';
+import { ProgramsService } from './programs.service';
+import {
+  AthleteRequestsService,
+  programClosedForRequests,
+} from './athlete-requests.service';
 import {
   pendingRequirements,
   ProgramAthleteRequirementsService,
@@ -29,9 +43,29 @@ import {
 // Prefixo do id de uma inscrição de atleta do elenco que o programa ainda
 // não pôs em nenhuma categoria (sem ProgramAthlete): `program:<id>`.
 const PENDING_PREFIX = 'program:';
+// Programa do elenco (vínculo confirmado) que ainda não tem ficha neste
+// evento: `programUser:<userId do programa>`. A ficha (rascunho) nasce
+// quando o atleta salva algo (2026-10-10).
+const PROGRAM_USER_PREFIX = 'programUser:';
+
+export interface AthleteRequestSummary {
+  id: string;
+  status: AthleteRequestStatus;
+  categoryIds: string[];
+  note: string | null;
+  responseMessage: string | null;
+  submittedAt: Date | null;
+  respondedAt: Date | null;
+  // Prazo acabou com o pedido ainda aberto ("Não respondido no prazo").
+  expired: boolean;
+}
 
 export interface AthleteRegistrationEntry {
+  // Vazio enquanto o programa do elenco ainda não tem ficha no evento.
   programId: string;
+  // Conta do programa (null = programa sem conta). Chave estável da
+  // entrada na tela, junto com programId.
+  programUserId: string | null;
   programName: string;
   // Atleta do evento, ou `program:<programId>` enquanto ele não existe.
   athleteId: string;
@@ -41,6 +75,13 @@ export interface AthleteRegistrationEntry {
   pendingCount: number;
   contestedCount: number;
   requirements: AthleteRequirementsView;
+  // Pedido de inscrição do atleta neste programa (o mais recente), ou null
+  // (programa ainda não recebeu pedido, ou escalou o atleta sozinho).
+  request: AthleteRequestSummary | null;
+  // O programa enviou a ficha: não recebe mais pedidos.
+  programClosed: boolean;
+  // Sem conta na plataforma: o pedido espera o programa se cadastrar.
+  programHasAccount: boolean;
 }
 
 export interface AthleteRegistrationEvent {
@@ -50,10 +91,16 @@ export interface AthleteRegistrationEvent {
   startDate: string;
   location: string;
   registrationDeadline: string | null;
+  registrationStatus: RegistrationStatus;
   open: boolean;
   entries: AthleteRegistrationEntry[];
   // Só na tela do evento (getForEvent), não na lista da Home.
   regulationDocuments?: RegulationDocument[];
+  // Só na tela do evento: categorias que o atleta pode pedir.
+  categories?: Category[];
+  // Só na tela do evento: limite de categorias por atleta das regras de
+  // crossover (null = sem limite).
+  maxCategoriesPerAthlete?: number | null;
   // Só na lista da Home (listMine): o evento no formato do card, pra Home
   // juntar a inscrição ao card do evento (ou criar o card, quando a pessoa
   // ainda não tem vínculo com o evento).
@@ -83,7 +130,12 @@ export class AthleteRegistrationService {
     private readonly categoriesRepo: Repository<Category>,
     @InjectRepository(AthleteLink)
     private readonly linksRepo: Repository<AthleteLink>,
+    @InjectRepository(AthleteRegistrationRequest)
+    private readonly requestsRepo: Repository<AthleteRegistrationRequest>,
     private readonly eventsService: EventsService,
+    private readonly programsService: ProgramsService,
+    private readonly requestsService: AthleteRequestsService,
+    private readonly categoryCriteriaService: CategoryCriteriaService,
     private readonly usersService: UsersService,
     private readonly requirementsService: ProgramAthleteRequirementsService,
     private readonly regulationsService: RegulationsService,
@@ -134,14 +186,80 @@ export class AthleteRegistrationService {
     const pending = (await this.pendingPrograms(user, athletes)).filter(
       (p) => p.aliasId === event.aliasId,
     );
+    const linkedPrograms = await this.linkedProgramsWithoutDraft(
+      user,
+      event.aliasId,
+    );
     const view = await this.buildEvent(event, user, athletes, pending);
-    if (view.entries.length === 0) {
-      throw new NotFoundException(
-        'Nenhum programa inscreveu você neste evento.',
+    for (const program of linkedPrograms) {
+      const requirements = await this.requirementsService.previewForAthlete(
+        event,
+        this.participationsRepo.create({
+          aliasId: event.aliasId,
+          name: program.name,
+          submittedAt: null,
+          reopenedAt: null,
+          userId: program.userId,
+        }),
+        {
+          firstName: user.firstName,
+          lastName: user.lastName ?? '',
+          email: user.email,
+        },
       );
+      view.entries.push({
+        programId: '',
+        programUserId: program.userId,
+        programName: program.name,
+        athleteId: `${PROGRAM_USER_PREFIX}${program.userId}`,
+        categories: [],
+        pendingCount: pendingRequirements(requirements, {
+          includeOptionalDocs: true,
+        }).length,
+        contestedCount: 0,
+        requirements,
+        request: null,
+        programClosed: false,
+        programHasAccount: true,
+      });
     }
+    // Sem programa nenhum ainda: quem já tem vínculo com o evento (ex.:
+    // entrou pelo código) vê a tela pra adicionar um programa.
+    if (view.entries.length === 0) {
+      const { member } = await this.eventsService.getMemberForEventId(
+        eventId,
+        userId,
+      );
+      if (!member) {
+        throw new NotFoundException(
+          'Nenhum programa inscreveu você neste evento.',
+        );
+      }
+    }
+    // Abas na ordem em que o atleta escolheu os programas (criação do
+    // atleta do evento); quem ainda não foi escolhido vai pro fim.
+    const chosenAt = new Map(
+      athletes.map((a) => [a.id, new Date(a.createdAt).getTime()]),
+    );
+    view.entries.sort(
+      (a, b) =>
+        (chosenAt.get(a.athleteId) ?? Infinity) -
+          (chosenAt.get(b.athleteId) ?? Infinity) || 0,
+    );
     view.regulationDocuments =
       await this.regulationsService.listDocumentsByAlias(event.aliasId);
+    const categories = await this.categoriesRepo.find({
+      where: { aliasId: event.aliasId, status: CategoryStatus.ACTIVE },
+      order: { name: 'ASC' },
+    });
+    this.categoryCriteriaService.attachLabels(
+      categories,
+      await this.categoryCriteriaService.getByAlias(event.aliasId),
+    );
+    view.categories = categories;
+    view.maxCategoriesPerAthlete = (
+      await this.regulationsService.getCrossoverRulesByAlias(event.aliasId)
+    ).maxCategories;
     return view;
   }
 
@@ -160,6 +278,37 @@ export class AthleteRegistrationService {
     const athletes = (await this.myAthletes(user)).filter(
       (a) => a.aliasId === event.aliasId,
     );
+
+    if (athleteId.startsWith(PROGRAM_USER_PREFIX)) {
+      const programUserId = athleteId.slice(PROGRAM_USER_PREFIX.length);
+      const linked = await this.linkedProgramsWithoutDraft(user, event.aliasId);
+      const program = linked.find((p) => p.userId === programUserId);
+      // Ficha criada entre a leitura e o clique: usa a que existe.
+      const existing = await this.participationsRepo.findOneBy({
+        aliasId: event.aliasId,
+        userId: programUserId,
+      });
+      if ((!program && !existing) || !create) {
+        throw new NotFoundException('Inscrição não encontrada.');
+      }
+      const programUser = await this.usersService.findById(programUserId);
+      if (!programUser) throw new NotFoundException('Programa não encontrado.');
+      const participation =
+        existing ??
+        (await this.programsService.createDraftForAthleteRequest(
+          event.aliasId,
+          user.id,
+          { user: programUser },
+        ));
+      if (programClosedForRequests(participation)) {
+        throw new NotFoundException('Inscrição não encontrada.');
+      }
+      const created = await this.requestsService.ensureProgramAthlete(
+        participation,
+        user,
+      );
+      return { programId: participation.id, athleteId: created.id };
+    }
 
     if (athleteId.startsWith(PENDING_PREFIX)) {
       const programId = athleteId.slice(PENDING_PREFIX.length);
@@ -207,7 +356,44 @@ export class AthleteRegistrationService {
     user: User,
     athletes: ProgramAthlete[],
   ): Promise<ProgramParticipation[]> {
-    const links = await this.linksRepo
+    const links = await this.confirmedLinks(user);
+    if (links.length === 0) return [];
+    const participations = await this.participationsRepo.findBy({
+      userId: In([...new Set(links.map((l) => l.programUserId as string))]),
+    });
+    const taken = new Set(athletes.map((a) => a.programId));
+    return participations.filter((p) => !taken.has(p.id));
+  }
+
+  // Programas do elenco do atleta (vínculo confirmado, com conta) que
+  // ainda não têm ficha neste evento: o atleta pode pedir inscrição por
+  // eles (2026-10-10).
+  private async linkedProgramsWithoutDraft(
+    user: User,
+    aliasId: string,
+  ): Promise<{ userId: string; name: string }[]> {
+    const links = await this.confirmedLinks(user);
+    const programUserIds = [
+      ...new Set(links.map((l) => l.programUserId as string)),
+    ];
+    if (programUserIds.length === 0) return [];
+    const withDraft = await this.participationsRepo.findBy({
+      aliasId,
+      userId: In(programUserIds),
+    });
+    const taken = new Set(withDraft.map((p) => p.userId));
+    const result: { userId: string; name: string }[] = [];
+    for (const id of programUserIds.filter((id) => !taken.has(id))) {
+      const programUser = await this.usersService.findById(id);
+      if (programUser?.role !== UserRole.PROGRAM) continue;
+      const { profile } = await this.programsService.findAllForUser(id);
+      result.push({ userId: id, name: profile.name });
+    }
+    return result;
+  }
+
+  private confirmedLinks(user: User): Promise<AthleteLink[]> {
+    return this.linksRepo
       .createQueryBuilder('link')
       .where(
         '(link.athleteUserId = :userId OR LOWER(link.email) = LOWER(:email))',
@@ -217,12 +403,6 @@ export class AthleteRegistrationService {
       .andWhere('link.endedAt IS NULL')
       .andWhere('link.programUserId IS NOT NULL')
       .getMany();
-    if (links.length === 0) return [];
-    const participations = await this.participationsRepo.findBy({
-      userId: In([...new Set(links.map((l) => l.programUserId as string))]),
-    });
-    const taken = new Set(athletes.map((a) => a.programId));
-    return participations.filter((p) => !taken.has(p.id));
   }
 
   private async buildEvent(
@@ -252,6 +432,31 @@ export class AthleteRegistrationService {
         })
       : [];
 
+    const requests = athletes.length
+      ? await this.requestsRepo.find({
+          where: {
+            athleteUserId: user.id,
+            programId: In(athletes.map((a) => a.programId)),
+          },
+          order: { createdAt: 'DESC' },
+        })
+      : [];
+    const open = isRegistrationOpen(event);
+    const requestOf = (programId: string): AthleteRequestSummary | null => {
+      const r = requests.find((q) => q.programId === programId);
+      if (!r) return null;
+      return {
+        id: r.id,
+        status: r.status,
+        categoryIds: r.categoryIds,
+        note: r.note,
+        responseMessage: r.responseMessage,
+        submittedAt: r.submittedAt,
+        respondedAt: r.respondedAt,
+        expired: !open && OPEN_REQUEST_STATUSES.includes(r.status),
+      };
+    };
+
     const result: AthleteRegistrationEntry[] = [];
     for (const athlete of athletes) {
       const own = entries.filter((e) => e.athleteId === athlete.id);
@@ -265,7 +470,8 @@ export class AthleteRegistrationService {
       );
       result.push({
         programId: program.id,
-        programName: program.name,
+        programUserId: program.userId,
+        programName: program.name.trim() || program.email,
         athleteId: athlete.id,
         categories: own.map((e) => ({
           teamName: teams.find((t) => t.id === e.teamId)?.name ?? '',
@@ -279,6 +485,9 @@ export class AthleteRegistrationService {
           (i) => i.applies && i.document?.status === 'contested',
         ).length,
         requirements,
+        request: requestOf(program.id),
+        programClosed: programClosedForRequests(program),
+        programHasAccount: !!program.userId,
       });
     }
     for (const program of pending) {
@@ -293,7 +502,8 @@ export class AthleteRegistrationService {
       );
       result.push({
         programId: program.id,
-        programName: program.name,
+        programUserId: program.userId,
+        programName: program.name.trim() || program.email,
         athleteId: `${PENDING_PREFIX}${program.id}`,
         categories: [],
         pendingCount: pendingRequirements(requirements, {
@@ -301,6 +511,9 @@ export class AthleteRegistrationService {
         }).length,
         contestedCount: 0,
         requirements,
+        request: null,
+        programClosed: programClosedForRequests(program),
+        programHasAccount: true,
       });
     }
     return {
@@ -310,6 +523,7 @@ export class AthleteRegistrationService {
       startDate: event.startDate,
       location: event.location,
       registrationDeadline: event.registrationDeadline,
+      registrationStatus: event.registrationStatus,
       open: isRegistrationOpen(event),
       entries: result,
     };

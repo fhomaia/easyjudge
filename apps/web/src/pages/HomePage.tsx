@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNotificationsUnread } from "@/store/notificationsUnread";
-import { registrationPathAfterJoin } from "@/lib/registrationWindow";
+import { isRegistrationOpen, registrationPathAfterJoin } from "@/lib/registrationWindow";
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -118,6 +118,30 @@ export function HomePage() {
       setEvents([...list, ...extra]);
     });
   }, [accountRole]);
+
+  // Botão de inscrição como atleta no card: a inscrição que a API mandou
+  // ou, com as inscrições abertas e sem nenhum programa ainda (ex.: entrou
+  // pelo código), um "Inscreva-se aqui!" vazio (2026-10-10, pedido de
+  // inscrição do atleta). Não aparece pra quem organiza ou julga o evento.
+  function athleteRegistrationFor(event: Event): AthleteRegistrationEvent | undefined {
+    const existing = athleteRegistrations.get(event.aliasId);
+    if (existing) return existing;
+    if (!accountRole || accountRole === "program" || !isRegistrationOpen(event)) return undefined;
+    if (event.currentUserRoles.some((r) => r === "admin" || r === "assessor" || r === "judge")) {
+      return undefined;
+    }
+    return {
+      eventId: event.aliasId,
+      name: event.name,
+      logoUrl: event.logoUrl,
+      startDate: event.startDate,
+      location: event.location,
+      registrationDeadline: event.registrationDeadline,
+      registrationStatus: event.registrationStatus,
+      open: true,
+      entries: [],
+    };
+  }
 
   useEffect(() => {
     setPage(1);
@@ -363,7 +387,7 @@ export function HomePage() {
                                 onShare={setShareTarget}
                                 onOpenLive={handleOpenLive}
                                 onOpenRegistration={handleOpenRegistration}
-                                athleteRegistration={athleteRegistrations.get(event.aliasId)}
+                                athleteRegistration={athleteRegistrationFor(event)}
                                 onOpenAthleteRegistration={handleOpenAthleteRegistration}
                               />
                             ) : (
@@ -379,7 +403,7 @@ export function HomePage() {
                                 onShare={setShareTarget}
                                 onOpenLive={handleOpenLive}
                                 onOpenRegistration={handleOpenRegistration}
-                                athleteRegistration={athleteRegistrations.get(event.aliasId)}
+                                athleteRegistration={athleteRegistrationFor(event)}
                                 onOpenAthleteRegistration={handleOpenAthleteRegistration}
                               />
                             ),

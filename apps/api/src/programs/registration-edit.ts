@@ -1,10 +1,18 @@
 import { EventStatus } from '../events/enums/event-status.enum';
 import { isRegistrationOpen } from '../events/registration-window';
+import { RegistrationStatus } from '../events/enums/registration-status.enum';
 
 const BEFORE_START = [EventStatus.CREATED, EventStatus.PUBLISHED];
 
-type EditableEvent = { status: EventStatus; registrationDeadline: string | null };
-type EditableParticipation = { submittedAt: Date | null; reopenedAt: Date | null };
+type EditableEvent = {
+  status: EventStatus;
+  registrationDeadline: string | null;
+  registrationStatus: RegistrationStatus;
+};
+type EditableParticipation = {
+  submittedAt: Date | null;
+  reopenedAt: Date | null;
+};
 
 // O programa pode mexer na própria ficha? (2026-10-05)
 // - rascunho: enquanto as inscrições estiverem abertas;
@@ -24,7 +32,9 @@ export function programCanRequestChange(
   event: EditableEvent,
   participation: EditableParticipation,
 ): boolean {
-  return participation.submittedAt !== null && BEFORE_START.includes(event.status);
+  return (
+    participation.submittedAt !== null && BEFORE_START.includes(event.status)
+  );
 }
 
 export const REGISTRATION_LOCKED_MESSAGE =

@@ -24,4 +24,9 @@ export enum NotificationType {
   // Pro programa (destinatário único): produtor contestou um documento de
   // atleta (2026-10-06).
   DOCUMENT_CONTESTED = 'document_contested',
+  // Pedido de inscrição do atleta (2026-10-10), destinatário único:
+  // enviado (pro programa) e respondido (pro atleta: aprovado, correção
+  // pedida ou recusado).
+  ATHLETE_REGISTRATION_SUBMITTED = 'athlete_registration_submitted',
+  ATHLETE_REGISTRATION_ANSWERED = 'athlete_registration_answered',
 }
