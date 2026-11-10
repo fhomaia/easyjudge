@@ -23,6 +23,9 @@ import { UsersService } from '../../users/services/users.service';
 import { ProgramParticipation } from '../entities/program-participation.entity';
 import { UserRole } from '../../common/enums/user-role.enum';
 
+// Quem está cadastrando/editando, pra escolher a mensagem de CPF repetido.
+type DuplicateViewer = 'staff' | 'program' | 'athlete';
+
 export interface ProgramAthleteEntryView {
   teamId: string;
   categoryId: string;
@@ -152,7 +155,13 @@ export class ProgramAthletesService {
       const adopted = await this.adoptHiddenAthlete(programId, data.email);
       if (adopted) return adopted;
     }
-    await this.assertUnique(programId, data.email, data.cpf, null);
+    await this.assertUnique(
+      programId,
+      data.email,
+      data.cpf,
+      null,
+      byProducer ? 'staff' : 'program',
+    );
 
     const saved = await this.saveHandlingConflict(
       this.athletesRepo.create({
@@ -178,6 +187,7 @@ export class ProgramAthletesService {
     athleteId: string,
     dto: UpdateProgramAthleteDto,
     userId: string,
+    viewer: DuplicateViewer = 'program',
   ): Promise<ProgramAthleteView> {
     const athlete = await this.findAthleteOrThrow(
       eventId,
@@ -194,7 +204,13 @@ export class ProgramAthletesService {
     if (athlete.email !== previousEmail) {
       await this.assertNotProgramAccount(athlete.email);
     }
-    await this.assertUnique(programId, athlete.email, athlete.cpf, athlete.id);
+    await this.assertUnique(
+      programId,
+      athlete.email,
+      athlete.cpf,
+      athlete.id,
+      viewer,
+    );
 
     const saved = await this.saveHandlingConflict(athlete);
     await this.activityLogService.record(
@@ -468,6 +484,7 @@ export class ProgramAthletesService {
     email: string,
     cpf: string | null,
     exceptId: string | null,
+    viewer: DuplicateViewer,
   ): Promise<void> {
     const qb = this.athletesRepo
       .createQueryBuilder('a')
@@ -484,9 +501,23 @@ export class ProgramAthletesService {
     if (exceptId) qb.andWhere('a.id != :exceptId', { exceptId });
     const existing = await qb.getOne();
     if (!existing) return;
+    if (existing.email.toLowerCase() === email) {
+      throw new ConflictException(
+        'Já existe um atleta com este email neste programa.',
+      );
+    }
+    // Mesmo CPF com outro email: o produtor pode não enxergar esse atleta
+    // (staffVisibleIds) e o atleta nunca enxerga o elenco do programa, então
+    // a mensagem padrão apontaria pra alguém que não aparece na tela.
+    // Continua bloqueado (juntar os dois registros foi considerado
+    // arriscado, decisão do usuário 2026-11-10); só a mensagem muda.
+    const hiddenFromViewer =
+      viewer === 'athlete' ||
+      (viewer === 'staff' &&
+        !(await this.staffVisibleIds(programId)).has(existing.id));
     throw new ConflictException(
-      existing.email.toLowerCase() === email
-        ? 'Já existe um atleta com este email neste programa.'
+      hiddenFromViewer
+        ? 'Este CPF já está cadastrado neste programa com outro email. Confira com o programa.'
         : 'Já existe um atleta com este CPF neste programa.',
     );
   }

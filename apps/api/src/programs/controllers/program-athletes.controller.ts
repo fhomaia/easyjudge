@@ -245,6 +245,7 @@ export class ProgramAthletesController {
       athleteId,
       dto,
       req.user.userId,
+      actorOf(req),
     );
   }
 

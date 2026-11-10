@@ -394,6 +394,7 @@ export class ProgramAthleteRequirementsService {
           athleteId,
           { birthDate: value },
           userId,
+          actor,
         );
       }
       return this.list(eventId, programId, athleteId, actor);
@@ -416,6 +417,7 @@ export class ProgramAthleteRequirementsService {
         athleteId,
         { cpf: digits },
         userId,
+        actor,
       );
       return this.list(eventId, programId, athleteId, actor);
     }
