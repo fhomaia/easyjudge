@@ -2237,11 +2237,13 @@ revistas no meio da sessão (vale o que está aqui).
   enviado. Produtor inscrevendo o email de um atleta ESCONDIDO adota a
   linha (`adoptHiddenAthlete`, descarta o rascunho de pedido dele);
   email de conta Programa dá 400.
-- **Pontas abertas**: CPF igual ao de um atleta escondido com outro email
-  continua dando 409 "Já existe um atleta com este CPF neste programa"
-  (adoção é só por email; juntar foi considerado arriscado). Sugerido
-  só deixar a mensagem mais clara, sem resposta do usuário ainda.
-  Sugestões não respondidas: dar SPECTATOR na inscrição; tirar o filtro
+- **CPF repetido com outro email** continua dando 409 (adoção é só por
+  email; juntar os registros foi considerado arriscado, decisão do
+  usuário 2026-11-10). Pro produtor, quando o atleta com esse CPF está
+  escondido dele, e pro próprio atleta, a mensagem é "Este CPF já está
+  cadastrado neste programa com outro email. Confira com o programa."
+  (`assertUnique`, parâmetro `viewer`); o programa vê a mensagem antiga.
+- **Pontas abertas**: sugestões não respondidas: dar SPECTATOR na inscrição; tirar o filtro
   "Sem categoria"; contar pedidos de correção na etiqueta azul do
   produtor e etiquetas de etapa por atleta.
 - **Demo local**: `scripts/demo-inscricoes/` (`seed.mjs`/`cleanup.mjs`)
