@@ -512,7 +512,7 @@ export function JudgingPage() {
       if (!criterion || !resource) return null;
       return {
         title: `${criterion.name} · ${resource.name}`,
-        description: "Selecione os jurados responsáveis por este item de avaliação nesta pista.",
+        description: "Selecione os jurados responsáveis por este item de avaliação neste palco.",
         assignedJudgeIds: judgeIdsByCriterion.get(assignmentKey(openCriterionId, openResourceId)) ?? [],
       };
     }
@@ -748,7 +748,7 @@ export function JudgingPage() {
 
                         <div className="flex items-center gap-2 rounded-lg bg-primary/5 p-4 text-sm text-muted-foreground">
                           <Info className="size-4 shrink-0 text-primary" />
-                          Dica: arraste um jurado para a coluna de uma pista (nos critérios ou
+                          Dica: arraste um jurado para a coluna de um palco (nos critérios ou
                           grupos) para atribuir. Clique numa célula para editar os jurados
                           atribuídos ali.
                         </div>

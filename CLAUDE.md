@@ -1627,6 +1627,13 @@ virou a propriedade `gender` (coluna `division`); ver a seção seguinte. O
 modal de geração automática do Cronograma continua chamando a modalidade
 de "categoria" (pedido antigo do usuário).
 
+## "Palco", não "pista" (2026-11-05)
+
+Decisão do usuário: na TELA (e nas mensagens de erro da API) o recurso
+que recebe apresentações se chama **palco** (masculino: "o palco",
+"neste palco", "Palco vinculado"). Comentários de código e este arquivo
+ainda dizem "pista"; texto novo voltado ao usuário usa "palco".
+
 ## Critérios de divisão das categorias + tela de categoria (2026-10-06)
 
 Decisões do usuário, várias revisadas no meio da sessão (a versão final

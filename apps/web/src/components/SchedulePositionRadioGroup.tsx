@@ -26,12 +26,12 @@ export function SchedulePositionRadioGroup({
       <label className="flex items-center gap-2 text-sm">
         <RadioGroupItem value="start" />
         <ArrowUpToLine className="size-4 text-muted-foreground" />
-        Para o início da pista
+        Para o início do palco
       </label>
       <label className="flex items-center gap-2 text-sm">
         <RadioGroupItem value="end" />
         <ArrowRightToLine className="size-4 text-muted-foreground" />
-        Para o fim da pista
+        Para o fim do palco
       </label>
       {showBeforeAfter && (
         <>

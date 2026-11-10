@@ -87,7 +87,7 @@ export function CreateResourceDialog({
         <div className="grid gap-1.5">
           <DialogTitle className="text-xl font-medium">Adicionar recurso</DialogTitle>
           <DialogDescription>
-            Um recurso é uma linha da timeline — pista, área de aquecimento, isolamento, palco de
+            Um recurso é uma linha da timeline — palco, área de aquecimento, isolamento, área de
             premiação, o que fizer sentido pro seu evento.
           </DialogDescription>
         </div>
@@ -120,10 +120,10 @@ export function CreateResourceDialog({
 
           {!supportsPresentations && (
             <div className="grid gap-2">
-              <Label>Pista vinculada</Label>
+              <Label>Palco vinculado</Label>
               <p className="text-xs text-muted-foreground">
-                Se este recurso funciona como aquecimento, diga a qual pista ele atende. Uma
-                pista pode ter mais de uma área de aquecimento vinculada.
+                Se este recurso funciona como aquecimento, diga a qual palco ele atende. Um
+                palco pode ter mais de uma área de aquecimento vinculada.
               </p>
               <Select value={pairedResourceId} onValueChange={(value) => setPairedResourceId(value ?? NONE_VALUE)}>
                 <SelectTrigger>

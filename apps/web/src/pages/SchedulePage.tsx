@@ -508,7 +508,7 @@ export function SchedulePage() {
     const target = resolveDropTarget(active, over);
     if (!target) return;
     if (!target.accepts) {
-      setError('Apresentações só podem ser agendadas em pistas (recursos que aceitam apresentações).');
+      setError('Apresentações só podem ser agendadas em palcos (recursos que aceitam apresentações).');
       return;
     }
     const resourceId = target.resource.id;
@@ -620,7 +620,7 @@ export function SchedulePage() {
                 <div>
                   <h1 className="text-2xl font-semibold text-foreground">Cronograma do Evento</h1>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Planeje a utilização dos recursos do dia (pistas, aquecimentos e outros).
+                    Planeje a utilização dos recursos do dia (palcos, aquecimentos e outros).
                   </p>
                 </div>
               </div>
@@ -930,7 +930,7 @@ export function SchedulePage() {
         open={replicateOpen}
         onOpenChange={setReplicateOpen}
         title="Repetir cronograma em todos os dias"
-        description="O horário do dia (início/fim, intervalo entre apresentações), as pistas, aquecimentos, eventos especiais (Almoço, Abertura, Premiação, Contestação de notas, intervalos personalizados) e as apresentações/aquecimentos das equipes do dia selecionado serão copiados para todos os outros dias do evento — substituindo completamente o que já existir neles."
+        description="O horário do dia (início/fim, intervalo entre apresentações), os palcos, aquecimentos, eventos especiais (Almoço, Abertura, Premiação, Contestação de notas, intervalos personalizados) e as apresentações/aquecimentos das equipes do dia selecionado serão copiados para todos os outros dias do evento — substituindo completamente o que já existir neles."
         confirmLabel="Repetir mesmo assim"
         confirmingLabel="Repetindo..."
         onConfirm={handleReplicateToAllDays}
@@ -942,7 +942,7 @@ export function SchedulePage() {
         title="Excluir dia"
         description={
           dayToDelete
-            ? `O dia ${format(parseISO(dayToDelete.date), "dd/MM")} será excluído, junto com todas as pistas, aquecimentos, eventos especiais e apresentações agendadas nele. Essa ação não pode ser desfeita.`
+            ? `O dia ${format(parseISO(dayToDelete.date), "dd/MM")} será excluído, junto com todos os palcos, aquecimentos, eventos especiais e apresentações agendadas nele. Essa ação não pode ser desfeita.`
             : ""
         }
         confirmLabel="Excluir dia"

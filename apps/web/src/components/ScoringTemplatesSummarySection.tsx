@@ -115,7 +115,7 @@ export function ScoringTemplatesSummarySection({
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-foreground">Sistemas de pontuação</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Sistemas de pontuação vinculados a este evento — disponíveis pra usar nas categorias.
+            Sistemas de pontuação que serão usados no evento.
           </p>
         </div>
         <button

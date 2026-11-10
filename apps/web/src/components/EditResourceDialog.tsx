@@ -110,7 +110,7 @@ export function EditResourceDialog({
           <div className="grid gap-1.5">
             <DialogTitle className="text-xl font-medium">Editar recurso</DialogTitle>
             <DialogDescription>
-              Ajuste o nome, se aceita apresentações, ou a pista a que este aquecimento atende.
+              Ajuste o nome, se aceita apresentações, ou o palco a que este aquecimento atende.
             </DialogDescription>
           </div>
 
@@ -142,10 +142,10 @@ export function EditResourceDialog({
 
               {!supportsPresentations && (
                 <div className="grid gap-2">
-                  <Label>Pista vinculada</Label>
+                  <Label>Palco vinculado</Label>
                   <p className="text-xs text-muted-foreground">
-                    Se este recurso funciona como aquecimento, diga a qual pista ele atende. Uma
-                    pista pode ter mais de uma área de aquecimento vinculada.
+                    Se este recurso funciona como aquecimento, diga a qual palco ele atende. Um
+                    palco pode ter mais de uma área de aquecimento vinculada.
                   </p>
                   <Select
                     value={pairedResourceId}
@@ -191,8 +191,8 @@ export function EditResourceDialog({
                   // pista vinculada, mesmo raciocínio já aplicado ao
                   // aquecimento agendado em si (2026-08-16).
                   <p className="text-xs text-muted-foreground">
-                    Um recurso de aquecimento não pode ser excluído diretamente — exclua a pista
-                    vinculada a ele para excluí-lo junto.
+                    Um recurso de aquecimento não pode ser excluído diretamente — exclua o palco
+                    vinculado a ele para excluí-lo junto.
                   </p>
                 )}
               </div>
@@ -221,7 +221,7 @@ export function EditResourceDialog({
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
         title="Remover recurso"
-        description={`Remover "${resource?.name}"? Todos os itens agendados nessa pista, os aquecimentos vinculados a eles (mesmo em outra linha) e qualquer área de aquecimento vinculada a esta pista também serão removidos.`}
+        description={`Remover "${resource?.name}"? Todos os itens agendados nesse palco, os aquecimentos vinculados a eles (mesmo em outra linha) e qualquer área de aquecimento vinculada a este palco também serão removidos.`}
         confirmLabel="Remover"
         confirmingLabel="Removendo..."
         onConfirm={handleConfirmDelete}

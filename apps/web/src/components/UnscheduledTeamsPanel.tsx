@@ -98,7 +98,7 @@ export function UnscheduledTeamsPanel({
         </span>
       </div>
       <p className="-mt-2 text-xs text-muted-foreground">
-        Arraste até uma pista ou clique numa equipe para escolher a posição.
+        Arraste até um palco ou clique numa equipe para escolher a posição.
       </p>
       <label className="flex items-start gap-2 text-xs text-muted-foreground">
         <Checkbox

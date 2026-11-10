@@ -67,7 +67,7 @@ export function exportScheduleToExcel(
       Dia: r.day,
       Início: r.start,
       Fim: r.end,
-      Pista: r.resource,
+      Palco: r.resource,
       Item: r.title,
       Detalhe: r.subtitle,
       Situação: r.status,

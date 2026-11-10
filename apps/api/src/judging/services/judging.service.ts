@@ -420,7 +420,7 @@ export class JudgingService {
     // limite, não foi pedido pra esse.
     if (role === SpecialJudgeRole.LEGALITY_JUDGE && judgeIds.length > 1) {
       throw new BadRequestException(
-        'Só é possível indicar um jurado de legalidade por pista.',
+        'Só é possível indicar um jurado de legalidade por palco.',
       );
     }
     const event = await this.eventsService.findEventOrThrow(eventId);

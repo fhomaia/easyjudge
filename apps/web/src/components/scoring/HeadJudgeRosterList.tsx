@@ -38,7 +38,7 @@ export function HeadJudgeRosterList({ roster, loading, onSelectJudge }: HeadJudg
       <div className="mt-4 space-y-2">
         {roster.judges.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-            Nenhum jurado escalado nesta pista ainda.
+            Nenhum jurado escalado neste palco ainda.
           </p>
         ) : (
           roster.judges.map((judge) => {

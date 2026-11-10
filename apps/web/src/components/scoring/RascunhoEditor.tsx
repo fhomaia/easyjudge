@@ -55,8 +55,9 @@ export function RascunhoEditor({
 }: RascunhoEditorProps) {
   // Reabrir uma folha com só um dos dois preenchido já entra nesse
   // modo; com os dois vazios (rascunho novo) ou os dois preenchidos
-  // (editado nas duas formas em sessões diferentes), começa em desenho.
-  const [mode, setMode] = useState<RascunhoMode>(() => (!drawValue && textValue ? "text" : "draw"));
+  // (editado nas duas formas em sessões diferentes), começa em texto
+  // (pedido do usuário, 2026-11-05; antes começava em desenho).
+  const [mode, setMode] = useState<RascunhoMode>(() => (drawValue && !textValue ? "draw" : "text"));
   const { toolbar, canvas } = useSketchCanvas({
     initialDataUrl: drawValue,
     onChange: onDrawChange,
@@ -74,11 +75,11 @@ export function RascunhoEditor({
           canvas vinha numa linha própria, exclusiva do modo desenho. */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
         <div className="flex shrink-0 gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
-          <ModeButton selected={mode === "draw"} onClick={() => setMode("draw")}>
-            Desenho livre
-          </ModeButton>
           <ModeButton selected={mode === "text"} onClick={() => setMode("text")}>
             Caixa de texto
+          </ModeButton>
+          <ModeButton selected={mode === "draw"} onClick={() => setMode("draw")}>
+            Desenho livre
           </ModeButton>
         </div>
         {mode === "draw" && toolbar}

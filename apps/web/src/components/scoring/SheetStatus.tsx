@@ -63,7 +63,7 @@ export function CategorySheetProgress({ total, doneCount }: { total: number; don
 }
 
 function pendingDescription(item: SheetStatusPending) {
-  if (item.requiredCount === 0) return "Nenhum jurado escalado nesta pista.";
+  if (item.requiredCount === 0) return "Nenhum jurado escalado neste palco.";
   if (!item.started) return "Ainda não começou.";
   return `Falta enviar: ${item.missingJudges.join(", ")}`;
 }
@@ -117,7 +117,7 @@ export function HeadJudgeSheetStatus({ eventId }: { eventId: string }) {
   if (status.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-        Nenhuma apresentação nas suas pistas.
+        Nenhuma apresentação nos seus palcos.
       </div>
     );
   }
@@ -125,7 +125,7 @@ export function HeadJudgeSheetStatus({ eventId }: { eventId: string }) {
   const activeDay = status.find((d) => d.dayId === activeDayId) ?? status[0];
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Situação das súmulas das pistas em que você é Head Judge.</p>
+      <p className="text-xs text-muted-foreground">Situação das súmulas dos palcos em que você é Head Judge.</p>
       {status.length > 1 && (
         <div className="scrollbar-none flex items-center gap-1 overflow-x-auto border-b border-border">
           {status.map((day) => (

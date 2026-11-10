@@ -976,7 +976,7 @@ export class ScoringService {
         )
       : allProgress;
     if (participation && progress.length === 0) {
-      throw new ForbiddenException('Você não é Head Judge em nenhuma pista.');
+      throw new ForbiddenException('Você não é Head Judge em nenhum palco.');
     }
 
     const pendingIds = progress
@@ -2360,7 +2360,7 @@ export class ScoringService {
           }
           if (leafIds.size === 0) {
             throw new ForbiddenException(
-              'Só jurados escalados nesta pista podem usar o cronômetro.',
+              'Só jurados escalados neste palco podem usar o cronômetro.',
             );
           }
         }

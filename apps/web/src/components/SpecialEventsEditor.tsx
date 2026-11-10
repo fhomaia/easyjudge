@@ -152,9 +152,9 @@ export function SpecialEventsEditor({
       <div>
         <p className="text-sm font-medium">Eventos especiais (opcional)</p>
         <p className="text-xs text-muted-foreground">
-          Cada evento entra em todas as pistas e termina no mesmo horário em
-          todas. A duração é o tempo mínimo: pistas que chegam antes esperam as
-          outras.
+          Cada evento entra em todos os palcos e termina no mesmo horário em
+          todos. A duração é o tempo mínimo: palcos que chegam antes esperam os
+          outros.
         </p>
       </div>
 

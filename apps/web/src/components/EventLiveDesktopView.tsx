@@ -419,11 +419,11 @@ export function EventLiveDesktopView({
             )}
           </div>
 
-          {/* AGORA EM CADA PISTA */}
+          {/* AGORA EM CADA PALCO */}
           <div className="rounded-2xl border border-border bg-emerald-500/5 p-4">
-            <p className="text-xs font-semibold tracking-wide text-emerald-700">AGORA EM CADA PISTA</p>
+            <p className="text-xs font-semibold tracking-wide text-emerald-700">AGORA EM CADA PALCO</p>
             {resourceStatuses.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">Nenhuma pista configurada no cronograma.</p>
+              <p className="mt-3 text-sm text-muted-foreground">Nenhum palco configurado no cronograma.</p>
             ) : (
               <div className="mt-2.5 grid gap-3">
                 {resourceStatuses.map((resource) => {

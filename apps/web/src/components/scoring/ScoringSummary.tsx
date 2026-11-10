@@ -14,8 +14,9 @@ interface ScoringSummaryProps {
   isLegalityJudge: boolean;
   finalResult: number;
   maxScore: number;
-  // Mostra a nota máxima da categoria em pequeno ao lado do Total
-  // ("88.5 / 100.0"; súmula de detalhe, a tela do jurado não usa).
+  // Mostra a nota máxima da categoria em pequeno ao lado do Total e do
+  // Resultado final ("88.5 / 100.0"; súmula de detalhe, a tela do
+  // jurado não usa).
   showMaxScore?: boolean;
   // "compact": versão de uma linha só, sem card próprio — pensada pra
   // caber dentro do rodapé de ação (entre "Equipe anterior" e o aviso
@@ -115,7 +116,12 @@ export function ScoringSummary({
           </div>
         )}
         <div>
-          <p className="text-lg font-bold tabular-nums text-primary">{finalResult.toFixed(1)}</p>
+          <p className="text-lg font-bold tabular-nums text-primary">
+            {finalResult.toFixed(1)}
+            {showMaxScore && (
+              <span className="text-xs font-medium text-muted-foreground"> / {maxScore.toFixed(1)}</span>
+            )}
+          </p>
           <p className="text-[11px] text-muted-foreground">Resultado final</p>
         </div>
         {utilizationPercent !== null && (

@@ -479,7 +479,7 @@ export class ScheduleService {
     // pareados a ela junto) — pedido do usuário, 2026-08-16.
     if (!resource.supportsPresentations) {
       throw new BadRequestException(
-        'Um recurso de aquecimento não pode ser excluído diretamente — exclua a pista vinculada a ele para excluí-lo junto.',
+        'Um recurso de aquecimento não pode ser excluído diretamente — exclua o palco vinculado a ele para excluí-lo junto.',
       );
     }
 
@@ -845,7 +845,7 @@ export class ScheduleService {
       entry.type === ScheduleEntryType.WARMUP
     ) {
       throw new BadRequestException(
-        'Apresentação e aquecimento não podem ser editados diretamente — use "Mover" para ajustar pista/posição.',
+        'Apresentação e aquecimento não podem ser editados diretamente — use "Mover" para ajustar palco/posição.',
       );
     }
     if (entry.linkedEntryId && entry.label !== INTERVAL_BREAK_LABEL) {

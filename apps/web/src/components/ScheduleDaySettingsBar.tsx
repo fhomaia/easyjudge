@@ -129,8 +129,8 @@ export function ScheduleDaySettingsBar({
 
       <div className="h-px w-full bg-border sm:h-10 sm:w-px" />
 
-      <HeaderStat icon={LayoutGrid} label="Recursos (pistas)">
-        {matCount} {matCount === 1 ? "pista" : "pistas"}
+      <HeaderStat icon={LayoutGrid} label="Recursos (palcos)">
+        {matCount} {matCount === 1 ? "palco" : "palcos"}
       </HeaderStat>
 
       {sortedResources.length > 0 && (

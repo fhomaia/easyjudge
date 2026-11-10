@@ -201,7 +201,7 @@ export function MovePresentationDialog({
         </div>
 
         <div className="grid gap-2">
-          <Label>Pista</Label>
+          <Label>Palco</Label>
           <Select value={resourceId} onValueChange={(value) => value && setResourceId(value)}>
             <SelectTrigger className="w-full min-w-0">
               <SelectValue className="truncate">

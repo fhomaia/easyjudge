@@ -200,7 +200,7 @@ export function PresentationDetailsDialog({
 
         <div className="grid gap-2 rounded-lg border border-border/60 p-4 text-sm">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">Pista</span>
+            <span className="text-muted-foreground">Palco</span>
             <span className="font-medium text-foreground">{resource.name}</span>
           </div>
           <div className="flex items-center justify-between gap-3">
