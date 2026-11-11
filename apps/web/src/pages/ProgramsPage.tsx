@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
+  ChevronDown,
   Building2,
   Lock,
   Mail,
@@ -412,7 +413,19 @@ export function ProgramsPage() {
 }
 
 // Topo da aba Inscrições (2026-11-10, pedido do usuário): as duas formas
-// de ter competidores no evento, que podem ser combinadas.
+// de ter competidores no evento, que podem ser combinadas. Colapsável: a
+// versão curta fica só com o título e os botões; a escolha fica guardada
+// no navegador (localStorage, conveniência por pessoa).
+const MODES_COLLAPSED_KEY = "easyjudge-registration-modes-collapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(MODES_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function RegistrationModesInfo({
   onEnroll,
   onShare,
@@ -424,16 +437,74 @@ function RegistrationModesInfo({
   // Sem nenhuma inscrição ainda: texto de início.
   empty?: boolean;
 }) {
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  function toggle() {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(MODES_COLLAPSED_KEY, next ? "1" : "0");
+    } catch {
+      // sem armazenamento: só não lembra a escolha
+    }
+  }
+
+  const enrollButton = (
+    <Button className="w-full sm:w-auto" onClick={onEnroll}>
+      <Plus data-icon="inline-start" />
+      Inscrever programa
+    </Button>
+  );
+  const shareButton = onShare && (
+    <Button
+      variant="outline"
+      className="w-full border-primary/40 text-primary hover:bg-primary/10 sm:w-auto"
+      onClick={onShare}
+    >
+      <QrCode data-icon="inline-start" />
+      Compartilhar evento
+    </Button>
+  );
+  const title = empty ? "Nenhuma inscrição ainda" : "Como os competidores entram no evento";
+  const toggleButton = (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? "Mostrar explicação" : "Esconder explicação"}
+      title={collapsed ? "Mostrar explicação" : "Esconder explicação"}
+      className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <ChevronDown className={cn("size-4 transition-transform", !collapsed && "rotate-180")} />
+    </button>
+  );
+
+  if (collapsed) {
+    return (
+      <section className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-semibold text-foreground">{title}</h2>
+          <span className="sm:hidden">{toggleButton}</span>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {enrollButton}
+          {shareButton}
+          <span className="hidden sm:block">{toggleButton}</span>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="grid gap-4 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
-      <div>
-        <h2 className="font-semibold text-foreground">
-          {empty ? "Nenhuma inscrição ainda" : "Como os competidores entram no evento"}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Você pode inscrever os competidores, esperar as fichas de inscrição enviadas por eles ou
-          combinar os dois.
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="font-semibold text-foreground">{title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Você pode inscrever os competidores, esperar as fichas de inscrição enviadas por eles ou
+            combinar os dois.
+          </p>
+        </div>
+        {toggleButton}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
@@ -449,10 +520,7 @@ function RegistrationModesInfo({
               </p>
             </div>
           </div>
-          <Button className="mt-auto w-full sm:w-auto sm:self-start" onClick={onEnroll}>
-            <Plus data-icon="inline-start" />
-            Inscrever programa
-          </Button>
+          <div className="mt-auto sm:self-start">{enrollButton}</div>
         </div>
         <div className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
           <div className="flex items-start gap-3">
@@ -467,16 +535,7 @@ function RegistrationModesInfo({
               </p>
             </div>
           </div>
-          {onShare && (
-            <Button
-              variant="outline"
-              className="mt-auto w-full border-primary/40 text-primary hover:bg-primary/10 sm:w-auto sm:self-start"
-              onClick={onShare}
-            >
-              <QrCode data-icon="inline-start" />
-              Compartilhar evento
-            </Button>
-          )}
+          {shareButton && <div className="mt-auto sm:self-start">{shareButton}</div>}
         </div>
       </div>
     </section>
