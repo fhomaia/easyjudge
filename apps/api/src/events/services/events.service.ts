@@ -154,7 +154,10 @@ export class EventsService {
   // Cria a v1 do evento (aliasId = id, já que é a primeira versão) e o
   // membership de admin do criador, numa transação — as duas linhas
   // nascem juntas ou nenhuma nasce.
-  async createEvent(dto: CreateEventDto, createdById: string): Promise<Event> {
+  async createEvent(
+    dto: CreateEventDto,
+    createdById: string,
+  ): Promise<EventWithRole> {
     assertRegistrationDeadline(dto.registrationDeadline ?? null, dto.startDate);
     const id = randomUUID();
     const creator = await this.usersService.findById(createdById);
@@ -196,7 +199,15 @@ export class EventsService {
       createdById,
       EventActivityAction.CREATED,
     );
-    return saved;
+    // Mesmo formato das outras rotas (com os papéis de quem pede): a Home
+    // põe o evento criado direto na lista, e o card lê currentUserRoles
+    // (sem isso a tela ficava em branco até recarregar).
+    const roles = [EventMemberRole.ADMIN];
+    return {
+      ...saved,
+      currentUserRole: highestRole(roles),
+      currentUserRoles: roles,
+    };
   }
 
   // Lista TODOS os eventos em que o usuário tem membership, em
