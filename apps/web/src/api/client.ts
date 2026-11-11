@@ -807,6 +807,8 @@ export interface AthleteRequirementsView {
   programSubmitted: boolean;
   // O próprio atleta enviou a parte dele (opcional).
   athleteSubmittedAt: string | null;
+  // Data de nascimento do atleta (conta > elenco > atleta do evento).
+  birthDate: string | null;
   items: AthleteRequirementItem[];
 }
 

@@ -21,7 +21,7 @@ import { AthleteRequirementValue } from '../entities/athlete-requirement-value.e
 import { AthleteRequirementDocument } from '../../documents/entities/athlete-requirement-document.entity';
 import { AthleteLink } from '../../athletes/entities/athlete-link.entity';
 import { requirementApplies } from '../registration-requirements';
-import type { CategoryRules } from '../../categories/entities/category.entity';
+import { ageAt, ageProblem } from '../age-rules';
 import type { CategoryCriterion } from '../../categories/category-criteria';
 import { CategoryStatus } from '../../categories/enums/category-status.enum';
 import { Event } from '../../events/entities/event.entity';
@@ -162,36 +162,6 @@ function rangeText(
   if (min != null && max != null) return `de ${min} a ${max} ${unit}`;
   if (min != null) return `${min} ${unit} ou mais`;
   return `até ${max} ${unit}`;
-}
-
-// Idade completa na data (aniversário na própria data conta).
-function ageAt(birthDate: string, onDate: string): number {
-  const [by, bm, bd] = birthDate.split('-').map(Number);
-  const [y, m, d] = onDate.split('-').map(Number);
-  let age = y - by;
-  if (m < bm || (m === bm && d < bd)) age -= 1;
-  return age;
-}
-
-// Motivo de um atleta não poder entrar numa categoria pela regra de
-// idade; null = elegível (ou categoria sem regra de idade). Mesmas
-// mensagens da tela (EventRegistrationPage, popup de atletas).
-function ageProblem(
-  rules: CategoryRules,
-  birthDate: string | null,
-): string | null {
-  if ((rules.minAge == null && rules.maxAge == null) || !rules.ageCutoffDate) {
-    return null;
-  }
-  if (!birthDate) return 'Data de nascimento obrigatória para a categoria.';
-  const age = ageAt(birthDate, rules.ageCutoffDate);
-  if (rules.minAge != null && age < rules.minAge) {
-    return `Não tem a idade mínima (${rules.minAge} anos).`;
-  }
-  if (rules.maxAge != null && age > rules.maxAge) {
-    return `Idade superior ao máximo permitido (${rules.maxAge} anos).`;
-  }
-  return null;
 }
 
 // Inscrição de um evento feita pela própria conta Programa (2026-10-05).

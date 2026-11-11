@@ -10,15 +10,14 @@ import {
   Info,
   MessageSquare,
   Plus,
-  Search,
   X,
   Users,
   XCircle,
+  Send,
 } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,7 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { PageLoadingOverlay } from "@/components/PageLoadingOverlay";
 import { EventThumbnail } from "@/components/EventThumbnail";
 import { FormError } from "@/components/FormError";
-import { groupCategoriesByModality } from "@/components/CategoryFilters";
+import { CategoryStepPicker } from "@/components/CategoryStepPicker";
 import {
   AthleteRequirementsPanel,
   type RequirementsAdapter,
@@ -464,7 +463,7 @@ function EntryCard({
             {stage === "payment"
               ? `Definidas pelo ${entry.programName}. Para mudar algo, fale com o programa.`
               : canEditRequest
-                ? `Marque uma ou mais. Sua requisição será aprovada previamente pelo representante do programa ${entry.programName} antes de passar para a etapa de pagamento.`
+                ? `Adicione uma ou mais. Sua requisição será aprovada previamente pelo representante do programa ${entry.programName} antes de passar para a etapa de pagamento.`
                 : "Categorias do seu pedido."}
           </p>
         </div>
@@ -488,10 +487,11 @@ function EntryCard({
             )}
           </>
         ) : canEditRequest ? (
-          <CategoryPicker
+          <CategoryStepPicker
             categories={categories}
             selected={categoryIds}
             max={maxCategories}
+            birthDate={requirements.birthDate ?? null}
             onToggle={toggleCategory}
           />
         ) : (
@@ -521,10 +521,17 @@ function EntryCard({
             </p>
           )}
           <Button
-            className="w-full sm:w-auto sm:justify-self-end"
+            // Habilitado: mesmo degradê do "Inscreva-se aqui!", pra chamar
+            // atenção (pedido do usuário, 2026-11-10).
+            className={cn(
+              "h-10 w-full rounded-full px-6 sm:w-auto sm:justify-self-end",
+              !(saving || categoryIds.length === 0 || missing.length > 0) &&
+                "bg-gradient-to-br from-violet-600 to-indigo-700 text-white shadow-md hover:opacity-90",
+            )}
             disabled={saving || categoryIds.length === 0 || missing.length > 0}
             onClick={() => setConfirmOpen(true)}
           >
+            <Send data-icon="inline-start" />
             {request?.status === "changes_requested" ? "Reenviar pedido" : "Enviar pedido"}
           </Button>
         </div>
@@ -766,89 +773,6 @@ function ChipList({ labels, empty }: { labels: string[]; empty: string }) {
         >
           {label}
         </span>
-      ))}
-    </div>
-  );
-}
-
-// Categorias do evento por modalidade, com busca por nome.
-function CategoryPicker({
-  categories,
-  selected,
-  max,
-  onToggle,
-}: {
-  categories: Category[];
-  selected: string[];
-  // Limite de categorias por atleta: atingido, as demais ficam desativadas.
-  max: number | null;
-  onToggle: (categoryId: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const term = query.trim().toLowerCase();
-  const groups = groupCategoriesByModality(
-    term ? categories.filter((c) => c.name.toLowerCase().includes(term)) : categories,
-  );
-  if (categories.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">O organizador ainda não cadastrou categorias.</p>
-    );
-  }
-  const limitReached = max !== null && selected.length >= max;
-  return (
-    <div className="grid gap-3">
-      {limitReached && (
-        <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          {`O limite de ${max} ${max === 1 ? "categoria" : "categorias"} por atleta foi atingido. Para escolher outra, desmarque uma das atuais.`}
-        </p>
-      )}
-      {categories.length > 6 && (
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar categoria"
-            className="pl-9"
-          />
-        </div>
-      )}
-      {groups.length === 0 && (
-        <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada.</p>
-      )}
-      {groups.map((group) => (
-        <div key={group.key} className="grid gap-1.5">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {group.label}
-          </p>
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 sm:grid-cols-2">
-            {group.categories.map((category) => {
-              const checked = selected.includes(category.id);
-              const blocked = !checked && limitReached;
-              return (
-                <label
-                  key={category.id}
-                  className={cn(
-                    "flex min-w-0 items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-colors",
-                    checked
-                      ? "cursor-pointer border-primary/50 bg-primary/5"
-                      : blocked
-                        ? "cursor-not-allowed border-border/60 text-muted-foreground opacity-60"
-                        : "cursor-pointer border-border/60 hover:bg-muted/40",
-                  )}
-                >
-                  <Checkbox
-                    checked={checked}
-                    disabled={blocked}
-                    onCheckedChange={() => onToggle(category.id)}
-                  />
-                  <span className="min-w-0 truncate">{category.name}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
       ))}
     </div>
   );

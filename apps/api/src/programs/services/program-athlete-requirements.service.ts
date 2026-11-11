@@ -97,6 +97,10 @@ export interface AthleteRequirementsView {
   programSubmitted: boolean;
   // O próprio atleta enviou a parte dele.
   athleteSubmittedAt: Date | null;
+  // Data de nascimento do atleta (conta > elenco > atleta do evento),
+  // mesmo sem o item no formulário: o atleta escolhe só categorias da
+  // idade dele (2026-11-10).
+  birthDate: string | null;
   items: AthleteRequirementView[];
 }
 
@@ -274,6 +278,8 @@ export class ProgramAthleteRequirementsService {
       allowSubmitWithoutDocuments: settings.allowSubmitWithoutDocuments,
       programSubmitted: !!participation.submittedAt,
       athleteSubmittedAt: athlete.athleteSubmittedAt,
+      birthDate:
+        account?.birthDate ?? link?.birthDate ?? athlete.birthDate ?? null,
       items: settings.requirements
         .map((requirement): AthleteRequirementView => {
           const base = {
@@ -984,6 +990,15 @@ export class ProgramAthleteRequirementsService {
     ];
     if (ids.length === 0) return [];
     return this.categoriesRepo.findBy({ id: In(ids) });
+  }
+
+  // Data de nascimento única do atleta (ver birthDate da visão).
+  async birthDateFor(
+    participation: ProgramParticipation,
+    athlete: ProgramAthlete,
+  ): Promise<string | null> {
+    const { account, link } = await this.identity(athlete, participation);
+    return account?.birthDate ?? link?.birthDate ?? athlete.birthDate ?? null;
   }
 
   // Conta do atleta (pelo email) e vínculo no elenco do programa.

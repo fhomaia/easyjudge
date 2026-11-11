@@ -34,6 +34,8 @@ import { AthletesService } from '../../athletes/services/athletes.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { NotificationType } from '../../notifications/enums/notification-type.enum';
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
+import { CategoryCriteriaService } from '../../categories/services/category-criteria.service';
+import { ageProblem } from '../age-rules';
 import { RegulationsService } from '../../regulations/services/regulations.service';
 import { MailService } from '../../auth/services/mail.service';
 import { ProgramsService } from './programs.service';
@@ -105,6 +107,7 @@ export class AthleteRequestsService {
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
     private readonly regulationsService: RegulationsService,
+    private readonly categoryCriteriaService: CategoryCriteriaService,
   ) {}
 
   // --- Lado do atleta ---
@@ -230,6 +233,12 @@ export class AthleteRequestsService {
     }
     const categoryIds = [...new Set(dto.categoryIds)];
     await this.assertEventCategories(event, categoryIds);
+    await this.assertAgeEligible(
+      event,
+      participation,
+      programAthlete,
+      categoryIds.filter((id) => !request.categoryIds.includes(id)),
+    );
     // Limite de categorias por atleta (regras de crossover). Só barra
     // acrescentar: com o limite baixado depois, dá pra ir tirando.
     const { maxCategories } =
@@ -1062,6 +1071,40 @@ export class AthleteRequestsService {
   private assertOpen(event: Event): void {
     if (!isRegistrationOpen(event)) {
       throw new ConflictException(registrationClosedMessage(event));
+    }
+  }
+
+  // O atleta só escolhe categoria da idade dele (decisão do usuário,
+  // 2026-11-10), pra o programa não precisar revisar. Só nas categorias
+  // acrescentadas: as que já estavam ficam como pendência, como antes.
+  // Do lado do programa e do produtor a idade continua só pendência.
+  private async assertAgeEligible(
+    event: Event,
+    participation: ProgramParticipation,
+    programAthlete: ProgramAthlete,
+    addedIds: string[],
+  ): Promise<void> {
+    if (addedIds.length === 0) return;
+    const categories = await this.categoriesRepo.findBy({ id: In(addedIds) });
+    this.categoryCriteriaService.attachLabels(
+      categories,
+      await this.categoryCriteriaService.getByAlias(event.aliasId),
+    );
+    const birthDate = await this.requirementsService.birthDateFor(
+      participation,
+      programAthlete,
+    );
+    for (const category of categories) {
+      const problem = category.rules
+        ? ageProblem(category.rules, birthDate)
+        : null;
+      if (problem) {
+        throw new BadRequestException(
+          birthDate
+            ? `${category.name}: ${problem}`
+            : `${category.name}: informe sua data de nascimento para escolher esta categoria.`,
+        );
+      }
     }
   }
 

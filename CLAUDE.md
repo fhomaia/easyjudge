@@ -2294,6 +2294,29 @@ qualquer momento, sem desfazer envio nenhum.
 - **Testado**: script HTTP com contas descartáveis numa segunda API
   (porta 3001, email em stub), 16 verificações, tudo apagado no fim.
 
+## Atleta escolhe categoria em etapas, só da idade dele (2026-11-10)
+
+- **`CategoryStepPicker`** (tela de inscrição do atleta, no lugar da lista
+  de categorias): categorias escolhidas como linhas com X e "+ Adicionar
+  categoria", que abre um popup em etapas: Modalidade → Gênero → Nível →
+  as outras divisões na ordem do nome. Cada etapa só mostra as opções que
+  existem nas categorias que sobraram; etapa com uma opção só é pulada;
+  categoria que não usa o critério aparece como "Sem <critério>"; trilha
+  das escolhas clicável pra voltar; com 3 ou menos sobrando, mostra a
+  lista. Botões "Adicionar categoria" e "Enviar pedido" (habilitado) com
+  o degradê do "Inscreva-se aqui!".
+- **Idade trava só do lado do atleta** (decisão do usuário, pra o
+  programa não revisar): opção/categoria fora da idade aparece desativada
+  com o motivo (`lib/ageRules.ts`), e `AthleteRequestsService.save`
+  recusa (400) categoria ACRESCENTADA fora da idade ou com regra de idade
+  sem data de nascimento (`assertAgeEligible`; as que já estavam ficam
+  como pendência). Programa e produtor continuam só com pendência.
+  `AthleteRequirementsView.birthDate` (conta > elenco > atleta do evento)
+  e `ProgramAthleteRequirementsService.birthDateFor`. `ageAt`/`ageProblem`
+  saíram pra `programs/age-rules.ts`.
+- **Testado**: script HTTP (7 verificações) e navegador em `127.0.0.1`
+  com conta descartável (36 categorias, desktop).
+
 ## Próximos passos (não iniciados ainda)
 
 0. Pagamento da inscrição (com aba de resumo da ficha). Crossover: feito,
