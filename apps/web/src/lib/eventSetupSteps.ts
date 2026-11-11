@@ -245,13 +245,13 @@ export function buildSetupSteps(
           : null,
       updatedAt: programs.updatedAt,
       // Inscrições nunca liberadas: só a aba Configurações está
-      // disponível (2026-10-11); pausadas e sem solicitação pendente: o
+      // disponível (2026-10-11), botão "Liberar inscrições" (2026-11-10); pausadas e sem solicitação pendente: o
       // botão leva pra lá pra retomar. Liberadas e sem inscrições:
       // configurar e divulgar; com inscrições: acompanhar a lista; com
       // solicitação pendente: a aba Solicitações (2026-10-06).
       actionLabel:
         event.registrationStatus === "not_started"
-          ? "Configurar inscrições"
+          ? "Liberar inscrições"
           : programs.pendingRequestsCount > 0
             ? "Ver solicitações"
             : event.registrationStatus === "paused"
