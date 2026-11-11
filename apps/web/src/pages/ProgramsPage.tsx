@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
-  ChevronDown,
   Building2,
   Lock,
   Mail,
@@ -413,20 +412,9 @@ export function ProgramsPage() {
 }
 
 // Topo da aba Inscrições (2026-11-10, pedido do usuário): as duas formas
-// de ter competidores no evento, que podem ser combinadas. No celular dá
-// pra recolher: fica o título, a frase de explicação e os dois botões (sem
-// os quadros). No computador fica sempre aberto. A escolha fica no
-// navegador (localStorage, conveniência por pessoa).
-const MODES_COLLAPSED_KEY = "easyjudge-registration-modes-collapsed";
-
-function readCollapsed(): boolean {
-  try {
-    return localStorage.getItem(MODES_COLLAPSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
+// de ter competidores no evento, que podem ser combinadas. No celular, só
+// o título, a frase e os dois botões; no computador, também os dois quadros
+// com a explicação de cada forma.
 function RegistrationModesInfo({
   onEnroll,
   onShare,
@@ -438,19 +426,6 @@ function RegistrationModesInfo({
   // Sem nenhuma inscrição ainda: texto de início.
   empty?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(readCollapsed);
-  function toggle() {
-    const next = !collapsed;
-    setCollapsed(next);
-    try {
-      localStorage.setItem(MODES_COLLAPSED_KEY, next ? "1" : "0");
-    } catch {
-      // sem armazenamento: só não lembra a escolha
-    }
-  }
-  // Quadros: recolhidos só no celular (no lugar deles, os dois botões).
-  const cards = collapsed ? "hidden sm:grid" : "grid";
-
   return (
     <section className="grid gap-4 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
       <div className="flex items-start justify-between gap-2">
@@ -463,35 +438,25 @@ function RegistrationModesInfo({
             combinar os dois.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Mostrar explicação" : "Esconder explicação"}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
-        >
-          <ChevronDown className={cn("size-4 transition-transform", !collapsed && "rotate-180")} />
-        </button>
       </div>
-      {collapsed && (
-        <div className="flex flex-col gap-2 sm:hidden">
-          <Button className="w-full" onClick={onEnroll}>
-            <Plus data-icon="inline-start" />
-            Inscrever programa
+      {/* Celular: só os botões. */}
+      <div className="flex flex-col gap-2 sm:hidden">
+        <Button className="w-full" onClick={onEnroll}>
+          <Plus data-icon="inline-start" />
+          Inscrever programa
+        </Button>
+        {onShare && (
+          <Button
+            variant="outline"
+            className="w-full border-primary/40 text-primary hover:bg-primary/10"
+            onClick={onShare}
+          >
+            <QrCode data-icon="inline-start" />
+            Compartilhar evento
           </Button>
-          {onShare && (
-            <Button
-              variant="outline"
-              className="w-full border-primary/40 text-primary hover:bg-primary/10"
-              onClick={onShare}
-            >
-              <QrCode data-icon="inline-start" />
-              Compartilhar evento
-            </Button>
-          )}
-        </div>
-      )}
-      <div className={cn(cards, "gap-3 sm:grid-cols-2")}>
+        )}
+      </div>
+      <div className="hidden gap-3 sm:grid sm:grid-cols-2">
         <div className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
