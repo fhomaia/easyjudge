@@ -907,6 +907,10 @@ export interface AthleteRegistrationEntry {
   // O programa enviou a ficha: não recebe mais pedidos.
   programClosed: boolean;
   programHasAccount: boolean;
+  // Só na tela do evento: categorias que não pode pedir a este programa
+  // (motivo) e as que já tem por outros programas (2026-11-10).
+  blockedCategories?: Record<string, string>;
+  otherCategoryIds?: string[];
 }
 
 export type AthleteRequestStatus =
@@ -963,6 +967,7 @@ export interface AthleteRegistrationEvent {
   categories?: Category[];
   // Limite de categorias por atleta (regras de crossover; null = sem limite).
   maxCategoriesPerAthlete?: number | null;
+  maxLevelDifference?: number | null;
   // Só na lista da Home: o evento no formato do card.
   event?: Event;
 }

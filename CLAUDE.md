@@ -2317,6 +2317,32 @@ qualquer momento, sem desfazer envio nenhum.
 - **Testado**: script HTTP (7 verificações) e navegador em `127.0.0.1`
   com conta descartável (36 categorias, desktop).
 
+## Pedido do atleta sem inconsistência (2026-11-10)
+
+Pedido do usuário: o atleta não consegue montar um pedido que daria
+pendência; a categoria continua visível, desativada com o motivo.
+
+- **`AthleteRequestsService.categoryConflicts`** (por email ou CPF, nos
+  OUTROS programas do evento: categorias em que já está escalado ou com
+  pedido enviado/aprovado/em correção): `blocked` (mesma categoria; regra
+  entre programas `none`/`by_institution`) e `otherCategoryIds` (contam no
+  limite de categorias). Vai pra tela em cada entrada da inscrição do
+  atleta (`blockedCategories`/`otherCategoryIds`, mais
+  `maxLevelDifference` no evento). `institutionLane`/`modalityKey`/
+  `constructionLevel` exportados de `crossover.ts`.
+- **`categoryProblems`**: ao salvar, confere as categorias acrescentadas
+  (conflito, limite contando outros programas, diferença de nível no
+  pedido); no ENVIO confere o pedido inteiro de novo (outro programa pode
+  ter escalado o atleta no meio tempo) e recusa com "Corrija antes de
+  enviar".
+- **Vagas da equipe**: o atleta não escolhe equipe, então o número máximo
+  de atletas da categoria é conferido na aprovação pelo programa
+  (`assertTeamCapacity`, 400).
+- **Tela** (`CategoryStepPicker`): junta os motivos da API, a idade e a
+  diferença de nível com o que já foi escolhido; motivo em âmbar com
+  alerta; limite conta as categorias de outros programas.
+- **Testado**: script HTTP com contas descartáveis (14 verificações).
+
 ## Próximos passos (não iniciados ainda)
 
 0. Pagamento da inscrição (com aba de resumo da ficha). Crossover: feito,

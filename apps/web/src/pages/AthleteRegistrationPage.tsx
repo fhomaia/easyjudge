@@ -278,6 +278,7 @@ export function AthleteRegistrationPage() {
                     open={view.open}
                     categories={view.categories ?? []}
                     maxCategories={view.maxCategoriesPerAthlete ?? null}
+                    maxLevelDifference={view.maxLevelDifference ?? null}
                     entry={active}
                     onView={setView}
                     onDiscard={
@@ -336,6 +337,7 @@ function EntryCard({
   open,
   categories,
   maxCategories,
+  maxLevelDifference,
   entry,
   onView,
   onDiscard,
@@ -344,6 +346,7 @@ function EntryCard({
   open: boolean;
   categories: Category[];
   maxCategories: number | null;
+  maxLevelDifference: number | null;
   entry: AthleteRegistrationEntry;
   onView: (view: AthleteRegistrationEvent) => void;
   // Sem abas (um programa só): o X de excluir a ficha fica no cabeçalho.
@@ -426,7 +429,8 @@ function EntryCard({
   const latestIdsRef = useRef(categoryIds);
   function toggleCategory(cid: string) {
     const current = latestIdsRef.current;
-    if (!current.includes(cid) && maxCategories !== null && current.length >= maxCategories) return;
+    const used = new Set([...current, ...(entry.otherCategoryIds ?? [])]).size;
+    if (!current.includes(cid) && maxCategories !== null && used >= maxCategories) return;
     const next = current.includes(cid) ? current.filter((x) => x !== cid) : [...current, cid];
     latestIdsRef.current = next;
     setCategoryIds(next);
@@ -492,6 +496,9 @@ function EntryCard({
             selected={categoryIds}
             max={maxCategories}
             birthDate={requirements.birthDate ?? null}
+            blockedReasons={entry.blockedCategories}
+            otherCategoryIds={entry.otherCategoryIds}
+            maxLevelDifference={maxLevelDifference}
             onToggle={toggleCategory}
           />
         ) : (

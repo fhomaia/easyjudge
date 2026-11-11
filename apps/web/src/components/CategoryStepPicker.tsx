@@ -13,7 +13,9 @@ import type { Category, CategoryCriterionKey } from "@/api/client";
 // categoria" abre um passo a passo: Modalidade, Gênero, Nível e as outras
 // divisões, cada passo só com as opções que existem nas categorias que
 // sobraram. Passo em que não há escolha (uma opção só) é pulado. Categoria
-// fora da idade do atleta não pode ser escolhida (a API também recusa).
+// que o atleta não pode pedir (idade, mesma categoria ou vínculo em outro
+// programa, diferença de nível, limite de categorias) aparece desativada
+// com o motivo; a API também recusa.
 
 type StepKey = "modality" | CategoryCriterionKey;
 
@@ -84,6 +86,9 @@ export function CategoryStepPicker({
   selected,
   max,
   birthDate,
+  blockedReasons = {},
+  otherCategoryIds = [],
+  maxLevelDifference = null,
   onToggle,
 }: {
   categories: Category[];
@@ -91,20 +96,47 @@ export function CategoryStepPicker({
   // Limite de categorias por atleta (crossover); null = sem limite.
   max: number | null;
   birthDate: string | null;
+  // Motivos vindos da API (outro programa: mesma categoria, vínculo).
+  blockedReasons?: Record<string, string>;
+  // Categorias que o atleta já tem por outros programas (contam no limite).
+  otherCategoryIds?: string[];
+  // Diferença máxima de nível na mesma modalidade (null = sem regra).
+  maxLevelDifference?: number | null;
   onToggle: (categoryId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [choices, setChoices] = useState<{ step: StepKey; value: string; label: string }[]>([]);
 
-  // Motivo de cada categoria fora da idade.
+  const selectedCategories = selected
+    .map((id) => categories.find((c) => c.id === id))
+    .filter((c): c is Category => !!c);
+
+  // Motivo de cada categoria que não pode ser escolhida agora.
   const blocked = useMemo(() => {
     const map = new Map<string, string>();
+    const build = (c: Category) => (c.level != null ? Math.trunc(c.level) : null);
+    const modality = (c: Category) => autoFormatKey(c.categoryFormat, c.customFormatLabel);
     for (const c of categories) {
-      const problem = ageProblem(c.rules, birthDate);
-      if (problem) map.set(c.id, problem);
+      const reason =
+        blockedReasons[c.id] ??
+        ageProblem(c.rules, birthDate) ??
+        (() => {
+          if (maxLevelDifference == null || selected.includes(c.id)) return null;
+          const level = build(c);
+          if (level == null) return null;
+          const clash = selectedCategories.find((s) => {
+            const other = build(s);
+            return other != null && modality(s) === modality(c) && Math.abs(other - level) > maxLevelDifference;
+          });
+          return clash
+            ? `Diferença de nível acima de ${maxLevelDifference} com ${clash.name}`
+            : null;
+        })();
+      if (reason) map.set(c.id, reason);
     }
     return map;
-  }, [categories, birthDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories, birthDate, blockedReasons, selected, maxLevelDifference]);
 
   const available = categories.filter((c) => !selected.includes(c.id));
   const candidates = available.filter((c) => choices.every((ch) => valueOf(c, ch.step) === ch.value));
@@ -116,10 +148,9 @@ export function CategoryStepPicker({
   );
   const showList = !nextStep || candidates.length <= SHORT_LIST;
 
-  const limitReached = max !== null && selected.length >= max;
-  const selectedCategories = selected
-    .map((id) => categories.find((c) => c.id === id))
-    .filter((c): c is Category => !!c);
+  // Limite conta também as categorias de outros programas.
+  const usedCount = new Set([...selected, ...otherCategoryIds]).size;
+  const limitReached = max !== null && usedCount >= max;
 
   function close() {
     setOpen(false);
@@ -166,7 +197,9 @@ export function CategoryStepPicker({
       {limitReached ? (
         <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          {`O limite de ${max} ${max === 1 ? "categoria" : "categorias"} por atleta foi atingido. Para escolher outra, tire uma das atuais.`}
+          {`O limite de ${max} ${max === 1 ? "categoria" : "categorias"} por atleta foi atingido${
+            otherCategoryIds.length > 0 ? " (contando as de outros programas)" : ""
+          }. Para escolher outra, tire uma das atuais.`}
         </p>
       ) : available.length > 0 ? (
         <Button
@@ -218,13 +251,16 @@ export function CategoryStepPicker({
                       className={cn(
                         "flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left text-sm transition-colors",
                         reason
-                          ? "cursor-not-allowed border-border/60 opacity-60"
+                          ? "cursor-not-allowed border-amber-300/60 bg-amber-50/50 dark:border-amber-400/20 dark:bg-amber-500/5"
                           : "border-border hover:border-primary/50 hover:bg-primary/5",
                       )}
                     >
                       <span className="min-w-0 flex-1 break-words font-medium text-foreground">{c.name}</span>
                       {reason ? (
-                        <span className="shrink-0 text-xs text-muted-foreground">{reason}</span>
+                        <span className="flex max-w-[55%] shrink-0 items-start gap-1 text-right text-xs text-amber-700 dark:text-amber-400">
+                          <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                          {reason}
+                        </span>
                       ) : (
                         <Plus className="size-4 shrink-0 text-primary" />
                       )}
@@ -246,13 +282,16 @@ export function CategoryStepPicker({
                     className={cn(
                       "flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left text-sm transition-colors",
                       option.blockedReason
-                        ? "cursor-not-allowed border-border/60 opacity-60"
+                        ? "cursor-not-allowed border-amber-300/60 bg-amber-50/50 dark:border-amber-400/20 dark:bg-amber-500/5"
                         : "border-border hover:border-primary/50 hover:bg-primary/5",
                     )}
                   >
                     <span className="min-w-0 break-words font-medium text-foreground">{option.label}</span>
                     {option.blockedReason ? (
-                      <span className="shrink-0 text-xs text-muted-foreground">{option.blockedReason}</span>
+                      <span className="flex max-w-[55%] shrink-0 items-start gap-1 text-right text-xs text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                        {option.blockedReason}
+                      </span>
                     ) : (
                       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                     )}

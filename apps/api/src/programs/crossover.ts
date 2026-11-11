@@ -11,6 +11,25 @@ import type { RegistrationIssue } from './services/program-registration.service'
 // usuário); opção criada pelo produtor é um vínculo à parte.
 const SHARED_INSTITUTIONS = ['school', 'university'];
 
+// "Faixa" do vínculo: os do grupo dividem uma só. Sem vínculo, não conta.
+export function institutionLane(id: string | null | undefined): string | null {
+  return !id ? null : SHARED_INSTITUTIONS.includes(id) ? 'shared' : id;
+}
+
+// Modalidade: o formato, ou o nome no Custom (cada Custom é uma).
+export function modalityKey(category: Category): string {
+  return category.categoryFormat === CategoryFormat.CUSTOM
+    ? `custom:${(category.customFormatLabel ?? '').trim().toLowerCase()}`
+    : category.categoryFormat;
+}
+
+// Nível de construção (4.2 conta como 4).
+export function constructionLevel(
+  category: Category | undefined,
+): number | null {
+  return category?.level != null ? Math.trunc(category.level) : null;
+}
+
 // Uma equipe+categoria de um atleta do evento, de qualquer programa.
 export interface CrossoverEntry {
   programId: string;
@@ -64,16 +83,7 @@ export function crossoverIssues(
       ?.label ?? id;
   const institutionLabel = (id: string) =>
     optionLabel(CategoryCriterionKey.INSTITUTION, id);
-  // "Faixa" do vínculo: os do grupo dividem uma só. Sem vínculo, não conta.
-  const institutionLane = (id: string | null | undefined) =>
-    !id ? null : SHARED_INSTITUTIONS.includes(id) ? 'shared' : id;
-  // Modalidade: o formato, ou o nome no Custom (cada Custom é uma).
-  const modalityKey = (category: Category) =>
-    category.categoryFormat === CategoryFormat.CUSTOM
-      ? `custom:${(category.customFormatLabel ?? '').trim().toLowerCase()}`
-      : category.categoryFormat;
-  const construction = (category: Category | undefined) =>
-    category?.level != null ? Math.trunc(category.level) : null;
+  const construction = constructionLevel;
 
   for (const person of groupByPerson(entries)) {
     person.sort(

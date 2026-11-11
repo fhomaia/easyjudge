@@ -1,4 +1,5 @@
 import type { EventWithRole } from '../../events/services/events.service';
+import { DocumentType } from '../../common/enums/document-type.enum';
 import { RegulationsService } from '../../regulations/services/regulations.service';
 import { RegulationDocument } from '../../regulations/entities/regulation-document.entity';
 import {
@@ -82,6 +83,11 @@ export interface AthleteRegistrationEntry {
   programClosed: boolean;
   // Sem conta na plataforma: o pedido espera o programa se cadastrar.
   programHasAccount: boolean;
+  // Só na tela do evento (2026-11-10): categorias que o atleta não pode
+  // pedir a este programa por causa de outro programa (motivo), e as
+  // categorias que ele já tem por outros programas (limite por atleta).
+  blockedCategories?: Record<string, string>;
+  otherCategoryIds?: string[];
 }
 
 export interface AthleteRegistrationEvent {
@@ -101,6 +107,8 @@ export interface AthleteRegistrationEvent {
   // Só na tela do evento: limite de categorias por atleta das regras de
   // crossover (null = sem limite).
   maxCategoriesPerAthlete?: number | null;
+  // Só na tela do evento: diferença máxima de nível na mesma modalidade.
+  maxLevelDifference?: number | null;
   // Só na lista da Home (listMine): o evento no formato do card, pra Home
   // juntar a inscrição ao card do evento (ou criar o card, quando a pessoa
   // ainda não tem vínculo com o evento).
@@ -257,9 +265,23 @@ export class AthleteRegistrationService {
       await this.categoryCriteriaService.getByAlias(event.aliasId),
     );
     view.categories = categories;
-    view.maxCategoriesPerAthlete = (
-      await this.regulationsService.getCrossoverRulesByAlias(event.aliasId)
-    ).maxCategories;
+    const rules = await this.regulationsService.getCrossoverRulesByAlias(
+      event.aliasId,
+    );
+    view.maxCategoriesPerAthlete = rules.maxCategories;
+    view.maxLevelDifference = rules.maxLevelDifference;
+    const userCpf =
+      user.documentType === DocumentType.CPF ? user.documentNumber : null;
+    for (const entry of view.entries) {
+      const own = athletes.find((a) => a.id === entry.athleteId);
+      const conflicts = await this.requestsService.categoryConflicts(
+        event,
+        entry.programId,
+        { email: own?.email ?? user.email, cpf: own?.cpf ?? userCpf },
+      );
+      entry.blockedCategories = conflicts.blocked;
+      entry.otherCategoryIds = conflicts.otherCategoryIds;
+    }
     return view;
   }
 

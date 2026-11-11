@@ -36,6 +36,7 @@ import { NotificationType } from '../../notifications/enums/notification-type.en
 import { NotificationAudience } from '../../notifications/enums/notification-audience.enum';
 import { CategoryCriteriaService } from '../../categories/services/category-criteria.service';
 import { ageProblem } from '../age-rules';
+import { constructionLevel, institutionLane, modalityKey } from '../crossover';
 import { RegulationsService } from '../../regulations/services/regulations.service';
 import { MailService } from '../../auth/services/mail.service';
 import { ProgramsService } from './programs.service';
@@ -81,6 +82,25 @@ export interface ProgramAthleteRequestView {
 // programa e categorias e envia; o programa aprova (escolhendo a equipe de
 // cada categoria), pede correção ou recusa. Tudo até o prazo de inscrição.
 // Ver AthleteRegistrationRequest.
+// Conflitos de categoria do atleta com o que ele já tem em OUTROS
+// programas do evento (2026-11-10): a tela mostra a categoria com o motivo
+// e a API recusa. `blocked` não depende da seleção atual; limite de
+// categorias e diferença de nível dependem (ver selectionProblems).
+export interface AthleteCategoryConflicts {
+  blocked: Record<string, string>;
+  // Categorias distintas que o atleta já tem por outros programas.
+  otherCategoryIds: string[];
+  maxCategories: number | null;
+  maxLevelDifference: number | null;
+}
+
+// Pedido de outro programa que já conta como compromisso do atleta.
+const COMMITTED_REQUEST_STATUSES = [
+  AthleteRequestStatus.SUBMITTED,
+  AthleteRequestStatus.APPROVED,
+  AthleteRequestStatus.CORRECTION_REQUESTED,
+];
+
 @Injectable()
 export class AthleteRequestsService {
   private readonly logger = new Logger(AthleteRequestsService.name);
@@ -233,24 +253,22 @@ export class AthleteRequestsService {
     }
     const categoryIds = [...new Set(dto.categoryIds)];
     await this.assertEventCategories(event, categoryIds);
-    await this.assertAgeEligible(
-      event,
-      participation,
-      programAthlete,
-      categoryIds.filter((id) => !request.categoryIds.includes(id)),
-    );
-    // Limite de categorias por atleta (regras de crossover). Só barra
-    // acrescentar: com o limite baixado depois, dá pra ir tirando.
-    const { maxCategories } =
-      await this.regulationsService.getCrossoverRulesByAlias(event.aliasId);
-    if (
-      maxCategories !== null &&
-      categoryIds.length > maxCategories &&
-      categoryIds.length > request.categoryIds.length
-    ) {
-      throw new BadRequestException(
-        `O limite de ${maxCategories} ${maxCategories === 1 ? 'categoria' : 'categorias'} por atleta foi atingido.`,
+    const added = categoryIds.filter((id) => !request.categoryIds.includes(id));
+    await this.assertAgeEligible(event, participation, programAthlete, added);
+    // Crossover (mesma categoria/vínculo em outro programa, limite de
+    // categorias, diferença de nível). Só barra acrescentar: com uma regra
+    // mudada depois, dá pra ir tirando.
+    if (added.length > 0) {
+      const problems = await this.categoryProblems(
+        event,
+        participation.id,
+        programAthlete,
+        categoryIds,
+        added,
       );
+      if (problems.length > 0) {
+        throw new BadRequestException(problems.join('\n'));
+      }
     }
     request.categoryIds = categoryIds;
     if (dto.note !== undefined) request.note = dto.note?.trim() || null;
@@ -283,6 +301,20 @@ export class AthleteRequestsService {
       throw new BadRequestException('Escolha ao menos uma categoria.');
     }
     await this.assertEventCategories(event, request.categoryIds);
+    // Confere tudo de novo no envio: outro programa pode ter inscrito o
+    // atleta depois que ele escolheu.
+    const problems = await this.categoryProblems(
+      event,
+      participation.id,
+      programAthlete,
+      request.categoryIds,
+      request.categoryIds,
+    );
+    if (problems.length > 0) {
+      throw new BadRequestException(
+        `Corrija antes de enviar:\n${problems.join('\n')}`,
+      );
+    }
     const view = await this.requirementsService.list(
       eventId,
       programId,
@@ -572,6 +604,7 @@ export class AthleteRequestsService {
         team.categories.push({ id: entry.categoryId } as Category);
       }
     }
+    await this.assertTeamCapacity(event, request.programAthleteId, unique);
     await this.programAthletesService.setAthleteEntries(
       eventId,
       participation.id,
@@ -1071,6 +1104,193 @@ export class AthleteRequestsService {
   private assertOpen(event: Event): void {
     if (!isRegistrationOpen(event)) {
       throw new ConflictException(registrationClosedMessage(event));
+    }
+  }
+
+  async categoryConflicts(
+    event: Event,
+    programId: string,
+    person: { email: string; cpf: string | null },
+  ): Promise<AthleteCategoryConflicts> {
+    const rules = await this.regulationsService.getCrossoverRulesByAlias(
+      event.aliasId,
+    );
+    const base = {
+      maxCategories: rules.maxCategories,
+      maxLevelDifference: rules.maxLevelDifference,
+    };
+    const qb = this.athletesRepo
+      .createQueryBuilder('a')
+      .where('a.aliasId = :aliasId', { aliasId: event.aliasId })
+      .andWhere('a.programId != :programId', { programId });
+    if (person.cpf) {
+      qb.andWhere('(LOWER(a.email) = LOWER(:email) OR a.cpf = :cpf)', {
+        email: person.email,
+        cpf: person.cpf,
+      });
+    } else {
+      qb.andWhere('LOWER(a.email) = LOWER(:email)', { email: person.email });
+    }
+    const others = await qb.getMany();
+    if (others.length === 0) {
+      return { blocked: {}, otherCategoryIds: [], ...base };
+    }
+    const otherIds = others.map((a) => a.id);
+    const entries = await this.entriesRepo.findBy({ athleteId: In(otherIds) });
+    const requests = await this.requestsRepo.findBy({
+      programAthleteId: In(otherIds),
+      status: In(COMMITTED_REQUEST_STATUSES),
+    });
+    const programOf = new Map(others.map((a) => [a.id, a.programId]));
+    // categoria -> programa em que o atleta já está.
+    const taken = new Map<string, string>();
+    for (const e of entries)
+      taken.set(e.categoryId, programOf.get(e.athleteId)!);
+    for (const r of requests) {
+      for (const id of r.categoryIds) {
+        if (!taken.has(id)) taken.set(id, r.programId);
+      }
+    }
+    if (taken.size === 0) {
+      return { blocked: {}, otherCategoryIds: [], ...base };
+    }
+    const programs = await this.participationsRepo.findBy({
+      id: In([...new Set(taken.values())]),
+    });
+    const programName = (id: string) => {
+      const p = programs.find((x) => x.id === id);
+      return p ? p.name.trim() || p.email : 'outro programa';
+    };
+    const categories = await this.categoriesRepo.findBy({
+      aliasId: event.aliasId,
+      status: CategoryStatus.ACTIVE,
+    });
+    const byId = new Map(categories.map((c) => [c.id, c]));
+    const firstOther = programName([...taken.values()][0]);
+
+    const blocked: Record<string, string> = {};
+    for (const category of categories) {
+      const sameProgram = taken.get(category.id);
+      if (sameProgram) {
+        blocked[category.id] =
+          `Você já está nesta categoria pelo programa ${programName(sameProgram)}.`;
+        continue;
+      }
+      if (rules.crossProgram === 'none') {
+        blocked[category.id] =
+          `Você já compete pelo programa ${firstOther}, e o evento não permite competir por mais de um programa.`;
+        continue;
+      }
+      if (rules.crossProgram === 'by_institution') {
+        const lane = institutionLane(category.institution);
+        const clash = lane
+          ? [...taken.entries()].find(
+              ([id]) => institutionLane(byId.get(id)?.institution) === lane,
+            )
+          : undefined;
+        if (clash) {
+          blocked[category.id] =
+            `Você já compete pelo programa ${programName(clash[1])} com este vínculo institucional, e o evento permite um programa por vínculo.`;
+        }
+      }
+    }
+    return { blocked, otherCategoryIds: [...taken.keys()], ...base };
+  }
+
+  // Problemas das categorias `toCheck` dentro da seleção `selection` (o
+  // pedido inteiro) deste programa.
+  private async categoryProblems(
+    event: Event,
+    programId: string,
+    programAthlete: ProgramAthlete,
+    selection: string[],
+    toCheck: string[],
+  ): Promise<string[]> {
+    const conflicts = await this.categoryConflicts(event, programId, {
+      email: programAthlete.email,
+      cpf: programAthlete.cpf,
+    });
+    const categories = await this.categoriesRepo.findBy({
+      id: In([...new Set([...selection, ...toCheck])]),
+    });
+    const byId = new Map(categories.map((c) => [c.id, c]));
+    const name = (id: string) => byId.get(id)?.name ?? 'Categoria';
+    const problems: string[] = [];
+    for (const id of toCheck) {
+      if (conflicts.blocked[id])
+        problems.push(`${name(id)}: ${conflicts.blocked[id]}`);
+    }
+    const max = conflicts.maxCategories;
+    if (max !== null) {
+      const total = new Set([...selection, ...conflicts.otherCategoryIds]).size;
+      if (total > max) {
+        problems.push(
+          conflicts.otherCategoryIds.length > 0
+            ? `O limite de ${max} ${max === 1 ? 'categoria' : 'categorias'} por atleta foi atingido (contando as de outros programas).`
+            : `O limite de ${max} ${max === 1 ? 'categoria' : 'categorias'} por atleta foi atingido.`,
+        );
+      }
+    }
+    const maxDiff = conflicts.maxLevelDifference;
+    if (maxDiff !== null) {
+      for (const id of toCheck) {
+        const category = byId.get(id);
+        const level = constructionLevel(category);
+        if (!category || level == null) continue;
+        const clash = selection.find((other) => {
+          const o = byId.get(other);
+          const ol = constructionLevel(o);
+          return (
+            other !== id &&
+            !!o &&
+            ol != null &&
+            modalityKey(o) === modalityKey(category) &&
+            Math.abs(ol - level) > maxDiff
+          );
+        });
+        if (clash) {
+          problems.push(
+            `${name(id)}: com ${name(clash)}, passa da diferença de ${maxDiff} ${maxDiff === 1 ? 'nível' : 'níveis'} permitida na mesma modalidade.`,
+          );
+        }
+      }
+    }
+    return [...new Set(problems)];
+  }
+
+  // Vagas da equipe na categoria (número máximo de atletas da regra),
+  // conferidas na aprovação do pedido, quando o programa escolhe a equipe.
+  private async assertTeamCapacity(
+    event: Event,
+    programAthleteId: string,
+    entries: AthleteEntryDto[],
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    const categories = await this.categoriesRepo.findBy({
+      id: In([...new Set(entries.map((e) => e.categoryId))]),
+    });
+    this.categoryCriteriaService.attachLabels(
+      categories,
+      await this.categoryCriteriaService.getByAlias(event.aliasId),
+    );
+    for (const entry of entries) {
+      const category = categories.find((c) => c.id === entry.categoryId);
+      const max = category?.rules?.maxAthletes ?? null;
+      if (!category || max == null) continue;
+      const current = await this.entriesRepo
+        .createQueryBuilder('e')
+        .where('e.teamId = :teamId', { teamId: entry.teamId })
+        .andWhere('e.categoryId = :categoryId', {
+          categoryId: entry.categoryId,
+        })
+        .andWhere('e.athleteId != :athleteId', { athleteId: programAthleteId })
+        .getCount();
+      if (current >= max) {
+        const team = await this.teamsRepo.findOneBy({ id: entry.teamId });
+        throw new BadRequestException(
+          `A equipe ${team?.name ?? ''} já tem o máximo de ${max} ${max === 1 ? 'atleta' : 'atletas'} em ${category.name}. Escolha outra equipe ou tire um atleta dela.`,
+        );
+      }
     }
   }
 
