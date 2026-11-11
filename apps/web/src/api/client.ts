@@ -785,6 +785,9 @@ export interface AthleteRequirementItem {
   document: AthleteDocumentView | null;
   // Itens de documento: dá pra enviar/trocar este agora.
   documentEditable: boolean;
+  // Itens de dado: pode preencher agora (inclui dado vazio com a ficha já
+  // enviada, até o prazo; 2026-11-10).
+  valueEditable: boolean;
   // Data de nascimento/CPF da conta do atleta: não se edita por aqui.
   readOnly: boolean;
   source: "account" | "roster" | "event" | null;
@@ -1078,7 +1081,9 @@ export const userDocumentsApi = {
 
 export const registrationSettingsApi = {
   get: (eventId: string) =>
-    authRequest<RegistrationSettings & { presets: RegistrationRequirement[] }>(
+    authRequest<
+      RegistrationSettings & { presets: RegistrationRequirement[]; submittedProgramsCount: number }
+    >(
       `/events/${eventId}/registration-settings`,
     ),
 
@@ -3012,7 +3017,8 @@ export type NotificationType =
   | "registration_reopened"
   | "document_contested"
   | "athlete_registration_submitted"
-  | "athlete_registration_answered";
+  | "athlete_registration_answered"
+  | "registration_requirement_added";
 
 export interface NotificationView {
   id: string;

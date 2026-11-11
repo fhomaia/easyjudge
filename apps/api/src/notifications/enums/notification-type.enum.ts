@@ -29,4 +29,7 @@ export enum NotificationType {
   // pedida ou recusado).
   ATHLETE_REGISTRATION_SUBMITTED = 'athlete_registration_submitted',
   ATHLETE_REGISTRATION_ANSWERED = 'athlete_registration_answered',
+  // Item obrigatório novo na ficha depois de liberar as inscrições
+  // (2026-11-10), destinatário único: programa e atletas com conta.
+  REGISTRATION_REQUIREMENT_ADDED = 'registration_requirement_added',
 }

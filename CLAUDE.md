@@ -2264,6 +2264,36 @@ revistas no meio da sessão (vale o que está aqui).
   adoção também passaram). Telas NÃO testadas pela automação no
   navegador (extensão desconectada); conferidas pelo usuário.
 
+## Item novo na ficha depois de liberar as inscrições (2026-11-10)
+
+Decisões do usuário: o produtor pode acrescentar dados/documentos a
+qualquer momento, sem desfazer envio nenhum.
+
+- **Ficha enviada continua enviada**; o item novo vira pendência.
+- **Completar o que falta até o prazo**: com a ficha enviada, programa e
+  atleta preenchem dado VAZIO na janela dos documentos
+  (`canSendDocuments`); mudar o que já foi enviado continua passando pelo
+  organizador. `AthleteRequirementView.valueEditable` por item (a tela usa
+  ele, não mais o `dataEditable` geral); `set` confere com
+  `canFillMissing`; a rota do programa ganhou `@DocumentWrite()`.
+- **Aviso**: `ProgramAthleteRequirementsService.updateSettings` (o PUT
+  de `registration-settings` passa por ele) detecta item obrigatório novo
+  (ou que virou obrigatório) com as inscrições já liberadas e avisa, por
+  programa com atleta afetado (atleta em categoria ou com pedido em que o
+  item vale): notificação `registration_requirement_added` (destinatário
+  único) + email pro programa, notificação pros atletas com conta.
+  Migration `AddRegistrationRequirementAddedNotification` (só o valor do
+  enum).
+- **Confirmação na tela** (`RegistrationRequirementsSection`,
+  `registrationReleased`): com fichas já enviadas
+  (`submittedProgramsCount`, no GET das configurações), salvar item
+  obrigatório novo pede confirmação; cancelar não salva e mantém o popup
+  de edição aberto.
+- **Trocar o tipo** de item que já tem resposta (dado ou documento) dá
+  409; sem resposta, pode.
+- **Testado**: script HTTP com contas descartáveis numa segunda API
+  (porta 3001, email em stub), 16 verificações, tudo apagado no fim.
+
 ## Próximos passos (não iniciados ainda)
 
 0. Pagamento da inscrição (com aba de resumo da ficha). Crossover: feito,

@@ -680,7 +680,6 @@ export function EventRegistrationPage() {
                 eventId={id}
                 programId={program.id}
                 athleteId={dataTarget.athleteId}
-                readOnly={!editable}
                 onChanged={() => void load()}
               />
             )}

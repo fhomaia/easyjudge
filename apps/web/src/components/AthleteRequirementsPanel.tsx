@@ -127,7 +127,6 @@ export function AthleteRequirementsPanel({
   initialView,
   canContest = false,
   onChanged,
-  readOnly = false,
 }: {
   eventId?: string;
   programId?: string;
@@ -136,8 +135,6 @@ export function AthleteRequirementsPanel({
   initialView?: AthleteRequirementsView;
   // Produtor: pode contestar documentos.
   canContest?: boolean;
-  // Ficha travada: dados só consulta (documentos seguem o que a API diz).
-  readOnly?: boolean;
   // Data de nascimento/CPF ficam no atleta: quem mostra a idade recarrega.
   onChanged?: (view: AthleteRequirementsView) => void;
 }) {
@@ -219,7 +216,9 @@ export function AthleteRequirementsPanel({
             <RequirementField
               key={item.requirement.id}
               item={item}
-              readOnly={readOnly || !view.dataEditable}
+              // A API decide por item (ficha travada ainda completa dado
+              // vazio até o prazo, valueEditable).
+              readOnly={!item.valueEditable}
               onSave={async (value) => {
                 const next = await adapter.set(item.requirement.id as string, value);
                 applyView(next);

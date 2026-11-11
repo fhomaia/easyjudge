@@ -179,7 +179,10 @@ export class ProgramAthletesController {
     );
   }
 
+  // Escrita na janela dos documentos (2026-11-10): com a ficha enviada, o
+  // programa ainda preenche dado VAZIO até o prazo; o service confere.
   @Put(':athleteId/requirements/:requirementId')
+  @DocumentWrite()
   async setRequirement(
     @Param('eventId') eventId: string,
     @Param('programId') programId: string,

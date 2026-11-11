@@ -43,7 +43,10 @@ import { ProgramAthletesService } from './program-athletes.service';
 import {
   requirementApplies,
   type RegistrationRequirement,
+  type RegistrationSettingsView,
 } from '../registration-requirements';
+import { UpdateRegistrationSettingsDto } from '../dto/update-registration-settings.dto';
+import { RegistrationStatus } from '../../events/enums/registration-status.enum';
 
 // De onde vem o valor da data de nascimento/CPF (valor único do atleta).
 export type RequirementValueSource = 'account' | 'roster' | 'event' | null;
@@ -67,6 +70,12 @@ export interface AthleteRequirementView {
   // (o atleta, depois de a inscrição ser enviada, só manda o que falta ou
   // foi contestado).
   documentEditable: boolean;
+  // Itens de dado: quem está vendo pode preencher este agora. Além de
+  // `dataEditable` (ficha não travada), um dado ainda VAZIO pode ser
+  // preenchido na janela dos documentos mesmo com a ficha enviada (item
+  // pedido depois do envio, 2026-11-10); mudar o que já foi enviado
+  // continua passando pelo organizador.
+  valueEditable: boolean;
   // Data de nascimento/CPF da conta do atleta: não se edita por aqui.
   readOnly: boolean;
   source: RequirementValueSource;
@@ -253,24 +262,26 @@ export class ProgramAthleteRequirementsService {
       documents.flatMap((d) => d.fileKeys),
     );
     const { account, link } = await this.identity(athlete, participation);
+    const dataEditable = canEditData(actor, event, participation, athlete);
 
     return {
       name: `${athlete.firstName} ${athlete.lastName}`.trim(),
       email: athlete.email,
       documentsEditable: canSendDocuments(actor, event, participation),
-      dataEditable: canEditData(actor, event, participation, athlete),
+      dataEditable,
       athleteLocked:
         actor === 'athlete' && athleteLocked(participation, athlete),
       allowSubmitWithoutDocuments: settings.allowSubmitWithoutDocuments,
       programSubmitted: !!participation.submittedAt,
       athleteSubmittedAt: athlete.athleteSubmittedAt,
-      items: settings.requirements.map(
-        (requirement): AthleteRequirementView => {
+      items: settings.requirements
+        .map((requirement): AthleteRequirementView => {
           const base = {
             requirement,
             applies: requirementApplies(requirement, categories),
             document: null,
             documentEditable: false,
+            valueEditable: false,
           };
           if (requirement.kind === 'document') {
             const doc = documents.find(
@@ -335,8 +346,19 @@ export class ProgramAthleteRequirementsService {
             readOnly: false,
             source: null,
           };
-        },
-      ),
+        })
+        .map((item) =>
+          item.requirement.kind === 'document'
+            ? item
+            : {
+                ...item,
+                valueEditable:
+                  !item.readOnly &&
+                  (dataEditable ||
+                    (item.value == null &&
+                      canSendDocuments(actor, event, participation))),
+              },
+        ),
     };
   }
 
@@ -354,7 +376,16 @@ export class ProgramAthleteRequirementsService {
       programId,
       athleteId,
     );
-    if (!canEditData(actor, event, participation, athlete)) {
+    if (
+      !canEditData(actor, event, participation, athlete) &&
+      !(await this.canFillMissing(
+        event,
+        participation,
+        athlete,
+        actor,
+        requirementId,
+      ))
+    ) {
       throw new ForbiddenException(
         actor === 'athlete' && athleteLocked(participation, athlete)
           ? ATHLETE_LOCKED_MESSAGE
@@ -666,6 +697,205 @@ export class ProgramAthleteRequirementsService {
       );
     }
     return this.list(eventId, programId, athleteId, 'staff');
+  }
+
+  // Dado ainda vazio, na janela dos documentos (ver valueEditable).
+  private async canFillMissing(
+    event: Event,
+    participation: ProgramParticipation,
+    athlete: ProgramAthlete,
+    actor: RequirementActor,
+    requirementId: string,
+  ): Promise<boolean> {
+    if (!canSendDocuments(actor, event, participation)) return false;
+    const view = await this.buildView(event, participation, athlete, actor);
+    return !!view.items.find((i) => i.requirement.id === requirementId)
+      ?.valueEditable;
+  }
+
+  // Salvar os dados/documentos pedidos (aba Configurações), 2026-11-10:
+  // não deixa trocar o tipo de um item que já tem resposta e, com as
+  // inscrições já liberadas, avisa os programas (e atletas com conta)
+  // afetados por um item obrigatório novo.
+  async updateSettings(
+    eventId: string,
+    dto: UpdateRegistrationSettingsDto,
+  ): Promise<RegistrationSettingsView> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    const previous = await this.settingsService.getByAlias(event.aliasId);
+    await this.assertKindChangesAllowed(event.aliasId, previous, dto);
+    const saved = await this.settingsService.update(eventId, dto);
+    if (event.registrationStatus !== RegistrationStatus.NOT_STARTED) {
+      const added = saved.requirements.filter(
+        (r) =>
+          r.required &&
+          !previous.requirements.some((p) => p.id === r.id && p.required),
+      );
+      if (added.length > 0) {
+        try {
+          await this.notifyNewRequirements(event, added);
+        } catch (err) {
+          // Melhor esforço: a configuração já está salva.
+          this.logger.error('Falha ao avisar item novo', err as Error);
+        }
+      }
+    }
+    return saved;
+  }
+
+  // Fichas já enviadas no evento (a tela confirma antes de pedir algo novo).
+  async submittedProgramsCount(eventId: string): Promise<number> {
+    const event = await this.eventsService.findEventOrThrow(eventId);
+    return this.participationsRepo
+      .createQueryBuilder('p')
+      .where('p.aliasId = :aliasId', { aliasId: event.aliasId })
+      .andWhere('p.submittedAt IS NOT NULL')
+      .getCount();
+  }
+
+  private async assertKindChangesAllowed(
+    aliasId: string,
+    previous: RegistrationSettingsView,
+    dto: UpdateRegistrationSettingsDto,
+  ): Promise<void> {
+    for (const incoming of dto.requirements) {
+      const before = previous.requirements.find((r) => r.id === incoming.id);
+      if (!before || before.kind === incoming.kind) continue;
+      const athleteIds = this.athletesRepo
+        .createQueryBuilder('a')
+        .select('a.id')
+        .where('a.aliasId = :aliasId', { aliasId });
+      const answered =
+        (await this.valuesRepo
+          .createQueryBuilder('v')
+          .where('v.requirementId = :id', { id: before.id })
+          .andWhere(`v.programAthleteId IN (${athleteIds.getQuery()})`)
+          .setParameters(athleteIds.getParameters())
+          .getCount()) +
+        (await this.documentsRepo
+          .createQueryBuilder('d')
+          .where('d.requirementId = :id', { id: before.id })
+          .andWhere(`d.programAthleteId IN (${athleteIds.getQuery()})`)
+          .setParameters(athleteIds.getParameters())
+          .getCount());
+      if (answered > 0) {
+        throw new ConflictException(
+          `"${before.label}" já tem respostas de atletas, então o tipo não pode mudar. Crie um item novo e, se quiser, exclua este.`,
+        );
+      }
+    }
+  }
+
+  private async notifyNewRequirements(
+    event: Event,
+    added: RegistrationRequirement[],
+  ): Promise<void> {
+    const participations = await this.participationsRepo.findBy({
+      aliasId: event.aliasId,
+    });
+    if (participations.length === 0) return;
+    const athletes = await this.athletesRepo.findBy({
+      programId: In(participations.map((p) => p.id)),
+    });
+    const athleteIds = athletes.map((a) => a.id);
+    const entries = athleteIds.length
+      ? await this.entriesRepo.findBy({ athleteId: In(athleteIds) })
+      : [];
+    const requests = athleteIds.length
+      ? await this.requestsRepo.findBy({
+          programAthleteId: In(athleteIds),
+          status: In(OPEN_REQUEST_STATUSES),
+        })
+      : [];
+    const categoryIds = [
+      ...new Set([
+        ...entries.map((e) => e.categoryId),
+        ...requests.flatMap((r) => r.categoryIds),
+      ]),
+    ];
+    const categories = categoryIds.length
+      ? await this.categoriesRepo.findBy({ id: In(categoryIds) })
+      : [];
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+    const categoriesOf = (athleteId: string) =>
+      [
+        ...entries
+          .filter((e) => e.athleteId === athleteId)
+          .map((e) => e.categoryId),
+        ...requests
+          .filter((r) => r.programAthleteId === athleteId)
+          .flatMap((r) => r.categoryIds),
+      ]
+        .map((id) => categoryById.get(id))
+        .filter((c): c is Category => !!c);
+
+    const deadlineLine = event.registrationDeadline
+      ? `Complete até o prazo de inscrição (${event.registrationDeadline.split('-').reverse().join('/')}).`
+      : 'Complete na ficha de inscrição.';
+    const titleFor = (labels: string[]) =>
+      labels.length === 1
+        ? `Novo item na inscrição: ${labels[0]}`
+        : `Novos itens na inscrição: ${labels.join(', ')}`;
+
+    for (const participation of participations) {
+      // Só atletas que já estão em alguma categoria (ou pediram uma).
+      const affected = athletes
+        .filter((a) => a.programId === participation.id)
+        .map((a) => ({
+          athlete: a,
+          items: added.filter((r) => {
+            const cats = categoriesOf(a.id);
+            return cats.length > 0 && requirementApplies(r, cats);
+          }),
+        }))
+        .filter((a) => a.items.length > 0);
+      if (affected.length === 0) continue;
+      const labels = added
+        .filter((r) => affected.some((a) => a.items.includes(r)))
+        .map((r) => r.label);
+      const title = titleFor(labels);
+
+      if (participation.userId) {
+        await this.notificationsService.create(
+          event.aliasId,
+          NotificationType.REGISTRATION_REQUIREMENT_ADDED,
+          NotificationAudience.ALL,
+          title,
+          undefined,
+          participation.userId,
+        );
+      }
+      await this.mailService.sendNotice({
+        to: [participation.email],
+        subject: `[${event.name}] ${title}`,
+        heading:
+          labels.length === 1
+            ? 'Novo item na inscrição'
+            : 'Novos itens na inscrição',
+        lines: [
+          `O organizador do evento ${event.name} passou a pedir aos atletas: ${labels.join(', ')}.`,
+          `${affected.length === 1 ? '1 atleta do seu programa precisa' : `${affected.length} atletas do seu programa precisam`} completar. ${deadlineLine}`,
+        ],
+        actionPath: `/events/${event.aliasId}/registration`,
+        actionLabel: 'Abrir a inscrição',
+        event: { name: event.name, logoUrl: event.logoUrl },
+      });
+
+      for (const { athlete, items } of affected) {
+        const user = await this.usersService.findByEmailInsensitive(
+          athlete.email,
+        );
+        if (!user || user.role === UserRole.PROGRAM) continue;
+        await this.notificationsService.create(
+          event.aliasId,
+          NotificationType.REGISTRATION_REQUIREMENT_ADDED,
+          NotificationAudience.ALL,
+          titleFor(items.map((r) => r.label)),
+          undefined,
+          user.id,
+        );
+      }
+    }
   }
 
   private assertDocumentsWindow(

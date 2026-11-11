@@ -274,7 +274,12 @@ export function ProgramsPage() {
               {event && event.registrationStatus !== "not_started" && (
                 <DeadlineSection event={event} onSaved={setEvent} />
               )}
-              {id && <RegistrationRequirementsSection eventId={id} />}
+              {id && event && (
+                <RegistrationRequirementsSection
+                  eventId={id}
+                  registrationReleased={event.registrationStatus !== "not_started"}
+                />
+              )}
               {/* No fim: o produtor confere tudo acima antes de liberar. */}
               {event && <ReleaseSection event={event} onSaved={setEvent} />}
             </div>

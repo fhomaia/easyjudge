@@ -97,8 +97,21 @@ function appliesToText(
 // Aba Configurações (tela de Inscrições do produtor): dados e documentos
 // pedidos aos atletas. O produtor ativa as sugestões que quiser e cria
 // outros (documento, texto ou lista de opções). Cada mudança salva na hora.
-export function RegistrationRequirementsSection({ eventId }: { eventId: string }) {
+export function RegistrationRequirementsSection({
+  eventId,
+  registrationReleased,
+}: {
+  eventId: string;
+  // Inscrições já liberadas alguma vez: item obrigatório novo pede
+  // confirmação quando já há ficha enviada (2026-11-10).
+  registrationReleased: boolean;
+}) {
   const [settings, setSettings] = useState<RegistrationSettings | null>(null);
+  const [submittedCount, setSubmittedCount] = useState(0);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    labels: string[];
+    resolve: (ok: boolean) => void;
+  } | null>(null);
   const [presets, setPresets] = useState<RegistrationRequirement[]>([]);
   const [criteria, setCriteria] = useState<CategoryCriterion[]>([]);
   const [editing, setEditing] = useState<{ index: number | null; value: RegistrationRequirement } | null>(
@@ -110,9 +123,10 @@ export function RegistrationRequirementsSection({ eventId }: { eventId: string }
   useEffect(() => {
     registrationSettingsApi
       .get(eventId)
-      .then(({ presets: p, ...s }) => {
+      .then(({ presets: p, submittedProgramsCount, ...s }) => {
         setSettings(s);
         setPresets(p);
+        setSubmittedCount(submittedProgramsCount);
       })
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : "Não foi possível carregar."),
@@ -120,10 +134,23 @@ export function RegistrationRequirementsSection({ eventId }: { eventId: string }
     categoryCriteriaApi.get(eventId).then(setCriteria).catch(() => setCriteria([]));
   }, [eventId]);
 
-  async function save(next: RegistrationSettings) {
+  // false = o produtor desistiu na confirmação (nada salvo).
+  async function save(next: RegistrationSettings): Promise<boolean> {
     setError(null);
+    const newlyRequired = next.requirements.filter(
+      (r) =>
+        r.required &&
+        !settings?.requirements.some((p) => p.id !== null && p.id === r.id && p.required),
+    );
+    if (registrationReleased && submittedCount > 0 && newlyRequired.length > 0) {
+      const ok = await new Promise<boolean>((resolve) =>
+        setPendingConfirm({ labels: newlyRequired.map((r) => r.label), resolve }),
+      );
+      if (!ok) return false;
+    }
     const saved = await registrationSettingsApi.update(eventId, next);
     setSettings(saved);
+    return true;
   }
 
   // Ordem da lista = ordem do formulário do atleta/programa. Arrastar
@@ -308,7 +335,32 @@ export function RegistrationRequirementsSection({ eventId }: { eventId: string }
           const requirements = [...settings.requirements];
           if (editing?.index != null) requirements[editing.index] = value;
           else requirements.push(value);
-          await save({ ...settings, requirements });
+          return save({ ...settings, requirements });
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          pendingConfirm?.resolve(false);
+          setPendingConfirm(null);
+        }}
+        title="Pedir item obrigatório novo?"
+        description={
+          pendingConfirm
+            ? `${
+                submittedCount === 1
+                  ? "1 programa já enviou a ficha."
+                  : `${submittedCount} programas já enviaram a ficha.`
+              } Os programas e atletas que precisam de "${pendingConfirm.labels.join('", "')}" serão avisados e poderão completar até o prazo de inscrição, sem perder o envio.`
+            : ""
+        }
+        confirmLabel="Salvar e avisar"
+        confirmingLabel="Salvando..."
+        confirmVariant="default"
+        onConfirm={async () => {
+          pendingConfirm?.resolve(true);
         }}
       />
 
@@ -460,7 +512,7 @@ function RequirementDialog({
   editing: { index: number | null; value: RegistrationRequirement } | null;
   criteria: CategoryCriterion[];
   onOpenChange: (open: boolean) => void;
-  onSave: (value: RegistrationRequirement) => Promise<void>;
+  onSave: (value: RegistrationRequirement) => Promise<boolean | void>;
 }) {
   const [draft, setDraft] = useState<RegistrationRequirement | null>(null);
   // Uma caixa por opção (lista); vazias são ignoradas ao salvar.
@@ -533,8 +585,8 @@ function RequirementDialog({
     }
     setSaving(true);
     try {
-      await onSave({ ...draft, label: draft.label.trim(), options, appliesTo });
-      onOpenChange(false);
+      const saved = await onSave({ ...draft, label: draft.label.trim(), options, appliesTo });
+      if (saved !== false) onOpenChange(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar.");
     } finally {

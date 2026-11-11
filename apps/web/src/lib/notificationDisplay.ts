@@ -42,6 +42,7 @@ export const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   document_contested: FileWarning,
   athlete_registration_submitted: UserPlus,
   athlete_registration_answered: UserCheck,
+  registration_requirement_added: ClipboardList,
 };
 
 export { formatRelativeTime as formatNotificationRelativeTime } from "@/lib/formatRelativeTime";
@@ -101,6 +102,11 @@ export function notificationHref(
       return `/events/${eventId}/registration?tab=requests`;
     case "athlete_registration_answered":
       return `/events/${eventId}/my-registration`;
+    // Item obrigatório novo na ficha (2026-11-10).
+    case "registration_requirement_added":
+      return roles.includes("program")
+        ? `/events/${eventId}/registration`
+        : `/events/${eventId}/my-registration`;
     default:
       return null;
   }

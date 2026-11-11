@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
 import { RegistrationSettingsService } from '../services/registration-settings.service';
+import { ProgramAthleteRequirementsService } from '../services/program-athlete-requirements.service';
 import { UpdateRegistrationSettingsDto } from '../dto/update-registration-settings.dto';
 import { REQUIREMENT_PRESETS } from '../registration-requirements';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -17,7 +18,10 @@ import { EventMemberRole } from '../../events/enums/event-member-role.enum';
 @Roles(UserRole.JUDGE, UserRole.ORGANIZATION)
 @EventRoles(EventMemberRole.ADMIN, EventMemberRole.ASSESSOR)
 export class RegistrationSettingsController {
-  constructor(private readonly settingsService: RegistrationSettingsService) {}
+  constructor(
+    private readonly settingsService: RegistrationSettingsService,
+    private readonly requirementsService: ProgramAthleteRequirementsService,
+  ) {}
 
   @Get()
   async get(@Param('eventId') eventId: string) {
@@ -25,6 +29,9 @@ export class RegistrationSettingsController {
       ...(await this.settingsService.getForEvent(eventId)),
       // Sugestões disponíveis (a tela mostra as que ainda não foram usadas).
       presets: Object.values(REQUIREMENT_PRESETS),
+      // Fichas já enviadas: a tela confirma antes de pedir algo novo.
+      submittedProgramsCount:
+        await this.requirementsService.submittedProgramsCount(eventId),
     };
   }
 
@@ -33,6 +40,6 @@ export class RegistrationSettingsController {
     @Param('eventId') eventId: string,
     @Body() dto: UpdateRegistrationSettingsDto,
   ) {
-    return this.settingsService.update(eventId, dto);
+    return this.requirementsService.updateSettings(eventId, dto);
   }
 }
