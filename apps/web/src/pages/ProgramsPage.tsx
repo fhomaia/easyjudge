@@ -206,15 +206,8 @@ export function ProgramsPage() {
                 )}
               </div>
             </div>
-            <Button
-              className="w-full sm:w-auto"
-              disabled={tabsLocked}
-              title={tabsLocked ? "Libere as inscrições para inscrever programas." : undefined}
-              onClick={() => setCreateProgramOpen(true)}
-            >
-              <Plus data-icon="inline-start" />
-              Inscrever programa
-            </Button>
+            {/* "Inscrever programa" fica no bloco do topo da aba Inscrições
+                (RegistrationModesInfo), não aqui (2026-11-10). */}
           </div>
 
           <div className="flex gap-6 border-b border-border">
