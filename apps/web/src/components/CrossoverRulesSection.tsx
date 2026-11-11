@@ -64,8 +64,7 @@ export function CrossoverRulesSection({
         <div>
           <p className="font-medium text-foreground">O atleta não compete contra ele mesmo</p>
           <p className="text-xs text-muted-foreground">
-            Sempre vale: o mesmo atleta não pode estar duas vezes na mesma categoria, nem em duas
-            equipes nem em dois programas.
+            O mesmo atleta não pode estar inscrito duas vezes na mesma categoria.
           </p>
         </div>
       </div>
