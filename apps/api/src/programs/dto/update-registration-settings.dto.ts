@@ -25,6 +25,7 @@ export class RegistrationRequirementDto {
   @IsIn([
     'birth_date',
     'identity',
+    'medical_certificate',
     'school_proof',
     'university_proof',
     'cpf',

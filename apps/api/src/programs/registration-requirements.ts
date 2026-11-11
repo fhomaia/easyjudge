@@ -12,6 +12,7 @@ export type RequirementKind = 'document' | 'text' | 'select' | 'date';
 export type RequirementPreset =
   | 'birth_date'
   | 'identity'
+  | 'medical_certificate'
   | 'school_proof'
   | 'university_proof'
   | 'cpf'
@@ -76,6 +77,17 @@ export const REQUIREMENT_PRESETS: Record<
     preset: 'identity',
     label: 'Documento de identidade',
     description: 'RG, CNH ou certidão de nascimento (frente e verso).',
+    required: true,
+    options: [],
+    appliesTo: null,
+  },
+  // Atestado médico (2026-11-10, pedido do usuário).
+  medical_certificate: {
+    kind: 'document',
+    preset: 'medical_certificate',
+    label: 'Atestado médico',
+    description:
+      'Atestado de aptidão para a prática esportiva, assinado por um médico.',
     required: true,
     options: [],
     appliesTo: null,

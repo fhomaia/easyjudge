@@ -735,6 +735,7 @@ export type RequirementKind = "document" | "text" | "select" | "date";
 export type RequirementPreset =
   | "birth_date"
   | "identity"
+  | "medical_certificate"
   | "school_proof"
   | "university_proof"
   | "cpf"

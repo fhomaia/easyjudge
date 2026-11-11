@@ -1745,7 +1745,7 @@ está aqui; a primeira, com liga/desliga por evento, foi descartada).
   sem linha = só Data de nascimento), `GET/PUT
   /events/:id/registration-settings` (admin/assessor). Nome e Email sempre
   pedidos (fixos, cadeado). Sugestões: data de nascimento (já ativa),
-  identidade, comprovante de vínculo escolar/universitário (já valendo só
+  identidade, atestado médico (documento, 2026-11-10), comprovante de vínculo escolar/universitário (já valendo só
   pra esses vínculos), CPF, telefone, contato de emergência; itens próprios
   do tipo documento, texto, lista de opções (caixas, Enter cria a próxima)
   ou data. Cada item: nome, orientação, obrigatório, "Vale para" (todas as
