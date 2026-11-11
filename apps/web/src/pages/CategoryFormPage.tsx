@@ -557,10 +557,6 @@ export function CategoryFormPage() {
       setError("Escolha o gênero da categoria.");
       return;
     }
-    if (selections.level.length === 0) {
-      setError("Escolha o nível da categoria.");
-      return;
-    }
     if (combinations.length > MAX_COMBINATIONS) {
       setError(
         `Essa seleção criaria ${combinations.length} categorias. O máximo de uma vez é ${MAX_COMBINATIONS}.`,
@@ -773,8 +769,8 @@ export function CategoryFormPage() {
                   title="Divisões da categoria"
                   description={
                     isEdit
-                      ? "Gênero e nível são obrigatórios. Nas outras divisões, escolha \"Não usar\" quando a categoria não usa aquela divisão."
-                      : "Gênero e nível são obrigatórios. Nas outras divisões, deixe sem nada marcado quando a categoria não usa aquela divisão. Mais de uma opção cria uma categoria para cada combinação."
+                      ? "Gênero é obrigatório. Nas outras divisões, escolha \"Não usar\" quando a categoria não usa aquela divisão."
+                      : "Gênero é obrigatório. Nas outras divisões, deixe sem nada marcado quando a categoria não usa aquela divisão. Mais de uma opção cria uma categoria para cada combinação."
                   }
                 >
                   <div className="grid gap-3">
@@ -792,7 +788,7 @@ export function CategoryFormPage() {
                           <SingleChoice
                             options={visibleChoices(key)}
                             value={selections[key][0] ?? null}
-                            allowNone={key !== "level" && key !== "gender"}
+                            allowNone={key !== "gender"}
                             onChange={(value) => choose(key, value)}
                             onAdd={() => setOptionsDialog({ key, newOption: true })}
                             onEdit={(optionId) =>
@@ -1295,7 +1291,7 @@ function DivisionCard({
             <div>
               <p className="font-medium text-foreground">
                 {CRITERION_LABELS[criterionKey]}
-                {(criterionKey === "level" || criterionKey === "gender") && (
+                {criterionKey === "gender" && (
                   <> <RequiredMark /></>
                 )}
               </p>
@@ -1451,7 +1447,7 @@ function SingleChoice({
 }: {
   options: ChoiceOption[];
   value: string | null;
-  // Nível é obrigatório: sem "Não usar".
+  // Gênero é obrigatório: sem "Não usar".
   allowNone: boolean;
   onChange: (value: string | null) => void;
   onAdd: () => void;

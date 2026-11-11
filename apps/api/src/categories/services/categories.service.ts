@@ -195,9 +195,11 @@ export class CategoriesService {
         if (values.nonTumbling !== undefined) {
           category.nonTumbling = values.nonTumbling;
         }
-        // Nível é obrigatório (como a modalidade).
+        // Nível é opcional desde 2026-11-10 (antes obrigatório, como a
+        // modalidade): sem nível, a categoria simplesmente não usa.
         if (category.level == null) {
-          throw new BadRequestException('Escolha o nível da categoria.');
+          category.nonTumbling = false;
+          continue;
         }
         if (isAlwaysNonTumbling(category.categoryFormat)) {
           category.nonTumbling = true;

@@ -1643,8 +1643,10 @@ está aqui; a primeira, com liga/desliga por evento, foi descartada).
   o nome: Vínculo institucional, Regime de competição (Novice/Prep/Elite),
   Faixa etária, Gênero, Nível, Tamanho (`CRITERION_ORDER`, espelhado em
   `categories/category-criteria.ts` e `web/src/lib/categoryCriteria.ts`).
-  **Nível e Gênero são obrigatórios** (como a modalidade); os demais, cada
-  categoria usa se quiser (null = não usa). Tamanho só em Team Cheer e Custom
+  **Gênero é obrigatório** (como a modalidade); os demais, inclusive o
+  Nível (opcional desde 2026-11-10, antes obrigatório), cada categoria usa
+  se quiser (null = não usa). Categoria sem nível fica fora da regra de
+  diferença de nível do crossover e vai pro começo na ordenação por nível. Tamanho só em Team Cheer e Custom
   (`sizeAllowedFor`; nos stunts a API zera).
 - **Categoria**: `institution`/`gender` (colunas antigas `modality`/
   `division`, de enum para varchar; os ids das opções padrão são os
@@ -1779,7 +1781,7 @@ está aqui; a primeira, com liga/desliga por evento, foi descartada).
   lista numa consulta só (era uma por programa). Botões: "Inscrever
   programa", "Abrir ficha de inscrição"; card do Setup: "Configurar
   inscrições" / "Ver inscrições" / "Ver solicitações".
-- **Também**: Gênero obrigatório nas categorias (como Nível).
+- **Também**: Gênero obrigatório nas categorias (o Nível era também, até 2026-11-10).
 - **Migrations**: `CreateRegistrationSettings`,
   `CreateAthleteRequirementValues`, `AddProgramSubmittedBy` (rodadas no
   Neon pelo usuário antes do push).

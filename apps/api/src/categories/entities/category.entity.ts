@@ -84,8 +84,8 @@ export class Category {
 
   // Parte inteira = nível de construção (1 a 7); casa decimal = nível de
   // tumbling (1 a 7) quando é diferente: 4.2 = construção 4, tumbling 2
-  // (ver levelProblem). Obrigatório na API; a coluna aceita null só por
-  // compatibilidade com a migration (não há categoria sem nível).
+  // (ver levelProblem). Opcional desde 2026-11-10 (null = categoria sem
+  // nível).
   @Column({ type: 'float', nullable: true })
   level: number | null;
 
