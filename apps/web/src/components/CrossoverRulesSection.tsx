@@ -97,7 +97,7 @@ export function CrossoverRulesSection({
         <NumberRule
           id="max-team-cheer-crossover"
           title="Limitar o número de atletas de crossover no Team Cheer"
-          hint="Ao ativar esta opção você escolherá a quantidade máxima de atletas inscritos em uma categoria de Team Cheer que podem ser reutilizados em outra categoria Team Cheer. Essa verificação não é feita entre categorias de gêneros diferentes."
+          hint="Ao ativar esta opção você escolherá a quantidade máxima de atletas inscritos em uma categoria de Team Cheer que podem ser reutilizados em outra categoria Team Cheer."
           unit={(n) => (n === 1 ? "atleta reutilizado" : "atletas reutilizados")}
           value={rules.maxTeamCheerCrossover}
           defaultValue={2}
