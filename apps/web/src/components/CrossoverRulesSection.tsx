@@ -132,7 +132,7 @@ const CROSS_PROGRAM_OPTIONS: {
   {
     value: "allowed",
     label: "Permitido",
-    hint: "Ex.: um atleta pode participar de dois programas All Star, desde que em categorias diferentes.",
+    hint: "Ex.: um atleta pode participar de dois programas All Star.",
   },
   { value: "none", label: "Não permitido", hint: "O atleta compete por um programa só no evento." },
 ];
