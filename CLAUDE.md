@@ -1950,8 +1950,11 @@ no prazo, está inscrito); prazo é um DIA (fecha 23:59 de Brasília) ou
   inscrições" (data ou "Sem data limite", obrigatório pra liberar; o
   PATCH manda status e prazo juntos); depois, editado na seção "Prazo de
   inscrição" da aba Configurações (que só aparece após a 1ª liberação).
-  Mudar a data de início pra antes do prazo dá 400 apontando pra
-  Inscrições > Configurações. Eventos antigos ficam com nulo (= sem
+  Mudar a data de início pra antes do prazo salvo: "Dados do evento"
+  mostra, logo abaixo da data, a escolha de um novo prazo
+  (`RegistrationDeadlineFields`, obrigatória pra salvar) e manda os dois
+  juntos; sem o prazo no PATCH, a API dá 400 apontando pra Inscrições >
+  Configurações. Eventos antigos ficam com nulo (= sem
   data limite).
 - **Nada despublica sozinho** (decisão do usuário, 2026-10-05):
   `updateEvent` não troca mais `published -> created`; edita a versão

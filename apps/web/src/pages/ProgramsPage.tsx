@@ -32,8 +32,7 @@ import { RegistrationRequirementsSection } from "@/components/RegistrationRequir
 import { EventRequestsTab } from "@/components/EventRequestsTab";
 import { ShareEventDialog } from "@/components/ShareEventDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { DatePicker } from "@/components/DatePicker";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RegistrationDeadlineFields } from "@/components/RegistrationDeadlineFields";
 import {
   Select,
   SelectContent,
@@ -521,7 +520,7 @@ function ReleaseSection({
             Os programas montam e enviam a ficha até as 23:59 (horário de Brasília) do dia
             escolhido. O prazo não pode passar da data de início do evento.
           </p>
-          <DeadlineFields value={deadline} onChange={setDeadline} startDate={event.startDate} />
+          <RegistrationDeadlineFields value={deadline} onChange={setDeadline} startDate={event.startDate} />
           {deadline !== "" && deadlineError && (
             <p className="text-sm text-destructive">{deadlineError}</p>
           )}
@@ -625,7 +624,7 @@ function DeadlineSection({
         O prazo não pode passar da data de início do evento.
       </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <DeadlineFields
+        <RegistrationDeadlineFields
           value={deadline}
           startDate={event.startDate}
           disabled={saving}
@@ -641,42 +640,6 @@ function DeadlineSection({
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </section>
-  );
-}
-
-// Data do prazo ou "Sem data limite". value: "" = nada escolhido (data
-// vazia e caixa desmarcada), null = sem data limite, senão "yyyy-MM-dd".
-function DeadlineFields({
-  value,
-  onChange,
-  startDate,
-  disabled = false,
-}: {
-  value: string | null;
-  onChange: (value: string | null) => void;
-  startDate: string;
-  disabled?: boolean;
-}) {
-  const [y, m, d] = startDate.split("-").map(Number);
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <div className="w-full sm:w-56">
-        <DatePicker
-          value={value ?? ""}
-          onChange={(next) => next && onChange(next)}
-          maxDate={y && m && d ? new Date(y, m - 1, d) : undefined}
-          disabled={value === null || disabled}
-        />
-      </div>
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <Checkbox
-          checked={value === null}
-          disabled={disabled}
-          onCheckedChange={(checked) => onChange(checked === true ? null : "")}
-        />
-        Sem data limite
-      </label>
-    </div>
   );
 }
 

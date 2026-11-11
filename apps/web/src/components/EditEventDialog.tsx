@@ -14,7 +14,14 @@ import {
   type EventFormValues,
 } from "@/components/EventFormFields";
 import { EventPhotoField } from "@/components/EventPhotoField";
+import { RegistrationDeadlineFields } from "@/components/RegistrationDeadlineFields";
 import { eventsApi, ApiError, type Event } from "@/api/client";
+
+// "yyyy-MM-dd" -> "dd/MM/yyyy".
+function formatDate(value: string) {
+  const [y, m, d] = value.split("-");
+  return `${d}/${m}/${y}`;
+}
 
 interface EditEventDialogProps {
   event: Event | null;
@@ -49,6 +56,14 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // Novo prazo de inscrição, pedido só quando a data de início nova fica
+  // antes do prazo salvo (o prazo não está mais neste formulário,
+  // 2026-11-10). "" = ainda não escolhido; null = sem data limite.
+  const [newDeadline, setNewDeadline] = useState<string | null>("");
+
+  const savedDeadline = event?.registrationDeadline ?? null;
+  const deadlineConflict =
+    !!form?.startDate && savedDeadline !== null && savedDeadline > form.startDate;
 
   // Publicado edita normalmente e continua publicado (2026-10-05: nada
   // despublica sozinho). Iniciado continua travado (a API recusa).
@@ -59,6 +74,7 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
       setForm(toFormValues(event));
       setPhoto(null);
       setPhotoPreview(null);
+      setNewDeadline("");
       // Sem setError(null) aqui de propósito: o erro já é limpo ao
       // fechar (handleOpenChange), e este efeito também roda depois de
       // salvar (o pai devolve o evento atualizado) — apagaria o aviso
@@ -83,6 +99,10 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
       setError("Selecione a data de início.");
       return;
     }
+    if (deadlineConflict && (newDeadline === "" || (newDeadline !== null && newDeadline > form.startDate))) {
+      setError("Escolha um novo prazo de inscrição, até a data de início, ou marque \"Sem data limite\".");
+      return;
+    }
     setLoading(true);
     try {
       let updated = await eventsApi.update(event.aliasId, {
@@ -91,6 +111,7 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
         location: form.location,
         venue: form.venue,
         address: form.address,
+        ...(deadlineConflict ? { registrationDeadline: newDeadline } : {}),
       });
       if (photo) {
         try {
@@ -159,7 +180,27 @@ export function EditEventDialog({ event, onOpenChange, onUpdated }: EditEventDia
                   disabled={isLocked}
                 />
 
-                <EventFormFields form={form} onChange={update} disabled={isLocked} />
+                <EventFormFields
+                  form={form}
+                  onChange={update}
+                  disabled={isLocked}
+                  afterStartDate={
+                    deadlineConflict && savedDeadline ? (
+                      <div className="grid gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
+                        <p className="text-sm text-amber-800 dark:text-amber-400">
+                          O prazo de inscrição ({formatDate(savedDeadline)}) fica depois da nova data de
+                          início. Escolha um novo prazo:
+                        </p>
+                        <RegistrationDeadlineFields
+                          value={newDeadline}
+                          onChange={setNewDeadline}
+                          startDate={form.startDate}
+                          disabled={loading}
+                        />
+                      </div>
+                    ) : null
+                  }
+                />
 
                 {isLocked ? (
                   <Button

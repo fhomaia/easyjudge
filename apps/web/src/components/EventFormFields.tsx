@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/DatePicker";
@@ -14,6 +15,9 @@ interface EventFormFieldsProps {
   form: EventFormValues;
   onChange: <K extends keyof EventFormValues>(key: K, value: EventFormValues[K]) => void;
   disabled?: boolean;
+  // Conteúdo logo abaixo da data de início (ex.: conflito com o prazo de
+  // inscrição no "Dados do evento").
+  afterStartDate?: ReactNode;
 }
 
 // "Dias de competição" saiu do formulário (2026-07-16) — o número de
@@ -21,7 +25,12 @@ interface EventFormFieldsProps {
 // botão "+ Dia" (faz mais sentido lá, já que é onde os dias
 // efetivamente existem/são usados). O prazo de inscrição também saiu
 // (2026-11-10): é escolhido na tela de Inscrições, ao liberar.
-export function EventFormFields({ form, onChange, disabled = false }: EventFormFieldsProps) {
+export function EventFormFields({
+  form,
+  onChange,
+  disabled = false,
+  afterStartDate,
+}: EventFormFieldsProps) {
   return (
     <>
       <div className="grid gap-2">
@@ -45,6 +54,8 @@ export function EventFormFields({ form, onChange, disabled = false }: EventFormF
           disabled={disabled}
         />
       </div>
+
+      {afterStartDate}
 
       <div className="grid gap-2">
         <Label htmlFor="event-location">Local</Label>
