@@ -107,7 +107,7 @@ export function CrossoverRulesSection({
         <NumberRule
           id="max-level-difference"
           title="Limitar a diferença de nível entre as categorias do atleta"
-          hint="Ao ativar esta opção você escolherá a diferença de nível máxima permitida entre as categorias do atleta na mesma modalidade. Ex: Se a diferença máxima for de um nível, o atleta que compete no nível 2 pode competir também em categorias do nível 1 e 3 mas não pode competir em categorias do nível 4 da mesma modalidade."
+          hint="Ao ativar esta opção você escolherá a diferença de nível máxima permitida entre as categorias do atleta na mesma modalidade. Ex: Se a diferença máxima for de um nível, o atleta que compete no Team Cheer nível 2 pode competir também no Team Cheer do nível 1 e 3 mas não pode competir no Team Cheer do nível 4."
           unit={(n) => (n === 1 ? "nível de diferença" : "níveis de diferença")}
           value={rules.maxLevelDifference}
           defaultValue={1}
