@@ -129,7 +129,11 @@ const CROSS_PROGRAM_OPTIONS: {
     label: "Um programa por vínculo institucional",
     hint: "Ex.: um atleta pode participar de um programa All Star e de um programa universitário, mas não pode participar de dois programas All Star ou de dois programas universitários.",
   },
-  { value: "allowed", label: "Permitido", hint: "O atleta pode competir por mais de um programa." },
+  {
+    value: "allowed",
+    label: "Permitido",
+    hint: "Ex.: um atleta pode participar de dois programas All Star, desde que em categorias diferentes.",
+  },
   { value: "none", label: "Não permitido", hint: "O atleta compete por um programa só no evento." },
 ];
 
