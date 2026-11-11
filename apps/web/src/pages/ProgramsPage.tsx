@@ -13,6 +13,7 @@ import {
   Search,
   Star,
   Users,
+  UserPlus,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -296,6 +297,10 @@ export function ProgramsPage() {
             />
           ) : totalPrograms > 0 ? (
             <>
+              <RegistrationModesInfo
+                onEnroll={() => setCreateProgramOpen(true)}
+                onShare={event?.eventCode ? () => setShareOpen(true) : null}
+              />
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative min-w-0 flex-1">
                   <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -355,12 +360,11 @@ export function ProgramsPage() {
               <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
             </>
           ) : (
-            <div className="flex min-h-[40vh] items-center justify-center">
-              <Button size="lg" onClick={() => setCreateProgramOpen(true)}>
-                <Plus data-icon="inline-start" />
-                Novo programa
-              </Button>
-            </div>
+            <RegistrationModesInfo
+              onEnroll={() => setCreateProgramOpen(true)}
+              onShare={event?.eventCode ? () => setShareOpen(true) : null}
+              empty
+            />
           )}
 
           {/* Só depois da primeira liberação das inscrições (2026-10-11). */}
@@ -411,6 +415,78 @@ export function ProgramsPage() {
         />
       )}
     </ProgramsSetupShell>
+  );
+}
+
+// Topo da aba Inscrições (2026-11-10, pedido do usuário): as duas formas
+// de ter competidores no evento, que podem ser combinadas.
+function RegistrationModesInfo({
+  onEnroll,
+  onShare,
+  empty = false,
+}: {
+  onEnroll: () => void;
+  // null = evento ainda sem código para compartilhar.
+  onShare: (() => void) | null;
+  // Sem nenhuma inscrição ainda: texto de início.
+  empty?: boolean;
+}) {
+  return (
+    <section className="grid gap-4 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+      <div>
+        <h2 className="font-semibold text-foreground">
+          {empty ? "Nenhuma inscrição ainda" : "Como os competidores entram no evento"}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Você pode inscrever os competidores, esperar as fichas de inscrição enviadas por eles ou
+          combinar os dois.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <UserPlus className="size-4" />
+            </div>
+            <div className="grid gap-1 text-sm">
+              <p className="font-medium text-foreground">Você inscreve</p>
+              <p className="text-muted-foreground">
+                Cadastre os programas, as equipes e os atletas competidores. Ótimo para quem já tem
+                a lista em mãos.
+              </p>
+            </div>
+          </div>
+          <Button className="mt-auto w-full sm:w-auto sm:self-start" onClick={onEnroll}>
+            <Plus data-icon="inline-start" />
+            Inscrever programa
+          </Button>
+        </div>
+        <div className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <QrCode className="size-4" />
+            </div>
+            <div className="grid gap-1 text-sm">
+              <p className="font-medium text-foreground">Os competidores se inscrevem</p>
+              <p className="text-muted-foreground">
+                Programas e atletas entram pelo link, QR ou código do evento, preenchem a ficha de
+                inscrição e enviam. As fichas aparecem nesta lista.
+              </p>
+            </div>
+          </div>
+          {onShare && (
+            <Button
+              variant="outline"
+              className="mt-auto w-full border-primary/40 text-primary hover:bg-primary/10 sm:w-auto sm:self-start"
+              onClick={onShare}
+            >
+              <QrCode data-icon="inline-start" />
+              Compartilhar evento
+            </Button>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
