@@ -414,8 +414,8 @@ export function ProgramsPage() {
 
 // Topo da aba Inscrições (2026-11-10, pedido do usuário): as duas formas
 // de ter competidores no evento, que podem ser combinadas. No celular dá
-// pra recolher: some só a descrição, os dois quadros continuam com ícone,
-// título e botão. No computador fica sempre aberto. A escolha fica no
+// pra recolher: fica o título, a frase de explicação e os dois botões (sem
+// os quadros). No computador fica sempre aberto. A escolha fica no
 // navegador (localStorage, conveniência por pessoa).
 const MODES_COLLAPSED_KEY = "easyjudge-registration-modes-collapsed";
 
@@ -448,8 +448,8 @@ function RegistrationModesInfo({
       // sem armazenamento: só não lembra a escolha
     }
   }
-  // Descrições: recolhidas só no celular.
-  const description = collapsed ? "hidden sm:block" : undefined;
+  // Quadros: recolhidos só no celular (no lugar deles, os dois botões).
+  const cards = collapsed ? "hidden sm:grid" : "grid";
 
   return (
     <section className="grid gap-4 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
@@ -458,7 +458,7 @@ function RegistrationModesInfo({
           <h2 className="font-semibold text-foreground">
             {empty ? "Nenhuma inscrição ainda" : "Como os competidores entram no evento"}
           </h2>
-          <p className={cn("mt-1 text-sm text-muted-foreground", description)}>
+          <p className="mt-1 text-sm text-muted-foreground">
             Você pode inscrever os competidores, esperar as fichas de inscrição enviadas por eles ou
             combinar os dois.
           </p>
@@ -473,7 +473,25 @@ function RegistrationModesInfo({
           <ChevronDown className={cn("size-4 transition-transform", !collapsed && "rotate-180")} />
         </button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      {collapsed && (
+        <div className="flex flex-col gap-2 sm:hidden">
+          <Button className="w-full" onClick={onEnroll}>
+            <Plus data-icon="inline-start" />
+            Inscrever programa
+          </Button>
+          {onShare && (
+            <Button
+              variant="outline"
+              className="w-full border-primary/40 text-primary hover:bg-primary/10"
+              onClick={onShare}
+            >
+              <QrCode data-icon="inline-start" />
+              Compartilhar evento
+            </Button>
+          )}
+        </div>
+      )}
+      <div className={cn(cards, "gap-3 sm:grid-cols-2")}>
         <div className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
           <div className="flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -481,7 +499,7 @@ function RegistrationModesInfo({
             </div>
             <div className="grid min-h-9 content-center gap-1 text-sm">
               <p className="font-medium text-foreground">Você inscreve</p>
-              <p className={cn("text-muted-foreground", description)}>
+              <p className="text-muted-foreground">
                 Cadastre os programas, as equipes e os atletas competidores. Ótimo para quem já tem
                 a lista em mãos.
               </p>
@@ -499,7 +517,7 @@ function RegistrationModesInfo({
             </div>
             <div className="grid min-h-9 content-center gap-1 text-sm">
               <p className="font-medium text-foreground">Os competidores se inscrevem</p>
-              <p className={cn("text-muted-foreground", description)}>
+              <p className="text-muted-foreground">
                 Programas e atletas entram pelo link, QR ou código do evento, preenchem a ficha de
                 inscrição e enviam. As fichas aparecem nesta lista.
               </p>
