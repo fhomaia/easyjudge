@@ -275,7 +275,13 @@ function NameFields({
     setSaved(false);
     setLoading(true);
     try {
-      onUpdated(await usersApi.updateProfile({ firstName, lastName }));
+      // Conta Programa não tem sobrenome (fica vazio) e a API recusa
+      // sobrenome vazio: manda só o nome.
+      onUpdated(
+        await usersApi.updateProfile(
+          profile.role === "program" ? { firstName } : { firstName, lastName },
+        ),
+      );
       setSaved(true);
     } catch (err) {
       setError(

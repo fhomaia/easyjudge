@@ -10,6 +10,7 @@ import { Not, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { AthleteLink } from '../../athletes/entities/athlete-link.entity';
+import { ProgramProfile } from '../../programs/entities/program-profile.entity';
 import { RegisterDto } from '../../auth/dto/register.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { ChangePasswordDto } from '../dto/change-password.dto';
@@ -44,6 +45,12 @@ export class UsersService {
     // ScoringTemplatesModule pra evitar isso.
     @InjectRepository(AthleteLink)
     private readonly athleteLinksRepository: Repository<AthleteLink>,
+    // Mesmo motivo do repositório acima (ProgramsModule importa
+    // UsersModule): o nome exibido de um programa vinculado vem do
+    // ProgramProfile, então trocar o nome em "Meu perfil" atualiza ele
+    // também (ver updateProfile).
+    @InjectRepository(ProgramProfile)
+    private readonly programProfilesRepository: Repository<ProgramProfile>,
     // StorageService é global (CommonModule, ver common.module.ts) —
     // injeta direto sem precisar importar o módulo.
     private readonly storageService: StorageService,
@@ -258,8 +265,11 @@ export class UsersService {
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<User> {
     const user = await this.findByIdOrThrow(userId);
 
+    const isProgram = user.role === UserRole.PROGRAM;
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
-    if (dto.lastName !== undefined) user.lastName = dto.lastName;
+    // Conta Programa não tem sobrenome (cadastro grava ''): ignora o que
+    // vier, pra o nome do programa não ganhar um pedaço solto.
+    if (dto.lastName !== undefined && !isProgram) user.lastName = dto.lastName;
 
     if (dto.documentNumber !== undefined) {
       if (user.documentNumber) {
@@ -293,7 +303,16 @@ export class UsersService {
       user.birthDate = dto.birthDate;
     }
 
-    return this.usersRepository.save(user);
+    const saved = await this.usersRepository.save(user);
+    if (isProgram && dto.firstName !== undefined) {
+      // Sem perfil ainda: ele nasce com o nome da conta na primeira
+      // leitura (ProgramsService.getOrCreateProfile), nada a fazer.
+      await this.programProfilesRepository.update(
+        { userId },
+        { name: dto.firstName },
+      );
+    }
+    return saved;
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
